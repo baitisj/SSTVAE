@@ -32,7 +32,14 @@ namespace sstvae::overlay {
 inline constexpr int CANVAS_W = images::IMG_W;
 inline constexpr int CANVAS_H = images::IMG_H;
 
-inline constexpr int DOC_VERSION = 1;
+// **2 since the editor grew a style palette**: weight, slant, underline,
+// a font family and a gradient fill. The bump is deliberate rather than
+// additive-and-silent. `from_json` refuses a document newer than the
+// build understands, so an older build meeting one of these says so
+// instead of quietly drawing a gradient as a flat colour -- which is the
+// failure a template is least able to survive, because a template is
+// opened by builds its author never saw.
+inline constexpr int DOC_VERSION = 2;
 
 // Resolved at render time rather than stored, so the reference stays
 // meaningful in a saved template.
@@ -51,7 +58,11 @@ struct TextItem {
     double size = 0.08;
     std::string color = "#ffffff";
     std::string stroke_color = "#000000";
-    double stroke_width = 0.12;  // fraction of the glyph size
+    // Fraction of the glyph size. **Zero is the off switch**, and the
+    // only one: the palette's stroke toggle writes 0 here rather than
+    // carrying a separate `stroke` flag, because two fields that can
+    // disagree about whether there is a stroke is one field too many.
+    double stroke_width = 0.12;
     // Font path; empty = the default face.
     std::string font;
     // Which point of the text box (x, y) positions, in PIL's two-letter
@@ -62,6 +73,36 @@ struct TextItem {
     std::string align = "left";   // between lines, once there is more than one
     double line_spacing = 0.15;   // extra gap, fraction of size
     double rotation = 0.0;        // degrees, counter-clockwise
+
+    // --- style, added in document version 2 --------------------------
+    //
+    // **Every default here reproduces a version-1 document exactly.**
+    // That is not a courtesy to old files; it is what lets `color` go on
+    // meaning what it always meant (the fill, and now the *first* stop
+    // of a gradient) instead of a v1 document rendering as a surprise.
+    bool bold = false;
+    bool italic = false;
+    bool underline = false;
+    // A font *family*, as opposed to `font`, which is a path.
+    //
+    // The two are not alternatives with a winner picked at random:
+    // `font` wins when both are set, because a template that ships its
+    // own face is naming the exact file it needs, and a family name is
+    // only ever a request the system may answer with something else.
+    // Empty means "no request" -- the default face.
+    //
+    // Either a real family ("DejaVu Sans") or one of the generic
+    // keywords "sans-serif", "serif", "monospace", "cursive".
+    std::string font_family;
+    // "solid", "linear" or "radial". Anything else is treated as solid,
+    // so a document from a build that grows a fourth mode still draws.
+    std::string fill_mode = "solid";
+    // The gradient's far stop. Unread when the fill is solid, but kept
+    // in the document regardless: toggling a gradient off and on again
+    // in the editor must not lose the colour it was set to.
+    std::string color2 = "#38bdf8";
+    // Degrees, clockwise from left-to-right. Linear fills only.
+    double fill_angle = 45.0;
 };
 
 // A picture inset -- typically the last received image, so an operator

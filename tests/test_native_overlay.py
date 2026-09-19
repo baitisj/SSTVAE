@@ -176,3 +176,89 @@ def test_a_bad_field_does_not_discard_the_whole_document(native):
     assert got["text"] == "keep me"
     assert got["x"] == TextItem().x, "the bad value should leave the default"
     assert any("x" in where for where, _ in notes)
+
+
+def test_the_version_2_style_fields_round_trip(native):
+    """The palette's fields, every one of them non-default.
+
+    A reader that knew only version 1 would pass every other test in
+    this file: the fields it dropped would come back as defaults, and
+    nothing above sets them. This is the test that notices.
+    """
+    cpp = _cpp(native)
+    doc = OverlayDoc(items=[
+        TextItem(
+            text="KC2G",
+            bold=True, italic=True, underline=True,
+            font_family="monospace",
+            fill_mode="radial", color2="#ff0066", fill_angle=-120.0,
+        ),
+    ])
+    text, notes = cpp.round_trip(doc.to_json())
+    assert not notes, notes
+    assert json.loads(text) == doc.to_dict()
+
+
+def test_a_version_1_document_loads_clean(native):
+    """The compatibility claim, stated rather than assumed.
+
+    A v1 document names none of the style fields. It must load without
+    a single note -- an unknown-field note here would mean the reader
+    had started treating the *absence* of a new field as a problem --
+    and every one of them must come back at the default that reproduces
+    v1 rendering.
+    """
+    cpp = _cpp(native)
+    data = {
+        "version": 1,
+        "items": [{
+            "type": "text", "text": "W1AW", "x": 0.1, "y": 0.2,
+            "size": 0.06, "color": "#ffcc00", "stroke_color": "#101010",
+            "stroke_width": 0.2, "font": None, "anchor": "mm",
+            "align": "center", "line_spacing": 0.3, "rotation": -7.5,
+        }],
+    }
+    text, notes = cpp.round_trip(json.dumps(data))
+    assert not notes, notes
+    got = json.loads(text)["items"][0]
+
+    default = TextItem()
+    assert got["bold"] is default.bold
+    assert got["italic"] is default.italic
+    assert got["underline"] is default.underline
+    assert got["font_family"] == default.font_family
+    assert got["fill_mode"] == default.fill_mode
+    assert got["color2"] == default.color2
+    assert got["fill_angle"] == default.fill_angle
+    # The v1 fields it did carry are untouched by the upgrade.
+    assert got["color"] == "#ffcc00"
+    assert got["rotation"] == -7.5
+
+
+def test_a_non_boolean_flag_is_noted_rather_than_guessed_at(native):
+    """A document is hand-editable, so `"bold": 1` is a typo to report.
+
+    Coercing it would be the same silent-repair failure the reader's
+    other fields already refuse: the operator's file says one thing,
+    the picture shows another, and nothing says so.
+    """
+    cpp = _cpp(native)
+    data = {"version": 2, "items": [{"type": "text", "text": "hi", "bold": 1}]}
+    text, notes = cpp.round_trip(json.dumps(data))
+
+    assert json.loads(text)["items"][0]["bold"] is False
+    assert any("bold" in where for where, _ in notes), notes
+
+
+def test_stroke_off_is_a_width_of_zero(native):
+    """The palette's stroke toggle has no field of its own.
+
+    Zero width is the off switch, and it has to survive the round trip
+    as zero rather than being 'helpfully' restored to the default --
+    which is what a reader treating 0 as unset would do.
+    """
+    cpp = _cpp(native)
+    doc = OverlayDoc(items=[TextItem(text="KC2G", stroke_width=0.0)])
+    text, notes = cpp.round_trip(doc.to_json())
+    assert not notes, notes
+    assert json.loads(text)["items"][0]["stroke_width"] == 0.0

@@ -44,6 +44,16 @@ struct Reader {
         }
     }
 
+    // Strictly a JSON boolean: 1 and "true" are not accepted, and are
+    // noted rather than guessed at. A document is hand-editable, so a
+    // reader that silently coerces is a reader that hides the typo.
+    void get(const std::string& key, bool& dst) const {
+        if (const json* v = find(key)) {
+            if (v->is_boolean()) dst = v->get<bool>();
+            else note(key, "expected true or false");
+        }
+    }
+
     void report_unknown(std::initializer_list<std::string_view> known) const {
         for (const auto& item : obj.items()) {
             const std::string_view key = item.key();
@@ -69,8 +79,17 @@ TextItem read_text(const Reader& r) {
     r.get("align", t.align);
     r.get("line_spacing", t.line_spacing);
     r.get("rotation", t.rotation);
+    r.get("bold", t.bold);
+    r.get("italic", t.italic);
+    r.get("underline", t.underline);
+    r.get("font_family", t.font_family);
+    r.get("fill_mode", t.fill_mode);
+    r.get("color2", t.color2);
+    r.get("fill_angle", t.fill_angle);
     r.report_unknown({"text", "x", "y", "size", "color", "stroke_color", "stroke_width",
-                      "font", "anchor", "align", "line_spacing", "rotation"});
+                      "font", "anchor", "align", "line_spacing", "rotation",
+                      "bold", "italic", "underline", "font_family", "fill_mode",
+                      "color2", "fill_angle"});
     return t;
 }
 
@@ -152,6 +171,13 @@ std::string to_json(const Doc& doc, int indent) {
                              {"align", t->align},
                              {"line_spacing", t->line_spacing},
                              {"rotation", t->rotation},
+                             {"bold", t->bold},
+                             {"italic", t->italic},
+                             {"underline", t->underline},
+                             {"font_family", t->font_family},
+                             {"fill_mode", t->fill_mode},
+                             {"color2", t->color2},
+                             {"fill_angle", t->fill_angle},
                              {"type", "text"}});
         } else {
             const auto& i = std::get<ImageItem>(item);

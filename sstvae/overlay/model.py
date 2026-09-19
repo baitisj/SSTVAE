@@ -29,7 +29,11 @@ from ..images import IMG_H, IMG_W
 # what the editor shows is what goes on the air.
 CANVAS_W, CANVAS_H = IMG_W, IMG_H
 
-DOC_VERSION = 1
+# 2 since the editor grew a style palette: weight, slant, underline, a
+# font family and a gradient fill. `from_dict` refuses anything newer, so
+# an older build meeting one of these says so rather than quietly drawing
+# a gradient as a flat colour.
+DOC_VERSION = 2
 
 # Resolved at render time rather than stored, so the reference stays
 # meaningful in a saved template.
@@ -64,6 +68,27 @@ class TextItem:
     align: str = "left"  # left | center | right, between lines
     line_spacing: float = 0.15  # extra gap between lines, fraction of size
     rotation: float = 0.0  # degrees, counter-clockwise
+
+    # Style, added in document version 2. Every default here reproduces
+    # a version-1 document exactly, which is what lets `color` go on
+    # meaning what it always meant -- the fill, and now also the first
+    # stop of a gradient.
+    #
+    # `render.py` does not draw these: it is the reference for the
+    # document, and the tests, while the application that grew the
+    # palette is the C++ one. The defaults are what keep that honest --
+    # a document written without touching the palette renders here
+    # exactly as it always did.
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    # A family name, or one of "sans-serif", "serif", "monospace",
+    # "cursive". `font` (a path) wins when both are set: a template
+    # shipping its own face is naming the exact file it needs.
+    font_family: str = ""
+    fill_mode: str = "solid"  # solid | linear | radial
+    color2: str = "#38bdf8"  # the gradient's far stop
+    fill_angle: float = 45.0  # degrees, linear fills only
     type: str = field(default="text", init=False)
 
 

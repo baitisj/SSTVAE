@@ -10,6 +10,15 @@ burned-in text augmentation in `sstvae/data.py` and its comment on why
 the training text is deliberately unstructured. Composition happens
 *before* encoding, so the overlay is part of the picture the network
 codes, not something laid on afterwards.
+
+**The document version 2 style fields are deliberately not drawn here**
+-- bold, italic, underline, `font_family` and the gradient fills. That
+is not an oversight: the application that grew the style palette is the
+C++ one, this module is the reference for the *document* plus what the
+Python tests render, and duplicating a gradient in PIL would be a second
+implementation to keep in step for no caller. The defaults in `model.py`
+are what make the omission safe -- a document written without touching
+the palette renders here exactly as it always did.
 """
 
 import os
