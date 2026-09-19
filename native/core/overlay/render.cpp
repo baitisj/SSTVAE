@@ -1,12 +1,16 @@
 #include "overlay/render.hpp"
 
+#include <QBrush>
 #include <QColor>
 #include <QFont>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QImage>
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRadialGradient>
+#include <QRectF>
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -79,10 +83,45 @@ QString family_for(const std::string& path) {
     return family;
 }
 
+// The document's four generic keywords. Qt's fontconfig backend
+// understands them as family names, but the other platforms' databases
+// do not, so the style hint rides along: it is what makes "monospace"
+// mean a fixed-pitch face on a machine where no family is called that.
+// Anything else is a real family name and is passed through untouched.
+void apply_family_request(QFont& font, const std::string& request) {
+    const QString name = QString::fromStdString(request);
+    struct Generic {
+        const char* keyword;
+        QFont::StyleHint hint;
+    };
+    static constexpr Generic GENERICS[] = {
+        {"sans-serif", QFont::SansSerif},
+        {"serif", QFont::Serif},
+        {"monospace", QFont::Monospace},
+        {"cursive", QFont::Cursive},
+    };
+    for (const Generic& g : GENERICS) {
+        if (name.compare(QLatin1String(g.keyword), Qt::CaseInsensitive) == 0) {
+            font.setFamily(name);
+            font.setStyleHint(g.hint);
+            return;
+        }
+    }
+    font.setFamily(name);
+}
+
 QFont font_for(const TextItem& item, int size_px) {
     QFont font;
+    // `font` (a path) wins over `font_family`: a template that ships its
+    // own face is naming the exact file it needs. The family request is
+    // the fallback for when there is no path *or* the path yielded no
+    // family, so an unreadable file degrades to the operator's choice of
+    // face rather than to the default.
     const QString family = family_for(item.font);
     if (!family.isEmpty()) font.setFamily(family);
+    else if (!item.font_family.empty()) apply_family_request(font, item.font_family);
+    font.setBold(item.bold);
+    font.setItalic(item.italic);
     // setPixelSize, not setPointSize: the document sizes text as a
     // fraction of canvas height, so the answer must not depend on the
     // DPI of whatever screen happens to be attached.
@@ -140,26 +179,100 @@ TextLayout layout_text(const TextItem& item, const QFont& font, int size_px,
     return out;
 }
 
-// One path for the whole block, so the stroke is drawn under *all* the
-// glyphs before any of them is filled. Stroking and filling line by
-// line would let a descender's outline cut across the line below it.
-QPainterPath text_path(const TextItem& item, const QFont& font,
-                       const TextLayout& layout) {
+// Where an underline sits, from the font's own metrics. Shared by the
+// drawing and by `item_bbox`, so a selection handle cannot stop short
+// of a line the renderer draws.
+//
+// Never thinner than a pixel: `lineWidth()` is 0 or fractional for some
+// faces at small sizes, and an underline that vanishes there would make
+// the toggle look broken.
+QRectF underline_rect(const QFontMetricsF& fm, double x, double baseline,
+                      double width) {
+    return QRectF(x, baseline + fm.underlinePos(), width,
+                  std::max(1.0, fm.lineWidth()));
+}
+
+// The block as two paths, so the stroke is drawn under *all* the glyphs
+// before any of them is filled. Stroking and filling line by line would
+// let a descender's outline cut across the line below it.
+//
+// **The underline is its own path rather than a rect appended to the
+// glyphs'.** `QPainterPath::addText` adds outlines only -- a font's
+// underline is a decoration Qt draws separately, so
+// `QFont::setUnderline` renders nothing through this path -- and a rect
+// appended to the same path fights it over the fill rule: under
+// odd-even a descender crossing the line is punched out of it, and
+// under winding a contour running the other way cancels it. Two paths,
+// both stroked before either is filled, is what a union would look like
+// without asking Qt to compute one.
+struct TextShape {
+    QPainterPath glyphs;
+    QPainterPath underline;
+};
+
+TextShape text_shape(const TextItem& item, const QFont& font,
+                     const TextLayout& layout) {
     const QFontMetricsF fm(font);
-    QPainterPath path;
+    TextShape shape;
     for (int i = 0; i < layout.lines.size(); ++i) {
         const QString& line = layout.lines[i];
         if (line.isEmpty()) continue;
+        const double advance = fm.horizontalAdvance(line);
         double x = layout.left;
-        if (item.align == "center")
-            x += (layout.width - fm.horizontalAdvance(line)) / 2.0;
-        else if (item.align == "right")
-            x += layout.width - fm.horizontalAdvance(line);
+        if (item.align == "center") x += (layout.width - advance) / 2.0;
+        else if (item.align == "right") x += layout.width - advance;
         const double baseline =
             layout.top + layout.ascent + layout.line_height * i;
-        path.addText(QPointF(x, baseline), font, line);
+        shape.glyphs.addText(QPointF(x, baseline), font, line);
+        if (item.underline)
+            shape.underline.addRect(underline_rect(fm, x, baseline, advance));
     }
-    return path;
+    return shape;
+}
+
+// The fill. `color` is the first stop in every mode, which is what
+// keeps a version-1 document identical: a solid item takes the exact
+// path it always did.
+//
+// Built over the layout box rather than the ink, so the ramp does not
+// shift as the text is edited, and in the painter's current space --
+// already translated and rotated for the item -- so the gradient turns
+// with the text instead of sliding across it. An unrecognised mode is
+// solid, per the document.
+QBrush fill_brush(const TextItem& item, const TextLayout& layout) {
+    const QColor from = color_of(item.color, Qt::white);
+    const bool linear = item.fill_mode == "linear";
+    const bool radial = item.fill_mode == "radial";
+    if (!linear && !radial) return QBrush(from);
+
+    const QColor to = color_of(item.color2, from);
+    const QPointF centre(layout.left + layout.width / 2.0,
+                         layout.top + layout.height / 2.0);
+    if (radial) {
+        const double radius =
+            std::max(1.0, std::hypot(layout.width, layout.height) / 2.0);
+        QRadialGradient g(centre, radius);
+        g.setColorAt(0.0, from);
+        g.setColorAt(1.0, to);
+        return QBrush(g);
+    }
+
+    // Clockwise on screen (y grows downward), so 0 runs left to right
+    // and 90 top to bottom. The half-length is the box's extent along
+    // that direction, which puts the end stops exactly on the corners --
+    // any shorter and a diagonal ramp never reaches its far colour.
+    // Not M_PI: MSVC only defines it behind _USE_MATH_DEFINES.
+    constexpr double PI = 3.14159265358979323846;
+    const double a = item.fill_angle * PI / 180.0;
+    const double dx = std::cos(a);
+    const double dy = std::sin(a);
+    const double half =
+        (std::abs(layout.width * dx) + std::abs(layout.height * dy)) / 2.0;
+    QLinearGradient g(centre - QPointF(dx, dy) * half,
+                      centre + QPointF(dx, dy) * half);
+    g.setColorAt(0.0, from);
+    g.setColorAt(1.0, to);
+    return QBrush(g);
 }
 
 void draw_text(QPainter& painter, const TextItem& item, int canvas_w,
@@ -186,7 +299,7 @@ void draw_text(QPainter& painter, const TextItem& item, int canvas_w,
     }
 
     const TextLayout layout = layout_text(item, font, size_px, x, y);
-    const QPainterPath path = text_path(item, font, layout);
+    const TextShape shape = text_shape(item, font, layout);
     if (stroke > 0.0) {
         QPen pen(color_of(item.stroke_color, Qt::black));
         // PIL's stroke_width is a radius, drawn outside the glyph; a
@@ -194,9 +307,12 @@ void draw_text(QPainter& painter, const TextItem& item, int canvas_w,
         // outside. Same visual weight rather than a coincidence.
         pen.setWidthF(stroke * 2.0);
         pen.setJoinStyle(Qt::RoundJoin);
-        painter.strokePath(path, pen);
+        painter.strokePath(shape.glyphs, pen);
+        if (item.underline) painter.strokePath(shape.underline, pen);
     }
-    painter.fillPath(path, color_of(item.color, Qt::white));
+    const QBrush brush = fill_brush(item, layout);
+    painter.fillPath(shape.glyphs, brush);
+    if (item.underline) painter.fillPath(shape.underline, brush);
     painter.restore();
 }
 
@@ -353,12 +469,22 @@ Bbox item_bbox(int canvas_w, int canvas_h, const Item& item,
         TextItem measured = *text;
         if (measured.text.empty()) measured.text = " ";
         const TextLayout layout = layout_text(measured, font, size_px, x, y);
+        // An underline can sit below the font's descent, and the handle
+        // must not clip a line the renderer draws.
+        double bottom = layout.top + layout.height;
+        if (text->underline) {
+            const double baseline = layout.top + layout.ascent +
+                                    layout.line_height * (layout.lines.size() - 1);
+            const QRectF line =
+                underline_rect(QFontMetricsF(font), layout.left, baseline, layout.width);
+            bottom = std::max(bottom, line.bottom());
+        }
         return Bbox{static_cast<int>(std::lround(layout.left - stroke)),
                     static_cast<int>(std::lround(layout.top - stroke)),
                     std::max(1, static_cast<int>(
                                     std::lround(layout.width + 2 * stroke))),
                     std::max(1, static_cast<int>(
-                                    std::lround(layout.height + 2 * stroke)))};
+                                    std::lround(bottom - layout.top + 2 * stroke)))};
     }
 
     const ImageItem& image = std::get<ImageItem>(item);

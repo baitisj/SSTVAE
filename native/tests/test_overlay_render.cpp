@@ -11,12 +11,14 @@
 // operator judges them against the latter.
 
 #include <QFile>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QImage>
 #include <QString>
 #include <QTemporaryDir>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -365,6 +367,264 @@ void test_a_file_inset_is_decoded_once() {
                    "cache: render still draws it after the file went");
 }
 
+
+// ---------------------------------------------------------------------
+// Style (document version 2)
+
+// One big, bold-enough word so each property has plenty of ink to move.
+overlay::TextItem styled_text() {
+    overlay::TextItem item;
+    item.text = "HIM";
+    item.x = 0.05;
+    item.y = 0.05;
+    item.size = 0.3;
+    item.color = "#ff0000";
+    item.stroke_width = 0.0;
+    return item;
+}
+
+images::Picture render_one(const overlay::TextItem& item) {
+    overlay::Doc doc;
+    doc.items.push_back(item);
+    return overlay::render(solid(320, 240, 0, 0, 0), doc);
+}
+
+bool identical(const images::Picture& a, const images::Picture& b) {
+    return a.width == b.width && a.height == b.height && a.rgb == b.rgb;
+}
+
+// The compatibility claim as an assertion: spelling out every version-2
+// field at its documented default is the same document as not naming
+// them, pixel for pixel. A default that drifted (colour2 leaking into a
+// solid fill, a family request overriding the default face) shows here
+// before it shows up as v1 templates quietly looking different.
+void test_the_style_defaults_render_as_version_1_did() {
+    overlay::TextItem plain = styled_text();
+    plain.stroke_width = 0.12;  // the stroke a new item really has
+
+    overlay::TextItem spelled = plain;
+    spelled.bold = false;
+    spelled.italic = false;
+    spelled.underline = false;
+    spelled.font_family = "";
+    spelled.fill_mode = "solid";
+    spelled.color2 = "#38bdf8";
+    spelled.fill_angle = 45.0;
+    check::is_true(identical(render_one(plain), render_one(spelled)),
+                   "style/defaults: spelled-out defaults are pixel-identical");
+
+    // And a solid fill ignores its second colour and its angle entirely.
+    overlay::TextItem other = plain;
+    other.color2 = "#00ff00";
+    other.fill_angle = 200.0;
+    check::is_true(identical(render_one(plain), render_one(other)),
+                   "style/defaults: a solid fill never reads color2 or the angle");
+}
+
+void test_bold_adds_ink() {
+    overlay::TextItem regular = styled_text();
+    overlay::TextItem bold = regular;
+    bold.bold = true;
+    const images::Picture base = solid(320, 240, 0, 0, 0);
+    check::is_true(painted(render_one(bold), base) > painted(render_one(regular), base),
+                   "style/bold: a bold face covers more pixels than the regular one");
+}
+
+void test_underline_draws_below_the_baseline() {
+    const images::Picture base = solid(320, 240, 0, 0, 0);
+    overlay::TextItem plain = styled_text();
+    // "HIM" has no descender, so anything painted under the baseline
+    // can only be the underline.
+    plain.text = "HIM";
+    overlay::TextItem underlined = plain;
+    underlined.underline = true;
+
+    const images::Picture without = render_one(plain);
+    const images::Picture with = render_one(underlined);
+    const overlay::Bbox ink_without = painted_bbox(without, base);
+    const overlay::Bbox ink_with = painted_bbox(with, base);
+    check::is_true(painted(with, base) > painted(without, base),
+                   "style/underline: it adds ink");
+    check::is_true(ink_with.y + ink_with.h > ink_without.y + ink_without.h,
+                   "style/underline: the ink reaches below the text's own");
+
+    // The selection handle has to cover the line the renderer drew.
+    const overlay::Bbox box = overlay::item_bbox(base.width, base.height,
+                                                 overlay::Item{underlined});
+    check::is_true(ink_with.y + ink_with.h <= box.y + box.h,
+                   "style/underline: item_bbox reaches the underline");
+}
+
+// A stroke draws under the underline as well as the glyphs, which is
+// what makes the line read as part of the text.
+void test_the_underline_is_stroked_too() {
+    const images::Picture base = solid(320, 240, 0, 0, 0);
+    overlay::TextItem item = styled_text();
+    item.underline = true;
+    item.stroke_width = 0.1;
+    item.stroke_color = "#00ff00";
+    const overlay::Bbox stroked = painted_bbox(render_one(item), base);
+    item.stroke_width = 0.0;
+    const overlay::Bbox bare = painted_bbox(render_one(item), base);
+    check::is_true(stroked.y + stroked.h > bare.y + bare.h,
+                   "style/underline: its stroke extends below the bare line");
+}
+
+// The two ends of the gradient, sampled on the ink's middle row a few
+// pixels inside its first and last painted columns: the H's left stem
+// and the M's right one.
+Rgb ink_near(const images::Picture& out, const images::Picture& base, bool left) {
+    const overlay::Bbox ink = painted_bbox(out, base);
+    const int y = ink.y + ink.h / 2;
+    for (int i = 0; i < ink.w; ++i) {
+        const int x = left ? ink.x + i : ink.x + ink.w - 1 - i;
+        if (same(pixel(out, x, y), pixel(base, x, y))) continue;
+        // The first painted pixel is antialiased edge coverage, a blend
+        // with the background rather than the fill. Step inside the
+        // stem, where the fill is what is there.
+        const int inside = left ? std::min(x + 4, ink.x + ink.w - 1)
+                                : std::max(x - 4, ink.x);
+        return pixel(out, inside, y);
+    }
+    return Rgb{};
+}
+
+int channel_distance(const Rgb& a, const Rgb& b) {
+    return std::abs(a.r - b.r) + std::abs(a.g - b.g) + std::abs(a.b - b.b);
+}
+
+void test_a_linear_fill_runs_from_color_to_color2() {
+    const images::Picture base = solid(320, 240, 0, 0, 0);
+    overlay::TextItem item = styled_text();
+    item.color = "#ff0000";
+    item.color2 = "#0000ff";
+    item.fill_mode = "linear";
+    item.fill_angle = 0.0;  // left to right
+
+    const images::Picture out = render_one(item);
+    const Rgb left = ink_near(out, base, true);
+    const Rgb right = ink_near(out, base, false);
+    check::is_true(left.r > left.b, "style/linear: the near edge is the from-colour");
+    check::is_true(right.b > right.r, "style/linear: the far edge is the to-colour");
+
+    // The same two colours in a solid fill do not vary: this is what
+    // makes the difference above the gradient rather than the glyphs.
+    item.fill_mode = "solid";
+    const images::Picture flat = render_one(item);
+    check::equal(channel_distance(ink_near(flat, base, true), ink_near(flat, base, false)),
+                 0, "style/linear: solid at the same colours is flat");
+}
+
+void test_the_angle_turns_the_ramp() {
+    const images::Picture base = solid(320, 240, 0, 0, 0);
+    overlay::TextItem item = styled_text();
+    item.color = "#ff0000";
+    item.color2 = "#0000ff";
+    item.fill_mode = "linear";
+
+    item.fill_angle = 0.0;
+    const images::Picture horizontal = render_one(item);
+    item.fill_angle = 180.0;
+    const images::Picture reversed = render_one(item);
+    check::is_true(ink_near(reversed, base, true).b > ink_near(reversed, base, true).r,
+                   "style/angle: 180 degrees puts the to-colour on the left");
+    check::is_true(!identical(horizontal, reversed),
+                   "style/angle: the ramp reverses");
+}
+
+void test_radial_differs_from_linear() {
+    overlay::TextItem item = styled_text();
+    item.color = "#ff0000";
+    item.color2 = "#0000ff";
+    item.fill_mode = "linear";
+    const images::Picture linear = render_one(item);
+    item.fill_mode = "radial";
+    const images::Picture radial = render_one(item);
+    check::is_true(!identical(linear, radial),
+                   "style/radial: not the linear ramp under another name");
+
+    // Centre outward: the middle of the word carries the from-colour
+    // and the corners of the box the to-colour.
+    const images::Picture base = solid(320, 240, 0, 0, 0);
+    const Rgb left = ink_near(radial, base, true);
+    const Rgb right = ink_near(radial, base, false);
+    check::is_true(left.b > left.r && right.b > right.r,
+                   "style/radial: both ends of the word are toward color2");
+}
+
+// The gradient is laid out in the item's own space, so rotating the
+// item turns the ramp with it. Sampled against a pre-rotated fill: a
+// horizontal ramp on text turned 180 degrees reads as the reverse of
+// the unrotated one.
+void test_the_gradient_rotates_with_the_text() {
+    const images::Picture base = solid(320, 240, 0, 0, 0);
+    overlay::TextItem item = styled_text();
+    item.x = 0.5;
+    item.y = 0.5;
+    item.anchor = "mm";
+    item.color = "#ff0000";
+    item.color2 = "#0000ff";
+    item.fill_mode = "linear";
+    item.fill_angle = 0.0;
+    const images::Picture upright = render_one(item);
+    item.rotation = 180.0;
+    const images::Picture turned = render_one(item);
+
+    check::is_true(ink_near(upright, base, true).r > ink_near(upright, base, true).b,
+                   "style/rotate: upright, the left is the from-colour");
+    check::is_true(ink_near(turned, base, true).b > ink_near(turned, base, true).r,
+                   "style/rotate: turned half a turn, the left is the to-colour");
+}
+
+void test_an_unknown_fill_mode_is_solid() {
+    overlay::TextItem solid_item = styled_text();
+    overlay::TextItem odd = solid_item;
+    odd.fill_mode = "conic";
+    odd.color2 = "#0000ff";
+    check::is_true(identical(render_one(solid_item), render_one(odd)),
+                   "style/mode: a mode from a newer build draws as solid");
+}
+
+// A family request only shows where the database has a face to honour
+// it, so this asks the database rather than assuming one: in a fixed
+// pitch face 'i' and 'W' advance the same, and in the default they do
+// not. Skipped -- loudly -- on a machine with no fixed-pitch face at
+// all, rather than passing on nothing.
+void test_a_family_request_changes_the_face() {
+    bool have_fixed = false;
+    for (const QString& family : QFontDatabase::families()) {
+        if (QFontDatabase::isFixedPitch(family)) have_fixed = true;
+    }
+    if (!have_fixed) {
+        std::fprintf(stderr, "note: no fixed-pitch font installed; "
+                             "family-request test skipped\n");
+        return;
+    }
+
+    auto width_of = [](const std::string& family, const std::string& text) {
+        overlay::TextItem item;
+        item.text = text;
+        item.size = 0.2;
+        item.font_family = family;
+        return overlay::item_bbox(640, 480, overlay::Item{item}).w;
+    };
+    check::is_true(width_of("", "iiii") < width_of("", "WWWW"),
+                   "style/family: the default face is proportional");
+    check::equal(width_of("monospace", "iiii"), width_of("monospace", "WWWW"),
+                 "style/family: monospace is fixed-pitch");
+
+    // A path that yields no family degrades to the request, not to the
+    // default face.
+    overlay::TextItem item;
+    item.text = "iiii";
+    item.size = 0.2;
+    item.font = "/nonexistent/not-a-font.ttf";
+    item.font_family = "monospace";
+    const int fallback = overlay::item_bbox(640, 480, overlay::Item{item}).w;
+    check::equal(fallback, width_of("monospace", "iiii"),
+                 "style/family: an unreadable font path falls back to the family");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -386,6 +646,16 @@ int main(int argc, char** argv) {
     test_empty_text_still_has_a_handle();
     test_items_draw_back_to_front();
     test_a_file_inset_is_decoded_once();
+    test_the_style_defaults_render_as_version_1_did();
+    test_bold_adds_ink();
+    test_underline_draws_below_the_baseline();
+    test_the_underline_is_stroked_too();
+    test_a_linear_fill_runs_from_color_to_color2();
+    test_the_angle_turns_the_ramp();
+    test_radial_differs_from_linear();
+    test_the_gradient_rotates_with_the_text();
+    test_an_unknown_fill_mode_is_solid();
+    test_a_family_request_changes_the_face();
 
     return check::report("overlay rendering");
 }
