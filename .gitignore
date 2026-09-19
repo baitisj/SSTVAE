@@ -45,3 +45,9 @@ dist/
 
 # Android CMake build tree (native/android-app)
 build-android/
+
+# Fork-local agent tooling. `.claude/settings.local.json` is per-machine
+# permission state, and `.colorfulvibe/` holds session attachments --
+# neither is part of the program.
+.claude/settings.local.json
+.colorfulvibe/

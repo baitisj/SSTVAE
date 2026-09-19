@@ -2480,3 +2480,132 @@ check is `tests/test_native_settings.py`'s non-default fixture: a new
 setting that the reader knows and the fixture does not now fails
 `test_the_fixture_holds_no_default`, so the file's schema still cannot
 grow silently.
+
+---
+
+## Fork directives (agent workflow)
+
+**Not upstream's.** Everything above describes SSTVAE itself and is
+arodland's; this section is this fork's own rules for how an agent works
+in the tree. It was `CLAUDE.md` in the fork's working directory before
+the upstream repo landed here, and is kept verbatim apart from its
+headings being demoted one level so the file has a single H1. Where the
+two disagree about the *code*, upstream wins -- these are directives
+about process, not about the program.
+
+Hooks handle verification mechanically. This file handles everything hooks
+can't enforce: how you think, how you plan, how you manage context.
+
+---
+
+### Planning
+
+- When asked to plan: output only the plan. No code until told to proceed.
+- When given a plan: follow it exactly. Flag real problems and wait.
+- For non-trivial features (3+ steps or architectural decisions): interview
+  me about implementation, UX, and tradeoffs before writing code.
+- Never attempt multi-file refactors in one response. Break into phases of
+  max 5 files. Complete, verify (hooks will enforce this), get approval,
+  then continue.
+
+### Code Quality
+
+Simplicity is a property of the FINISHED code, never of the process that
+produces it. Plan thoroughly - enumerate edge cases, failure modes, and
+integration points before writing code; a short plan is not a virtue, a
+wrong one is expensive. Then ship the simplest code that survives that
+scrutiny.
+
+- YAGNI applies to speculative features and abstractions nobody asked
+  for - NEVER to error handling, input validation, or edge cases the
+  plan identified.
+- If architecture is flawed, state is duplicated, or patterns are
+  inconsistent: propose and implement the structural fix. Ask: "What
+  would a senior perfectionist dev reject in code review?" Fix that.
+- Test deliberately. Focused tests that pin real behavior - the bug just
+  fixed, the edge case that scared you, the contract a caller depends
+  on. No smoke-test slop: if a test could not fail on a plausible
+  regression, it is waste - delete it.
+- Type safety is cheap insurance; prefer it over runtime discovery.
+- Write code that reads like a human wrote it. Comments explain WHY,
+  concisely, where the code cannot - never line-by-line narration. When
+  you change code, update its comments in the same edit; a stale comment
+  is worse than none.
+
+### Context Management
+
+- Before ANY structural refactor on a file >300 LOC: first remove all dead
+  props, unused exports, unused imports, debug logs. Commit cleanup
+  separately. Dead code burns tokens that trigger compaction faster.
+- For tasks touching >5 independent files: launch parallel sub-agents
+  (5-8 files per agent). Each gets its own ~167K context window. Sequential
+  processing of 20 files guarantees context decay by file 12.
+- After 10+ messages: re-read any file before editing it. Auto-compaction
+  may have destroyed your memory of its contents.
+- If you notice context degradation (referencing nonexistent variables,
+  forgetting file structures): run /compact proactively. Write session
+  state to context-log.md so forks can pick up cleanly.
+- A file Read returns ONE PAGE — a token cap (about 25k tokens), not the
+  file — and the result says when it was partial. Never compute, estimate or
+  summarise from a page. Data files (csv, tsv, json, jsonl, logs, tables):
+  write a script that processes the WHOLE file and read its output. Source
+  files: keep reading with offset/limit until the end. Count lines first
+  (wc -l) so you know what "the end" is.
+- Tool results over 50K chars get truncated to a 2KB preview with a
+  filepath to the full output. If results look suspiciously small: read the
+  full file at the given path, or re-run with narrower scope.
+
+### Edit Safety
+
+- Before every file edit: re-read the file. After editing: read it again.
+  The Edit tool fails silently on stale old_string matches.
+- You have grep, not an AST. On any rename or signature change, search
+  separately for: direct calls, type references, string literals, dynamic
+  imports, require() calls, re-exports, barrel files, test mocks. Assume
+  grep missed something.
+- Never delete a file without verifying nothing references it.
+
+### Self-Correction
+
+- After any correction from me: log the pattern to gotchas.md. Convert
+  mistakes into rules. Review past lessons at session start.
+- If a fix doesn't work after two attempts: stop. Read the entire relevant
+  section top-down. State where your mental model was wrong.
+- When asked to test your own output: adopt a new-user persona. Walk
+  through as if you've never seen the project.
+
+### Security
+- Never hardcode secrets, API keys, tokens, or connection strings. Read
+  them from env at runtime; gitignore .env* — always, the whole family.
+  NEVER create .env.example or any example/sample env file; document
+  required variable names in the README instead.
+- Parameterize every SQL query. Validate and bound all external input.
+  Escape output for its sink (HTML for the DOM, shell-escape for command
+  args, canonicalize+confine filesystem paths). Command injection, XSS,
+  and path traversal are default risks, not edge cases.
+- Never `curl … | sh` or pipe network content into an interpreter.
+- Ask before any destructive or irreversible operation: `git push
+  --force`, `reset --hard`, history rewrite, `branch -D`, `rm -rf`
+  outside build dirs, dropping a database. Don't weaken security config
+  (CORS *, disabled cert checks, eval, broad permissions) to make
+  something work — surface the blocker instead.
+
+### Communication
+- Two budgets — code and prose — and they are not the same.
+- CODE: spend freely. Maximum correctness and completeness, real
+  edge-case handling, and verification always come first. Never trade
+  code quality, robustness, or thoroughness to save tokens or effort. No
+  shortcuts, stubs, or "simplest thing that passes" (this is the Code
+  Quality bar above).
+- PROSE (your English to me): spend sparingly. Lead with the result, then
+  only what changes my next decision — blockers, risks, verification,
+  non-obvious choices. Cut preamble, diff narration, plan recaps, and
+  routine-step narration. Four sharp sentences over four paragraphs.
+- Explain at length ONLY when I ask, or for architecture / data-loss /
+  security / migration / production-behavior calls where the reasoning is
+  load-bearing. Brevity applies to your words, never to your code.
+- When I say "yes", "do it", or "push": execute. Don't repeat the plan.
+- When pointing to existing code as reference: study it, match its
+  patterns exactly. My working code is a better spec than my description.
+- Work from raw error data. Don't guess. If a bug report has no output,
+  ask for it.
