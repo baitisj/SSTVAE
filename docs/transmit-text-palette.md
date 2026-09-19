@@ -304,12 +304,27 @@ satisfy); an edit made through the menu is visible in the strip box's widgets.
 
 ---
 
-## Phase 6 — Docs (2 files)
+## Phase 6 — Docs (2 files, plus one deferred)
 
 - `CLAUDE.md` (merged, upstream section): note the v2 document and the palette
   under "The native port".
 - `docs/gui-review.md`: it already carries before/after transmit-tab shots; add
   the palette, with a fresh `sstvae-gui-shot --transmit` image.
+- **The wiki's `Home` page — deferred, and this is the reminder.** Upstream's
+  CLAUDE.md requires every `docs/*.md` to be listed under "Also in the
+  repository" on the wiki's `Home`, and `docs/transmit-text-palette.md` is not
+  there yet. It could not be: every entry on that list is a
+  `github.com/arodland/SSTVAE/blob/master/docs/…` URL, and this doc exists only
+  on the fork's branch, so any bullet written before the fork is pushed is a
+  404. Do it once the fork exists, pointing at the fork's own URL.
+
+  Two things that make this more than a one-line edit. The wiki is a
+  **separate git repository** (`https://github.com/arodland/SSTVAE.wiki.git`)
+  with no API — `gh` has no wiki commands — so it is clone, edit, commit,
+  push, and nothing in CI or the test suite will ever notice it is stale.
+  And pushing to *that* wiki needs write access to **arodland's** repository,
+  which a fork does not grant: if it is refused, the fork has its own separate
+  wiki, and that is where this entry belongs instead.
 
 ---
 
