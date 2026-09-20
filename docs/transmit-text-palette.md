@@ -21,10 +21,16 @@
 > still moving in the layout, because `QWidgetItem::sizeHint` bounds
 > the hint by the widget's *maximum* size.
 >
-> **Deferred, and the only outstanding item: the wiki `Home` entry**
-> (Phase 6). It needs the fork to exist on GitHub first -- see that
-> phase for why a bullet written before then is a 404, and for the
-> access question if the fork has no wiki of its own.
+> **Nothing is outstanding.** Phase 6's wiki `Home` entry is **closed as
+> not applicable to a fork** -- a fork cannot push to upstream's wiki and
+> its own starts empty, so the entry would mean seeding a parallel wiki
+> for one bullet. `CLAUDE.md`'s docs list does that job in the
+> repository instead. The reasoning, and the condition under which the
+> item returns, are in that phase.
+>
+> Pushed to `github.com/baitisj/SSTVAE`, branch
+> `transmit-text-palette`; `origin` is left pointing at arodland and the
+> fork is the `fork` remote, which the branch tracks.
 >
 > Two departures from this plan, both recorded where they land:
 > `size` is shown in **frame pixels in the strip box as well as in the
@@ -332,27 +338,36 @@ satisfy); an edit made through the menu is visible in the strip box's widgets.
 
 ---
 
-## Phase 6 — Docs (2 files, plus one deferred)
+## Phase 6 — Docs (2 files, plus one closed as not applicable)
 
 - `CLAUDE.md` (merged, upstream section): note the v2 document and the palette
   under "The native port".
 - `docs/gui-review.md`: it already carries before/after transmit-tab shots; add
   the palette, with a fresh `sstvae-gui-shot --transmit` image.
-- **The wiki's `Home` page — deferred, and this is the reminder.** Upstream's
-  CLAUDE.md requires every `docs/*.md` to be listed under "Also in the
-  repository" on the wiki's `Home`, and `docs/transmit-text-palette.md` is not
-  there yet. It could not be: every entry on that list is a
-  `github.com/arodland/SSTVAE/blob/master/docs/…` URL, and this doc exists only
-  on the fork's branch, so any bullet written before the fork is pushed is a
-  404. Do it once the fork exists, pointing at the fork's own URL.
+- ~~**The wiki's `Home` page.**~~ **Closed as not applicable to a fork**
+  (2026-09-19, baitisj), after the fork was pushed to
+  `github.com/baitisj/SSTVAE` and the question could actually be asked.
 
-  Two things that make this more than a one-line edit. The wiki is a
-  **separate git repository** (`https://github.com/arodland/SSTVAE.wiki.git`)
-  with no API — `gh` has no wiki commands — so it is clone, edit, commit,
-  push, and nothing in CI or the test suite will ever notice it is stale.
-  And pushing to *that* wiki needs write access to **arodland's** repository,
-  which a fork does not grant: if it is refused, the fork has its own separate
-  wiki, and that is where this entry belongs instead.
+  The rule it came from is real: upstream's CLAUDE.md requires every
+  `docs/*.md` to be listed under "Also in the repository" on the wiki's `Home`.
+  What the plan did not know is what honouring it from a fork would cost.
+  Pushing to `arodland/SSTVAE.wiki.git` needs write access to **arodland's**
+  repository, which a fork does not grant — so the entry would have to go to
+  the fork's own wiki, and **a fork's wiki starts empty rather than inheriting
+  upstream's eight pages**, and has to be enabled in Settings before it exists
+  at all. So "add one bullet to Home" is really "stand up a parallel wiki and
+  seed a Home page", which is a different and much larger thing, and one that
+  then has *two* Home pages drifting apart with nothing in CI watching either.
+
+  What the entry was for — "this doc exists, and here is what it covers" — is
+  already served by `CLAUDE.md`'s own docs list, which lives in the repository,
+  travels with the branch, and is read by everyone who works here. That is
+  strictly better than a wiki page nothing checks.
+
+  **If this branch is ever contributed upstream, the item comes back**, and
+  then it is the one-line edit it was always meant to be: an
+  `arodland/SSTVAE/blob/master/docs/…` bullet, added by someone with write
+  access, in the same sitting as the merge.
 
 ---
 

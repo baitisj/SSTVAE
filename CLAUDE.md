@@ -2069,10 +2069,13 @@ need when `--native` fails and you want to know *where*.
   Transmit composer, implemented 2026-09-19. Read it for why the
   document went to version 2 and why the palette is a popup rather than
   more of the control strip; the summary is under "The native port"
-  above. Its one outstanding item is the wiki `Home` entry, which
-  cannot be written until the fork exists on GitHub — every bullet on
-  that list is an `arodland/SSTVAE` blob URL, so one written now is a
-  404.
+  above. **The wiki `Home` entry that "The wiki" below would require for
+  it is deliberately not written**: a fork cannot push to upstream's
+  wiki, and a fork's own wiki starts empty rather than inheriting the
+  eight pages, so one bullet would mean standing up a parallel wiki with
+  a second Home to drift. This list is what does that job here. The item
+  returns if the branch is ever contributed upstream, where it is the
+  one-line edit it was meant to be.
 - `docs/gui-review.md` — the 2026-08-07 look-and-feel pass, most of it
   implemented; §7 is the fork's palette addendum, with the renders.
 - `docs/todo.md` — open work items with the reasoning behind them.
