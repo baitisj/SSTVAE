@@ -1,10 +1,38 @@
 # SSTVAE fork: right-click text palette for the Transmit composer
 
-> **Status.** Approved 2026-09-19. Phase 0 (fork landed) and Phase 1
-> (document format v2) are committed and **unverified** -- they were
-> written on a Windows machine with no CMake, Qt or compiler, which is
-> what the "Prerequisite / blocker" section below is about. Read that
-> section as the reason the work moved to Linux, not as a live problem.
+> **Status, 2026-09-19 -- Phases 0-6 are done and verified, bar one
+> deferred item.** The work moved to Linux and the "Prerequisite /
+> blocker" section below is history: read it as the reason for the
+> move, not as a live problem. Verified on a full build (codec, Qt
+> Widgets, Qt Multimedia and Hamlib all on -- note that the earlier
+> `--no-codec` runs silently turned the GUI off with it, reporting 20
+> passing tests where there are now 32):
+>
+> - **32/32 ctest**, including `overlay_render`, `overlay_editor`,
+>   `text_palette` and `tx_panel`.
+> - **`pytest --native`**: 392 passed, 9 skipped.
+> - `check_includes.py` and `check_layering.py` clean.
+>
+> Every new assertion was mutation-tested. Two of them had no teeth
+> until the fixture was fixed, and both are worth knowing: with three
+> overlay items "down one layer" and "to the bottom" land in the same
+> place, so a palette ignoring Shift entirely passed; and a size box
+> pinned by `setMinimumWidth` passes an assertion on `sizeHint()` while
+> still moving in the layout, because `QWidgetItem::sizeHint` bounds
+> the hint by the widget's *maximum* size.
+>
+> **Deferred, and the only outstanding item: the wiki `Home` entry**
+> (Phase 6). It needs the fork to exist on GitHub first -- see that
+> phase for why a bullet written before then is a 404, and for the
+> access question if the fork has no wiki of its own.
+>
+> Two departures from this plan, both recorded where they land:
+> `size` is shown in **frame pixels in the strip box as well as in the
+> palette** (Phase 4 left the box on fractions and flagged the
+> question; pixels was the call), and the font family is a nested
+> `QMenu` rather than a `QComboBox` -- Phase 4's named fallback, taken
+> up front because the combo's failure is style-dependent and so cannot
+> be ruled out from one machine.
 
 ## Context
 

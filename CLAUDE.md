@@ -609,6 +609,83 @@ checks the arithmetic — an inverted axis or a dropped letterbox offset
 still looks like a working editor until an item will not go where you
 put it.
 
+**The overlay document is version 2, and every default reproduces a
+version-1 document exactly** (this fork, 2026-09-19;
+`docs/transmit-text-palette.md` is the plan). `TextItem` grew weight,
+slant, underline, a font family and a solid/linear/radial fill with a
+far stop and an angle. `color` is the from-stop in *every* mode, which
+is what keeps `color` meaning what it always meant instead of a v1
+document rendering as a surprise. Four things are load-bearing. The
+version bump is deliberate rather than additive-and-silent: `from_json`
+refuses a document newer than the build understands, so an older build
+meeting a gradient says so rather than quietly drawing it flat — the
+failure a *template* is least able to survive, because a template is
+opened by builds its author never saw. **`font` (a path) wins over
+`font_family`**, because a template shipping its own face is naming the
+exact file it needs while a family is a request the system may answer
+with something else. **The stroke toggle has no field**:
+`stroke_width` is already a fraction of the glyph size and zero already
+means no stroke, and two fields that can disagree about whether there
+is a stroke is one field too many. And **`sstvae/overlay/model.py` is
+not optional** — `tests/test_native_overlay.py` asserts
+`cpp.DOC_VERSION == DOC_VERSION` and diffs the round trip, so bumping
+one side alone turns that suite red. `sstvae/overlay/render.py` is
+deliberately *not* extended; it is used only by the Python tests and
+the defaults keep it faithful.
+
+**Underline needs explicit geometry.** `QPainterPath::addText` adds
+glyph outlines only, so a font's underline — which Qt draws as a
+separate decoration — renders nothing through this path:
+`setUnderline(true)` alone is silent. `text_path` appends a rect per
+line at `QFontMetricsF::underlinePos()` into the *same* path, so the
+stroke and the fill both cover it, and `item_bbox` includes it or the
+selection handle clips the thing it selects.
+
+**The right-click palette is a popup because the control strip is not
+free.** `gui/text_palette.cpp` is a `QMenu` with Format / Style /
+Layers submenus, each holding one `QWidgetAction` whose widget is a row
+of live controls; `OverlayEditor::contextMenuRequested` opens it and
+the editor selects what was clicked *before* it emits, so the palette
+edits the item under the pointer. The shape is chosen for
+`equalise_strips`: the two panes' strips are locked to the same height,
+so anything added under the canvas is paid for by the received picture
+as well, and a popup costs no layout at all. Four things not to
+re-derive. **No `QComboBox` inside a `QWidgetAction`** — its popup is a
+second window over a menu holding a mouse grab and dismisses that menu
+on some styles; the font family is a nested `QMenu`, which is the one
+popup a menu is made of, and "some styles" is not something the machine
+in front of you can rule out for the other two platforms. **The item is
+not stored**: the Layers row rotates items inside a `std::vector`, so a
+pointer captured when the menu opened points at a different item by the
+next click — every edit re-asks the editor for its selection, and
+`popup_for` refuses an item that is not it. **A `QMenu` eats wheel
+events** to scroll itself, so the size and rotation fields are fed by
+an event filter that accepts them. And the editor's four layer moves
+(`raise_selected` and friends) **emit nothing when they cannot happen**:
+`documentChanged` abandons any speculative latent optimization in
+flight, so "raise" on the top item must be free.
+
+**Sizes are shown in pixels of the 640x480 transmitted frame**, in the
+palette and in the strip's "Selected item" box — which changed from the
+document's fraction when the palette landed, because two controls on
+one field showing two units is a defect rather than a preference. The
+document still stores a fraction, which is what makes a saved overlay
+mean the same thing at any resolution. `gui/overlay_units.hpp` is the
+one conversion: two copies can round differently, and the symptom is a
+size that changes by a pixel when read in the other control and then
+writes that pixel back. **The axis differs by item kind and that is the
+part that can be wrong and look right** — a text item's `size` is cap
+height against the canvas *height*, an inset's `width` against its
+*width*, so an inset converted against 480 reads 134 where it should
+read 179. Two widget traps came with it, both the same family as the
+colour button's: a `QSpinBox` sizes itself to its maximum's text and
+the maximum is the selected item's, so the box has to be **fixed** at
+the width of the widest number it can ever show — a *minimum* floors
+the widget and leaves its `sizeHint` free, and a `FlowLayout` lays out
+by the hint, measured still moving 69 px to 77. `sstvae-gui-shot
+--text-palette` shoots the menu and each submenu, since a popup appears
+in no widget render.
+
 **`sstvae-gui-shot` renders the app's windows to PNG, headless**, so a
 layout can be looked at at several sizes without a display or a human.
 A tool rather than a ctest, like `sstvae-audio-check`: "is this laid out
@@ -1987,6 +2064,17 @@ need when `--native` fails and you want to know *where*.
   2026-08-22 adds a dial readout, and changes none of this**: every
   session without a cable still has only the waterfall, so it keeps its
   height and the readout is one line above it.
+- `docs/transmit-text-palette.md` — **this fork's own**, and the only
+  doc here that is: the plan for the right-click style palette on the
+  Transmit composer, implemented 2026-09-19. Read it for why the
+  document went to version 2 and why the palette is a popup rather than
+  more of the control strip; the summary is under "The native port"
+  above. Its one outstanding item is the wiki `Home` entry, which
+  cannot be written until the fork exists on GitHub — every bullet on
+  that list is an `arodland/SSTVAE` blob URL, so one written now is a
+  404.
+- `docs/gui-review.md` — the 2026-08-07 look-and-feel pass, most of it
+  implemented; §7 is the fork's palette addendum, with the renders.
 - `docs/todo.md` — open work items with the reasoning behind them.
   Completed items keep only a short summary there; the full measurement
   records moved to `docs/todo-done.md` (2026-08-12).

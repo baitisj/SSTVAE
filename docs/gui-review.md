@@ -539,3 +539,72 @@ Ranked by (visible harm) / (effort):
 
 Everything in §3.5, §3.6, §3.10 and §4 is a judgement call rather than a
 defect and should be decided rather than fixed.
+
+---
+
+## 7. Addendum: the right-click text palette (fork, 2026-09-19)
+
+Not part of the 2026-08-07 review. Added here because this is the file
+that carries the transmit surface's before-and-after renders, and the
+palette changes what §1.1 and §2.2 are about.
+
+`docs/transmit-text-palette.md` is the plan and the reasoning. The
+short form: the "Selected item" box offered six things — text, align,
+size, rotation, colour, remove — and burned-in overlay text wants
+rather more than that. The box is unchanged; the palette is a second,
+richer path to the same document.
+
+**Right-click the selected text on the canvas.** Three submenus, each
+one row of live controls rather than a list of menu items:
+
+![The palette](images/text-palette-menu.png)
+
+![Format](images/text-palette-format.png)
+
+![Style](images/text-palette-style.png)
+
+![Layers](images/text-palette-layers.png)
+
+Four things about it are decisions rather than implementation, and each
+is the answer to something this review already established.
+
+**A popup, because the strip is not free.** §1.1's whole point is that
+the two panes' control strips are locked to the same height, so
+anything added under the canvas is paid for by the received picture as
+well as the composed one. A menu is in no layout at all.
+`test_tx_panel.cpp` asserts the strip does not move when the palette is
+opened or edited through.
+
+**The preview is still `overlay::render()`'s output.** Every control
+writes a field on `overlay::TextItem` — weight, slant, underline, a
+font family, a solid/linear/radial fill with two stops — which is why
+the document went to version 2 rather than the editor growing Qt
+effects. What is arranged is what goes on the air, by construction.
+
+**Sizes are in pixels of the 640x480 transmitted frame**, in the
+palette *and* in the strip box, which is a change: that box used to
+show the document's fraction ("0.080"). §2.2 is the reason — two
+controls on one field showing two units is the same defect that section
+catalogues, one level up. The document still stores a fraction, which
+is what makes a saved overlay mean the same thing at any resolution;
+`native/gui/overlay_units.hpp` is the single conversion, and it is
+single because two copies can round differently and the symptom is a
+size that changes by a pixel when read in the other control.
+
+![The transmit panel, with the size box in frame pixels](images/gui-review-transmit-palette.png)
+
+**Shot headless, like everything else here**, by a new
+`sstvae-gui-shot --text-palette`. A popup appears in no widget render,
+so it is the one surface `--transmit` cannot show — which is exactly
+the gap that makes a screenshot tool worth having.
+
+Two notes for whoever picks this up:
+
+- There is **no control for `fill_angle`**; a linear gradient runs at
+  the document's default 45°, and rotating the item rotates the
+  gradient with it. Clear-style resets the field, which still matters
+  for a document that arrived with another value in it.
+- The font family offers the four generic keywords, not the installed
+  faces. A document naming its own font *file* keeps it — the file wins
+  over a family, because a template shipping a face is naming the exact
+  thing it needs.
