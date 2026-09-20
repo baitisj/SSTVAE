@@ -33,14 +33,17 @@
 #include <QPushButton>
 #include <QSize>
 #include <QSlider>
+#include <QSpinBox>
 #include <QTimer>
 #include <QWidget>
 
 #include <string>
+#include <variant>
 
 #include "app_state.hpp"
 #include "check.hpp"
 #include "flow_layout.hpp"
+#include "overlay/model.hpp"
 #include "overlay_editor.hpp"
 #include "tx_panel.hpp"
 
@@ -291,6 +294,61 @@ void test_the_colour_button_does_not_change_size() {
                    "and the same size again with nothing selected");
 }
 
+// The size box is in pixels of the transmitted frame, per item kind.
+//
+// **The axis is the part that can be wrong and look right.** A text
+// item's `size` is cap height as a fraction of the canvas *height*
+// (480); an image inset's `width` is a fraction of its *width* (640).
+// One control serves both, so converting an inset against 480 gives a
+// number that is wrong by the aspect ratio, is entirely plausible on
+// screen, and writes itself back into the document the moment the
+// operator touches the field.
+//
+// Both directions are asserted, because a conversion used for display
+// only and a conversion used for write-back are two different bugs and
+// each leaves the other looking correct.
+void test_the_size_box_is_in_frame_pixels() {
+    AppState state;
+    QWidget host;
+    host.resize(900, 700);
+    auto* panel = new TransmitPanel(&state, &host);
+    panel->setGeometry(0, 0, 900, 700);
+    host.show();
+    QCoreApplication::processEvents();
+
+    auto* editor = panel->findChild<OverlayEditor*>();
+    auto* size = panel->findChild<QSpinBox*>(QStringLiteral("item_size_px"));
+    check::is_true(editor != nullptr && size != nullptr,
+                   "size: the panel has an editor and a size box");
+    if (editor == nullptr || size == nullptr) return;
+
+    editor->add_text("N0CALL");
+    QCoreApplication::processEvents();
+    // 0.08 of a 480-line canvas.
+    check::equal(size->value(), 38, "size: a text item reads in canvas pixels");
+    check::equal(size->minimum(), 5, "size: the range is the drag clamp, 0.01");
+    check::equal(size->maximum(), 720, "size: up to 1.5 of the height");
+
+    size->setValue(96);
+    const auto& text = std::get<overlay::TextItem>(editor->doc().items.front());
+    check::is_true(std::abs(text.size - 0.2) < 1e-12,
+                   "size: and writes back as a fraction of the height");
+
+    editor->remove_selected();
+    editor->add_image_inset("/nonexistent/inset.png");
+    QCoreApplication::processEvents();
+    // 0.28 of a 640-wide canvas -- 179, not the 134 that the text
+    // item's axis would give.
+    check::equal(size->value(), 179, "size: an inset reads against the width");
+    check::equal(size->minimum(), 13, "size: with the inset's own clamp, 0.02");
+    check::equal(size->maximum(), 1280, "size: up to 2.0 of the width");
+
+    size->setValue(320);
+    const auto& image = std::get<overlay::ImageItem>(editor->doc().items.front());
+    check::is_true(std::abs(image.width - 0.5) < 1e-12,
+                   "size: and writes back as a fraction of the width");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -303,5 +361,6 @@ int main(int argc, char** argv) {
     test_the_colour_button_does_not_change_size();
     test_an_edit_defers_the_rebuild();
     test_a_rebuild_consumes_the_pending_edit();
+    test_the_size_box_is_in_frame_pixels();
     return check::report("transmit panel");
 }

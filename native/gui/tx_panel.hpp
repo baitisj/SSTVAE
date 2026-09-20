@@ -25,6 +25,7 @@
 class QColor;
 class QComboBox;
 class QDoubleSpinBox;
+class QSpinBox;
 class QDragEnterEvent;
 class QDropEvent;
 class QGroupBox;
@@ -148,8 +149,6 @@ private:
     void build_ui();
     // Keeps the floating error banner across the top of the picture.
     void place_banner();
-    // Paint the current text colour onto the Colour button.
-    void set_color_swatch(const QColor& color);
     // True while the picture is committed to a send in progress.
     bool picture_locked() const;
     void set_picture_controls_enabled(bool on);
@@ -188,16 +187,13 @@ private:
     QGroupBox* properties_ = nullptr;
     QPlainTextEdit* text_edit_ = nullptr;
     QComboBox* align_combo_ = nullptr;
-    QDoubleSpinBox* size_spin_ = nullptr;
+    // In pixels of the transmitted frame -- see `overlay_units.hpp`.
+    QSpinBox* size_spin_ = nullptr;
     QDoubleSpinBox* rotation_spin_ = nullptr;
+    // The swatch and its don't-rebuild-an-identical-icon guard live in
+    // `style::set_color_swatch`, which remembers the last colour on the
+    // button itself -- the text palette has three more of these wells.
     QPushButton* color_button_ = nullptr;
-    // What the swatch currently shows, so a drag's per-mouse-move
-    // selectionChanged does not rebuild an identical icon.
-    QColor swatch_color_;
-    // Whether the button has ever been given a swatch. Distinct from
-    // `swatch_color_` being invalid, which is also a legal *state* --
-    // an image item has no colour.
-    bool swatch_set_ = false;
     // Set while the property widgets are being filled from an item, so
     // their change signals do not write straight back into it.
     bool loading_properties_ = false;

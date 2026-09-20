@@ -1,7 +1,9 @@
 #include "style.hpp"
 
+#include <QAbstractButton>
 #include <QEvent>
 #include <QFontMetrics>
+#include <QIcon>
 #include <QHBoxLayout>
 #include <QHelpEvent>
 #include <QMouseEvent>
@@ -11,6 +13,7 @@
 #include <QPalette>
 #include <QPixmap>
 #include <QStyle>
+#include <QVariant>
 #include <QToolButton>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -312,6 +315,32 @@ QImage to_qimage(const images::Picture& picture) {
 QPixmap to_pixmap(const images::Picture& picture) {
     const QImage image = to_qimage(picture);
     return image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+}
+
+void set_color_swatch(QAbstractButton* button, const QColor& color) {
+    if (button == nullptr) return;
+    // See the header: the property is unset until the first call, which
+    // is what distinguishes "never painted" from "painted as no colour".
+    static const char* const REMEMBERED = "sstvae_swatch_color";
+    const QVariant previous = button->property(REMEMBERED);
+    if (previous.isValid() && previous.value<QColor>() == color) return;
+    button->setProperty(REMEMBERED, color);
+
+    const int size = button->style()->pixelMetric(QStyle::PM_SmallIconSize);
+    // Device pixels, like the waterfall's backing image: a logical-sized
+    // pixmap is upscaled on a HiDPI screen, giving a soft square with a
+    // half-resolution border.
+    const qreal dpr = button->devicePixelRatioF();
+    QPixmap swatch(static_cast<int>(std::lround(size * dpr)),
+                   static_cast<int>(std::lround(size * dpr)));
+    swatch.setDevicePixelRatio(dpr);
+    swatch.fill(color.isValid() ? color : Qt::transparent);
+    if (color.isValid()) {
+        QPainter painter(&swatch);
+        painter.setPen(button->palette().color(QPalette::WindowText));
+        painter.drawRect(0, 0, size - 1, size - 1);
+    }
+    button->setIcon(QIcon(swatch));
 }
 
 QString fmt_snr_db(double snr_db) {

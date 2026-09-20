@@ -4,6 +4,7 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QSpinBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
@@ -46,6 +47,7 @@
 #include "images/images.hpp"
 #include "flow_layout.hpp"
 #include "overlay_editor.hpp"
+#include "overlay_units.hpp"
 #include "style.hpp"
 #include "settings/settings.hpp"
 
@@ -559,22 +561,29 @@ QGroupBox* TransmitPanel::build_properties(QWidget* parent) {
     });
     form->addWidget(style::row(box, {new QLabel(tr("Align"), box), align_combo_}));
 
-    size_spin_ = new QDoubleSpinBox(box);
-    size_spin_->setRange(0.01, 1.5);
-    size_spin_->setSingleStep(0.01);
-    size_spin_->setDecimals(3);
-    connect(size_spin_, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+    // **Pixels of the transmitted frame, not the document's fraction.**
+    // The document stores a fraction -- that is what makes a saved
+    // overlay mean the same thing at any resolution -- but "0.080" is
+    // not a size anyone composing a picture thinks in, and this box and
+    // the right-click palette have to agree about the unit or the same
+    // field reads as two different numbers. The conversion, and the
+    // fact that the axis differs by item kind, live in
+    // `overlay_units.hpp`; the range is narrowed to the selected item's
+    // in `on_selection`.
+    size_spin_ = new QSpinBox(box);
+    size_spin_->setObjectName(QStringLiteral("item_size_px"));
+    size_spin_->setRange(1, overlay::CANVAS_W * 2);
+    size_spin_->setSuffix(tr(" px"));
+    connect(size_spin_, &QSpinBox::valueChanged, this, [this](int value) {
         auto* item = editing_item();
         if (item == nullptr) return;
-        if (auto* text = std::get_if<overlay::TextItem>(item)) {
-            text->size = value;
-        } else if (auto* image = std::get_if<overlay::ImageItem>(item)) {
-            image->width = value;
-        }
+        units::set_size_px(*item, value);
         editor_->refresh_item();
     });
     size_spin_->setToolTip(
-        tr("A fraction of the image, so it means the same at any window size."));
+        tr("Size in pixels of the 640x480 transmitted frame. Stored as a "
+           "fraction of it, so a saved overlay means the same at any "
+           "resolution."));
     form->addWidget(style::row(box, {new QLabel(tr("Size"), box), size_spin_}));
 
     rotation_spin_ = new QDoubleSpinBox(box);
@@ -601,7 +610,7 @@ QGroupBox* TransmitPanel::build_properties(QWidget* parent) {
             QColor(QString::fromStdString(text->color)), this);
         if (!color.isValid()) return;
         text->color = color.name().toStdString();
-        set_color_swatch(color);
+        style::set_color_swatch(color_button_, color);
         editor_->refresh_item();
     });
     // **Given its swatch now, before anything is selected.**
@@ -620,7 +629,7 @@ QGroupBox* TransmitPanel::build_properties(QWidget* parent) {
     // invisible; what it buys is a button whose metrics never move.
     // `test_tx_panel.cpp` asserts that directly, which is a check every
     // platform can run.
-    set_color_swatch(QColor());
+    style::set_color_swatch(color_button_, QColor());
     form->addWidget(style::row(box, {new QLabel(tr("Colour"), box), color_button_}));
 
     // Removing acts on the selection, so it belongs with the selection's
@@ -945,42 +954,6 @@ void TransmitPanel::set_last_rx_image(const images::Picture& image) {
     add_rx_button_->setToolTip(QString());
 }
 
-void TransmitPanel::set_color_swatch(const QColor& color) {
-    // The button said "Colour..." and nothing else, so the current
-    // colour was invisible -- the one thing a colour control has to
-    // show. A filled square on the button, drawn at the icon size the
-    // style asks for so it matches the platform's other buttons.
-    // Dragging a text item emits selectionChanged on every mouse move,
-    // so without this guard the whole rebuild -- parse, allocate, paint,
-    // setIcon, and the layout invalidation setIcon triggers -- runs at
-    // mouse-move rate on the app's most latency-sensitive path.
-    //
-    // **`swatch_set_`, not just the colour.** An invalid QColor equals
-    // an invalid QColor, so before this flag existed the button could
-    // not be given its *first* swatch at construction -- the guard ate
-    // the call -- and it therefore acquired one only when a text item
-    // was first selected. See `build_properties` for why that mattered.
-    if (swatch_set_ && color == swatch_color_) return;
-    swatch_set_ = true;
-    swatch_color_ = color;
-
-    const int size = style()->pixelMetric(QStyle::PM_SmallIconSize);
-    // Device pixels, like the waterfall's backing image: a logical-sized
-    // pixmap is upscaled on a HiDPI screen, giving a soft square with a
-    // half-resolution border.
-    const qreal dpr = devicePixelRatioF();
-    QPixmap swatch(static_cast<int>(std::lround(size * dpr)),
-                   static_cast<int>(std::lround(size * dpr)));
-    swatch.setDevicePixelRatio(dpr);
-    swatch.fill(color.isValid() ? color : Qt::transparent);
-    if (color.isValid()) {
-        QPainter painter(&swatch);
-        painter.setPen(palette().color(QPalette::WindowText));
-        painter.drawRect(0, 0, size - 1, size - 1);
-    }
-    color_button_->setIcon(QIcon(swatch));
-}
-
 // --- property editing -------------------------------------------------------
 
 overlay::Item* TransmitPanel::editing_item() {
@@ -1010,7 +983,7 @@ void TransmitPanel::on_selection(overlay::Item* item) {
     if (item == nullptr) {
         // Otherwise the last item's colour stays painted on a disabled
         // button, describing a selection that no longer exists.
-        set_color_swatch(QColor());
+        style::set_color_swatch(color_button_, QColor());
         return;
     }
 
@@ -1019,17 +992,25 @@ void TransmitPanel::on_selection(overlay::Item* item) {
     text_edit_->setEnabled(is_text);
     align_combo_->setEnabled(is_text);
     color_button_->setEnabled(is_text);
+    // Range before value, and both from the item: a text item's size is
+    // cap height against the canvas *height* while an inset's width is
+    // against its *width*, so one range cannot serve both. `setRange`
+    // clamps whatever the box is holding, which is why it goes first --
+    // and why this is inside the loading guard, since that clamp fires
+    // the same signal an edit does.
+    const units::Range range = units::size_range(*item);
+    size_spin_->setRange(range.min, range.max);
+    size_spin_->setValue(units::size_px(*item));
     if (is_text) {
         const overlay::TextItem& text = std::get<overlay::TextItem>(*item);
         text_edit_->setPlainText(QString::fromStdString(text.text));
         align_combo_->setCurrentIndex(std::max(
             0, align_combo_->findData(QString::fromStdString(text.align))));
-        size_spin_->setValue(text.size);
-        set_color_swatch(QColor(QString::fromStdString(text.color)));
+        style::set_color_swatch(color_button_,
+                                QColor(QString::fromStdString(text.color)));
     } else {
         text_edit_->setPlainText(QString());
-        size_spin_->setValue(std::get<overlay::ImageItem>(*item).width);
-        set_color_swatch(QColor());  // no colour on an image item
+        style::set_color_swatch(color_button_, QColor());  // an image has none
     }
     rotation_spin_->setValue(std::visit([](const auto& i) { return i.rotation; },
                                         *item));

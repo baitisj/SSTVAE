@@ -27,6 +27,7 @@
 
 #include "images/types.hpp"
 
+class QAbstractButton;
 class QImage;
 class QPalette;
 class QPixmap;
@@ -174,6 +175,35 @@ private:
 
 QImage to_qimage(const images::Picture& picture);
 QPixmap to_pixmap(const images::Picture& picture);
+
+// Paint a colour onto a button as its icon.
+//
+// A colour control has to *show* its colour; a button reading
+// "Colour..." and nothing else shows none. Here rather than in a panel
+// because the text palette has three of these wells (fill, gradient
+// stop, stroke) and the transmit strip has a fourth, and the two
+// details below are exactly the kind that get left out of a copy.
+//
+// **The guard.** Dragging a text item emits `selectionChanged` on every
+// mouse move, so an unguarded rebuild -- parse, allocate, paint,
+// `setIcon`, and the layout invalidation `setIcon` triggers -- runs at
+// mouse-move rate on the app's most latency-sensitive path. The last
+// colour is remembered on the button itself, as a dynamic property, so
+// any number of wells are guarded without anyone holding state for
+// them. An *unset* property and a property holding an invalid QColor
+// are different, which matters: an invalid colour is a legal state (an
+// image item has none), so "never painted" cannot be spelled as "the
+// colour is invalid".
+//
+// **Give every such button its swatch at construction, before anything
+// is selected.** A QPushButton grows when it is handed an icon --
+// measured 80x22 without and 80x24 with -- so a button that acquires
+// one on the first selection silently gets 2 px taller at that moment.
+// On a platform where it is the tallest thing on its line of a wrapping
+// row that is 4 px on the whole control strip, which the two panes are
+// locked to: it cost a Windows-only CI failure. An invalid colour
+// paints nothing, so the call is invisible and the metrics never move.
+void set_color_swatch(QAbstractButton* button, const QColor& color);
 
 // SNR for display: "SNR 8.3 dB", or a placeholder when there is none.
 //

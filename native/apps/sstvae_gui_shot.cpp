@@ -19,6 +19,7 @@
 // screenshot tool.
 
 #include <QApplication>
+#include <QMenu>
 #include <QPixmap>
 #include <QStringList>
 #include <QLayout>
@@ -26,8 +27,10 @@
 #include <QProgressBar>
 #include <QTabWidget>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <string>
 
 #include "app_state.hpp"
@@ -37,9 +40,12 @@
 #include "log_pane.hpp"
 #include "main_window.hpp"
 #include "pane_container.hpp"
+#include "images/types.hpp"
+#include "overlay_editor.hpp"
 #include "rx_panel.hpp"
 #include "settings/settings.hpp"
 #include "settings_dialog.hpp"
+#include "text_palette.hpp"
 #include "tx_panel.hpp"
 
 namespace {
@@ -58,6 +64,8 @@ void usage() {
                  "  --log        also shoot the log pane and error banner\n"
                  "  --panes      also shoot both pane layouts, and report the\n"
                  "               minimum width each one imposes on the window\n"
+                 "  --text-palette  also shoot the right-click text palette\n"
+                 "               and each of its three submenus\n"
                  "\n"
                  "Writes settings-<n>-<name>.png, one per tab.\n");
 }
@@ -93,6 +101,7 @@ int main(int argc, char** argv) {
     bool window = false;
     bool log_widgets = false;
     bool panes = false;
+    bool text_palette = false;
 
     const QStringList args = QCoreApplication::arguments();
     for (int i = 1; i < args.size(); ++i) {
@@ -121,6 +130,8 @@ int main(int argc, char** argv) {
             log_widgets = true;
         } else if (arg == QLatin1String("--panes")) {
             panes = true;
+        } else if (arg == QLatin1String("--text-palette")) {
+            text_palette = true;
         } else {
             usage();
             return 2;
@@ -136,6 +147,47 @@ int main(int argc, char** argv) {
     if (tabs == nullptr) {
         std::fprintf(stderr, "sstvae-gui-shot: no tab widget found\n");
         return 1;
+    }
+
+    // **A popup is invisible to a normal widget render**, which is the
+    // whole reason this target exists: the palette is the one surface in
+    // the app that `--transmit` cannot show, because it is not in any
+    // layout. Unlike the transmit panel it needs no `AppState` -- the
+    // palette's only collaborator is the editor -- so it costs nothing
+    // and cannot touch the network.
+    if (text_palette) {
+        sstvae::gui::OverlayEditor editor;
+        editor.resize(width > 0 ? width : 640, height > 0 ? height : 480);
+        sstvae::images::Picture base(sstvae::overlay::CANVAS_W,
+                                     sstvae::overlay::CANVAS_H);
+        std::fill(base.rgb.begin(), base.rgb.end(), std::uint8_t{96});
+        editor.set_base_image(base);
+        editor.add_text("N0CALL");
+
+        sstvae::gui::TextPaletteMenu palette(&editor);
+        palette.popup_for(editor.selected_item(), QPoint(80, 80));
+        app.processEvents();
+        const QString root = QStringLiteral("%1/text-palette.png").arg(out);
+        palette.grab().save(root);
+        std::printf("%s\n", root.toLocal8Bit().constData());
+
+        // Each submenu separately: they are what the palette actually
+        // is, and a shot of three menu entries says nothing about the
+        // rows of controls behind them.
+        for (const char* name : {"palette_format", "palette_style",
+                                 "palette_layers"}) {
+            auto* sub = palette.findChild<QMenu*>(QString::fromLatin1(name));
+            if (sub == nullptr) continue;
+            sub->popup(QPoint(200, 200));
+            app.processEvents();
+            const QString path = QStringLiteral("%1/text-%2.png")
+                                     .arg(out, QString::fromLatin1(name));
+            sub->grab().save(path);
+            std::printf("%s (%dx%d)\n", path.toLocal8Bit().constData(),
+                        sub->sizeHint().width(), sub->sizeHint().height());
+            sub->close();
+        }
+        palette.close();
     }
 
     // Opt-in, because unlike the settings dialog this one needs an
