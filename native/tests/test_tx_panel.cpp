@@ -353,6 +353,56 @@ void test_the_size_box_is_in_frame_pixels() {
                    "size: and writes back as a fraction of the width");
 }
 
+// The size box never changes width.
+//
+// It is a `QSpinBox`, which sizes itself to its maximum's text, and the
+// maximum here is the selected item's -- 720 px for a text item against
+// 1280 for an inset. So selecting one kind after the other would move
+// the box, and the strip is a `FlowLayout`: a width change can move a
+// wrap, and a moved wrap changes the strip's height, which the receive
+// pane is locked to. Identical in shape to the colour button acquiring
+// an icon on its first selection, which failed on Windows and nowhere
+// else -- so, like that one, this is asserted on the control rather
+// than on the strip, where every platform can run it.
+//
+// **On the laid-out width, not on `sizeHint()`.** `QWidgetItem::sizeHint`
+// bounds the widget's hint by its maximum size, so a pinned width is
+// honoured by the layout while the widget's own hint goes on moving --
+// asserting on the hint fails against a correct fix. What decides the
+// wrap is the width the layout gives it, so that is what is measured.
+void test_the_size_box_does_not_change_width() {
+    AppState state;
+    QWidget host;
+    host.resize(900, 700);
+    auto* panel = new TransmitPanel(&state, &host);
+    panel->setGeometry(0, 0, 900, 700);
+    host.show();
+    QCoreApplication::processEvents();
+
+    auto* editor = panel->findChild<OverlayEditor*>();
+    auto* size = panel->findChild<QSpinBox*>(QStringLiteral("item_size_px"));
+    check::is_true(editor != nullptr && size != nullptr,
+                   "size: the panel has an editor and a size box");
+    if (editor == nullptr || size == nullptr) return;
+    const int idle = size->width();
+
+    editor->add_text(std::string("KD8XYZ"));
+    QCoreApplication::processEvents();
+    check::equal(size->width(), idle,
+                 "size: the box is the same width with a text item selected");
+
+    editor->remove_selected();
+    editor->add_image_inset("/nonexistent/inset.png");
+    QCoreApplication::processEvents();
+    check::equal(size->width(), idle,
+                 "size: and with an inset, whose range is nearly twice as wide");
+
+    editor->remove_selected();
+    QCoreApplication::processEvents();
+    check::equal(size->width(), idle,
+                 "size: and again with nothing selected");
+}
+
 // Where a canvas point lands inside the editor widget, mirroring its
 // letterboxing: same aspect, centred. The editor's own `canvas_rect` is
 // private, and rightly so -- this is a test of the panel's wiring, not
@@ -542,6 +592,7 @@ int main(int argc, char** argv) {
     test_an_edit_defers_the_rebuild();
     test_a_rebuild_consumes_the_pending_edit();
     test_the_size_box_is_in_frame_pixels();
+    test_the_size_box_does_not_change_width();
     test_a_right_click_opens_the_palette();
     test_an_edit_through_the_palette_reaches_the_strip_box();
     test_the_palette_costs_the_strip_nothing();

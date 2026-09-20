@@ -589,8 +589,34 @@ QGroupBox* TransmitPanel::build_properties(QWidget* parent) {
     // in `on_selection`.
     size_spin_ = new QSpinBox(box);
     size_spin_->setObjectName(QStringLiteral("item_size_px"));
-    size_spin_->setRange(1, overlay::CANVAS_W * 2);
     size_spin_->setSuffix(tr(" px"));
+    // **Width pinned at the widest number it can ever show, before the
+    // range is narrowed to an item's.** A `QSpinBox` sizes itself to
+    // its maximum's text, and the maximum here depends on what is
+    // selected -- 720 px for a text item against 1280 for an inset --
+    // so without this the box changes width when the operator selects
+    // something. That is the same failure as the colour button
+    // acquiring an icon on first selection: the strip is a `FlowLayout`,
+    // a width change can move a wrap, a moved wrap changes the strip's
+    // height, and the receive pane is locked to that height. It cost a
+    // Windows-only CI failure once already.
+    //
+    // Taken from the hint at the global maximum rather than from a
+    // pixel literal or a font measurement of "1280 px", because only
+    // the style knows how wide its own buttons and frame are -- so this
+    // still follows the font and the screen.
+    //
+    // **Fixed, not a minimum.** A minimum floors the widget's *width*
+    // and leaves its `sizeHint` free, and a `FlowLayout` lays out by
+    // the hint: measured, the box still moved 69 px to 77 between a
+    // text item and an inset with only a floor in place.
+    size_spin_->setRange(1, overlay::CANVAS_W * 2);
+    size_spin_->setFixedWidth(size_spin_->sizeHint().width());
+    // Opened on what a new text item will be, so the disabled box reads
+    // as a size rather than as "1 px".
+    const units::Range initial = units::size_range(overlay::Item(overlay::TextItem{}));
+    size_spin_->setRange(initial.min, initial.max);
+    size_spin_->setValue(units::size_px(overlay::Item(overlay::TextItem{})));
     connect(size_spin_, &QSpinBox::valueChanged, this, [this](int value) {
         auto* item = editing_item();
         if (item == nullptr) return;
