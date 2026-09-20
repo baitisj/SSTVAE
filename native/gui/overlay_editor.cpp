@@ -1,5 +1,6 @@
 #include "overlay_editor.hpp"
 
+#include <QContextMenuEvent>
 #include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -162,6 +163,48 @@ void OverlayEditor::clear_overlay() {
     emit documentChanged();
 }
 
+// Move the selection to depth `to`, keeping everything else in order.
+//
+// A rotate rather than a swap, because the to-top and to-bottom moves
+// pass over several items and those items must keep their relative
+// order -- swapping the selection with the far end would drag one
+// unrelated item all the way back across the stack.
+void OverlayEditor::reorder_selected(int to) {
+    const int n = static_cast<int>(doc_.items.size());
+    if (selected_ < 0 || selected_ >= n) return;
+    // Out of range or already there: a no-op, and it emits nothing.
+    // `documentChanged` abandons any speculative optimization in flight,
+    // so "raise" pressed on the top item must cost nothing at all.
+    if (to < 0 || to >= n || to == selected_) return;
+
+    const auto begin = doc_.items.begin();
+    if (to > selected_) {
+        std::rotate(begin + selected_, begin + selected_ + 1, begin + to + 1);
+    } else {
+        std::rotate(begin + to, begin + selected_, begin + selected_ + 1);
+    }
+    selected_ = to;
+    composed_valid_ = false;
+    update();
+    // **Both signals, and `selectionChanged` is not optional.** The
+    // items live in a vector, so a reorder moves them in memory: the
+    // `overlay::Item*` any property editor is holding now points at a
+    // different item. Same order as a drag's -- the new pointer first,
+    // then the composition change.
+    emit selectionChanged(selected_item());
+    emit documentChanged();
+}
+
+void OverlayEditor::raise_selected() { reorder_selected(selected_ + 1); }
+
+void OverlayEditor::lower_selected() { reorder_selected(selected_ - 1); }
+
+void OverlayEditor::raise_to_top() {
+    reorder_selected(static_cast<int>(doc_.items.size()) - 1);
+}
+
+void OverlayEditor::lower_to_bottom() { reorder_selected(0); }
+
 overlay::Item* OverlayEditor::selected_item() {
     if (selected_ < 0 || selected_ >= static_cast<int>(doc_.items.size())) {
         return nullptr;
@@ -239,6 +282,19 @@ int OverlayEditor::hit_test(const QPointF& point) const {
         }
     }
     return -1;
+}
+
+bool OverlayEditor::grip_hit(const QPointF& widget_point) const {
+    overlay::Item* item = const_cast<OverlayEditor*>(this)->selected_item();
+    if (item == nullptr) return false;
+    const overlay::Bbox box = overlay::item_bbox(
+        overlay::CANVAS_W, overlay::CANVAS_H, *item, last_rx_ ? &*last_rx_ : nullptr);
+    return handle_rect(box).contains(widget_point.toPoint());
+}
+
+int OverlayEditor::hit_index(const QPointF& widget_point) const {
+    if (grip_hit(widget_point)) return selected_;
+    return hit_test(to_canvas(widget_point));
 }
 
 // The side of the square resize grip.
@@ -325,18 +381,14 @@ void OverlayEditor::mousePressEvent(QMouseEvent* event) {
 
     // The grip first: it sits on the item's corner, so testing the item
     // before the handle would make the corner unresizable.
-    if (overlay::Item* item = selected_item()) {
-        const overlay::Bbox box = overlay::item_bbox(
-            overlay::CANVAS_W, overlay::CANVAS_H, *item,
-            last_rx_ ? &*last_rx_ : nullptr);
-        if (handle_rect(box).contains(point.toPoint())) {
-            drag_ = Drag::Resize;
-            resize_origin_ = to_canvas(point);
-            resize_start_ = std::holds_alternative<overlay::TextItem>(*item)
-                                ? std::get<overlay::TextItem>(*item).size
-                                : std::get<overlay::ImageItem>(*item).width;
-            return;
-        }
+    if (grip_hit(point)) {
+        overlay::Item* item = selected_item();
+        drag_ = Drag::Resize;
+        resize_origin_ = to_canvas(point);
+        resize_start_ = std::holds_alternative<overlay::TextItem>(*item)
+                            ? std::get<overlay::TextItem>(*item).size
+                            : std::get<overlay::ImageItem>(*item).width;
+        return;
     }
 
     const QPointF canvas = to_canvas(point);
@@ -361,14 +413,9 @@ void OverlayEditor::mousePressEvent(QMouseEvent* event) {
 // grip first, exactly as `mousePressEvent` tests it, so the cursor
 // cannot promise a resize where a press would start a move.
 void OverlayEditor::update_hover_cursor(const QPointF& point) {
-    if (overlay::Item* item = selected_item()) {
-        const overlay::Bbox box = overlay::item_bbox(
-            overlay::CANVAS_W, overlay::CANVAS_H, *item,
-            last_rx_ ? &*last_rx_ : nullptr);
-        if (handle_rect(box).contains(point.toPoint())) {
-            setCursor(Qt::SizeFDiagCursor);
-            return;
-        }
+    if (grip_hit(point)) {
+        setCursor(Qt::SizeFDiagCursor);
+        return;
     }
     setCursor(hit_test(to_canvas(point)) >= 0 ? Qt::SizeAllCursor
                                               : Qt::ArrowCursor);
@@ -420,6 +467,22 @@ void OverlayEditor::mouseMoveEvent(QMouseEvent* event) {
 void OverlayEditor::mouseReleaseEvent(QMouseEvent* event) {
     Q_UNUSED(event);
     drag_ = Drag::None;
+}
+
+void OverlayEditor::contextMenuEvent(QContextMenuEvent* event) {
+    // The same hit test a press does, so the menu opens on the item the
+    // pointer is over rather than on whatever happened to be selected --
+    // and selecting *first* means the palette edits what was clicked.
+    const int index = hit_index(QPointF(event->pos()));
+    if (index < 0) {
+        // Empty canvas: nothing of ours. Let the base class run, so a
+        // menu on an ancestor still works.
+        QWidget::contextMenuEvent(event);
+        return;
+    }
+    if (index != selected_) select(index);
+    event->accept();
+    emit contextMenuRequested(selected_item(), event->globalPos());
 }
 
 void OverlayEditor::resizeEvent(QResizeEvent* event) {

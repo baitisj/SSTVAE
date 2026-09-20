@@ -19,6 +19,7 @@
 #ifndef SSTVAE_GUI_OVERLAY_EDITOR_HPP
 #define SSTVAE_GUI_OVERLAY_EDITOR_HPP
 
+#include <QPoint>
 #include <QRect>
 #include <QWidget>
 
@@ -80,6 +81,23 @@ public:
     void remove_selected();
     void clear_overlay();
 
+    // Layer order. `Doc::items` is drawn back to front, so an item's
+    // index *is* its depth and a reorder is the whole feature. The
+    // selection follows the item it is on rather than the index it was
+    // at -- moving something and then finding a different item selected
+    // is the one behaviour that makes a layer control unusable.
+    //
+    // All four are no-ops when nothing is selected, and the to-top and
+    // to-bottom pair are no-ops when the selection is already there.
+    // **A no-op emits nothing**, deliberately: `documentChanged` restarts
+    // any speculative latent optimization in flight (see `set_last_rx`
+    // below for what that costs), so a control that fires it for a move
+    // that did not happen is expensive rather than merely untidy.
+    void raise_selected();
+    void lower_selected();
+    void raise_to_top();
+    void lower_to_bottom();
+
     // The selected item, or null. A pointer into the document, so the
     // property editor mutates it in place and calls `refresh_item`.
     overlay::Item* selected_item();
@@ -105,11 +123,22 @@ signals:
     // different item changes nothing that would be transmitted.
     void documentChanged();
 
+    // A right-click landed on an item. The item is already selected by
+    // the time this fires, so a palette summoned here edits what the
+    // operator actually clicked -- and `global_pos` is where to pop it
+    // up. Nothing is emitted for a right-click on empty canvas.
+    void contextMenuRequested(overlay::Item* item, const QPoint& global_pos);
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    // Right-click: hit-test exactly as a press does, select what was
+    // hit, and hand it to whoever is offering a menu. The editor opens
+    // nothing itself -- it has no business knowing what the palette
+    // contains, and `native/gui/` is where a QMenu belongs.
+    void contextMenuEvent(QContextMenuEvent* event) override;
     // Delete removes the selection; the arrows nudge it. Nudging is
     // what a mouse cannot do: items are placed in normalized
     // coordinates, so the smallest useful drag is one widget pixel,
@@ -136,6 +165,19 @@ private:
     // Cursor feedback for the no-drag path of mouseMoveEvent.
     void update_hover_cursor(const QPointF& point);
     void select(int index);
+    // The one mutation behind all four layer moves: put the selection at
+    // `to`, keeping every other item's relative order.
+    void reorder_selected(int to);
+    // Whether this widget point is on the selection's resize grip. The
+    // grip sits *on* the item's corner, so every path that hit-tests has
+    // to try it first or the corner becomes unresizable -- a press, the
+    // hover cursor and a right-click all ask this one question rather
+    // than each carrying its own copy of the rectangle arithmetic.
+    bool grip_hit(const QPointF& widget_point) const;
+    // The index a press or a right-click at this widget point lands on:
+    // the grip's item first, then the items front to back. -1 for empty
+    // canvas.
+    int hit_index(const QPointF& widget_point) const;
 
     overlay::Doc doc_;
     images::Picture base_;

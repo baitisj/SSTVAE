@@ -9,6 +9,7 @@
 // like a working editor until an item will not go where you put it.
 
 #include <QApplication>
+#include <QContextMenuEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QLayout>
@@ -81,6 +82,37 @@ void key(gui::OverlayEditor& editor, int code,
          Qt::KeyboardModifiers mods = Qt::NoModifier) {
     QKeyEvent event(QEvent::KeyPress, code, mods);
     QApplication::sendEvent(&editor, &event);
+}
+
+void right_click(gui::OverlayEditor& editor, QPoint at,
+                 QPoint global = QPoint(1000, 700)) {
+    QContextMenuEvent event(QContextMenuEvent::Mouse, at, global);
+    QApplication::sendEvent(&editor, &event);
+}
+
+// The text of the item at a given depth. `Doc::items` is drawn back to
+// front, so index 0 is the bottom layer.
+std::string text_at(const gui::OverlayEditor& editor, int index) {
+    return std::get<overlay::TextItem>(editor.doc().items[index]).text;
+}
+
+// The whole stack as one string, so a wrong order fails with the order
+// it got rather than with "false".
+std::string stack(const gui::OverlayEditor& editor) {
+    std::string out;
+    for (int i = 0; i < static_cast<int>(editor.doc().items.size()); ++i) {
+        out += text_at(editor, i);
+    }
+    return out;
+}
+
+// The selection's text, or "-" when nothing is selected. Read through
+// `selected_item()` rather than through an index, because the pointer
+// is what a reorder is most likely to leave pointing at the wrong item.
+std::string selected_text(gui::OverlayEditor& editor) {
+    overlay::Item* item = editor.selected_item();
+    if (item == nullptr) return "-";
+    return std::get<overlay::TextItem>(*item).text;
 }
 
 gui::OverlayEditor* make_editor() {
@@ -434,6 +466,206 @@ void test_it_pins_no_window_height() {
     }
 }
 
+// Layer order: a reorder, with the selection following the item.
+//
+// `Doc::items` is drawn back to front, so the index *is* the depth and
+// the move itself is a rotate. Two things it would be easy to get
+// wrong, and both are asserted here rather than left to reading.
+//
+// **The selection must follow the item, not the index.** Raising
+// something and then discovering a different item is selected makes the
+// control unusable, because the second press acts on the wrong thing.
+//
+// **To-top and to-bottom must rotate, not swap.** A swap with the far
+// end reaches the right depth for the item that moved and drags one
+// unrelated item the whole way back across the stack. The
+// discriminator is three items: from A,B,C with C selected,
+// lower_to_bottom is C,A,B and a swap gives C,B,A.
+void test_layer_moves_reorder_and_keep_the_selection() {
+    std::unique_ptr<gui::OverlayEditor> editor(make_editor());
+    editor->add_text("A");
+    editor->add_text("B");
+    editor->add_text("C");
+    check::equal(stack(*editor), std::string("ABC"), "layers: added back to front");
+    check::equal(selected_text(*editor), std::string("C"),
+                 "layers: the newest item is selected");
+
+    editor->lower_selected();
+    check::equal(stack(*editor), std::string("ACB"), "layers: lower moves down one");
+    check::equal(selected_text(*editor), std::string("C"),
+                 "layers: and the selection follows it");
+
+    editor->raise_selected();
+    check::equal(stack(*editor), std::string("ABC"), "layers: raise moves back up");
+    check::equal(selected_text(*editor), std::string("C"), "layers: still selected");
+
+    editor->lower_to_bottom();
+    check::equal(stack(*editor), std::string("CAB"),
+                 "layers: to-bottom rotates rather than swapping");
+    check::equal(selected_text(*editor), std::string("C"),
+                 "layers: to-bottom keeps the selection");
+
+    editor->raise_to_top();
+    check::equal(stack(*editor), std::string("ABC"),
+                 "layers: to-top rotates the others back down");
+    check::equal(selected_text(*editor), std::string("C"),
+                 "layers: to-top keeps the selection");
+
+    // From the middle, so "up" and "down" are both real moves and a
+    // one-off in either direction shows.
+    editor->lower_selected();  // ACB, C at index 1
+    editor->raise_to_top();
+    check::equal(stack(*editor), std::string("ABC"), "layers: to-top from the middle");
+    editor->lower_selected();
+    editor->lower_to_bottom();
+    check::equal(stack(*editor), std::string("CAB"),
+                 "layers: to-bottom from the middle");
+}
+
+// A move that cannot happen must cost nothing.
+//
+// Not tidiness: `documentChanged` is what `TransmitPanel` hangs
+// `schedule_optimization` on, and that abandons any speculative latent
+// refinement in flight to start a fresh one on a 120 s budget. "Raise"
+// pressed on the item that is already on top has to be free, and so has
+// a layer key pressed with nothing selected.
+void test_a_layer_move_that_cannot_happen_emits_nothing() {
+    std::unique_ptr<gui::OverlayEditor> editor(make_editor());
+    int changes = 0;
+    int selections = 0;
+    QObject::connect(editor.get(), &gui::OverlayEditor::documentChanged,
+                     [&changes] { ++changes; });
+    QObject::connect(editor.get(), &gui::OverlayEditor::selectionChanged,
+                     [&selections](overlay::Item*) { ++selections; });
+
+    // Nothing selected at all.
+    editor->raise_selected();
+    editor->lower_selected();
+    editor->raise_to_top();
+    editor->lower_to_bottom();
+    check::equal(changes, 0, "layers: no selection, no document change");
+    check::equal(selections, 0, "layers: and no selection change");
+
+    editor->add_text("A");
+    editor->add_text("B");
+    changes = 0;
+    selections = 0;
+
+    // B is on top already.
+    editor->raise_selected();
+    editor->raise_to_top();
+    check::equal(changes, 0, "layers: raising the top item is free");
+    check::equal(selections, 0, "layers: and does not re-announce the selection");
+
+    // One real move, then the other end.
+    editor->lower_to_bottom();
+    check::equal(changes, 1, "layers: a real move is one document change");
+    check::equal(selections, 1, "layers: and one selection change");
+    editor->lower_selected();
+    editor->lower_to_bottom();
+    check::equal(changes, 1, "layers: lowering the bottom item is free");
+    check::equal(selections, 1, "layers: and stays quiet too");
+
+    // A single item is at the top and the bottom at once.
+    editor->remove_selected();
+    changes = 0;
+    selections = 0;
+    editor->raise_selected();
+    check::equal(changes, 0, "layers: one item left, nothing to raise past");
+}
+
+// A reorder moves the items in memory, so the selection's *address*
+// changes. `TransmitPanel` holds the pointer `selected_item()` handed
+// it, so the editor has to announce the new one -- a reorder that
+// emitted only `documentChanged` would leave the property box editing
+// whatever item landed at the old address.
+void test_a_reorder_announces_the_new_pointer() {
+    std::unique_ptr<gui::OverlayEditor> editor(make_editor());
+    editor->add_text("A");
+    editor->add_text("B");
+
+    overlay::Item* announced = nullptr;
+    QObject::connect(editor.get(), &gui::OverlayEditor::selectionChanged,
+                     [&announced](overlay::Item* item) { announced = item; });
+
+    editor->lower_to_bottom();
+    check::is_true(announced != nullptr, "layers: a reorder announces a selection");
+    check::is_true(announced == editor->selected_item(),
+                   "layers: and it is the pointer the editor now returns");
+    check::equal(std::get<overlay::TextItem>(*announced).text, std::string("B"),
+                 "layers: pointing at the item that moved");
+}
+
+// Right-click hands the item to whoever is offering a menu.
+//
+// The editor opens nothing itself: `contextMenuRequested` is the whole
+// hook, so the palette lives in its own file and this widget stays
+// ignorant of what is on it. What the editor owes the menu is that the
+// item under the cursor is *selected* by the time it fires -- otherwise
+// the palette edits whatever was selected before, which is the item the
+// operator did not click.
+void test_right_click_selects_and_offers_a_menu() {
+    std::unique_ptr<gui::OverlayEditor> editor(make_editor());
+    editor->add_text("A");
+    // Somewhere else on the canvas, so the two do not overlap and the
+    // hit test has to actually discriminate.
+    std::get<overlay::TextItem>(*editor->selected_item()).x = 0.55;
+    std::get<overlay::TextItem>(*editor->selected_item()).y = 0.55;
+    editor->add_text("B");  // at the default corner, and selected
+
+    overlay::Item* offered = nullptr;
+    QPoint where;
+    int offers = 0;
+    QObject::connect(editor.get(), &gui::OverlayEditor::contextMenuRequested,
+                     [&](overlay::Item* item, const QPoint& global) {
+                         offered = item;
+                         where = global;
+                         ++offers;
+                     });
+
+    const QPointF centre_a = centre_of(editor->doc().items[0], nullptr);
+    right_click(*editor, widget_point(centre_a.x(), centre_a.y()),
+                QPoint(1234, 567));
+    check::equal(offers, 1, "right-click on an item offers a menu");
+    check::equal(selected_text(*editor), std::string("A"),
+                 "right-click selects the item it landed on");
+    check::is_true(offered == editor->selected_item(),
+                   "and offers the item it just selected");
+    check::equal(where.x(), 1234, "with the global position to pop up at, x");
+    check::equal(where.y(), 567, "and y");
+
+    // Empty canvas: nothing offered, and the selection is left alone so
+    // a stray right-click does not throw away what was being edited.
+    right_click(*editor, widget_point(overlay::CANVAS_W - 2, overlay::CANVAS_H / 2));
+    check::equal(offers, 1, "right-click on empty canvas offers nothing");
+    check::equal(selected_text(*editor), std::string("A"),
+                 "and leaves the selection alone");
+}
+
+// The right button must not start a drag.
+//
+// `mousePressEvent` returns early on anything but the left button, and
+// Qt delivers a press *and* a context-menu event for a right-click. If
+// that early return ever goes, a right-click would grab the item and
+// the following mouse move would drag it -- while the menu is open.
+void test_the_right_button_does_not_drag() {
+    std::unique_ptr<gui::OverlayEditor> editor(make_editor());
+    editor->add_text("A");
+    const QPointF centre = centre_of(editor->doc().items[0], nullptr);
+    const double x0 = std::get<overlay::TextItem>(editor->doc().items[0]).x;
+
+    QMouseEvent press_event(QEvent::MouseButtonPress,
+                            QPointF(widget_point(centre.x(), centre.y())),
+                            QPointF(widget_point(centre.x(), centre.y())),
+                            Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+    QApplication::sendEvent(editor.get(), &press_event);
+    right_click(*editor, widget_point(centre.x(), centre.y()));
+    move_to(*editor, widget_point(centre.x() + 120.0, centre.y() + 60.0));
+
+    check::equal(std::get<overlay::TextItem>(editor->doc().items[0]).x, x0,
+                 "a right-click drag does not move the item");
+}
+
 int main(int argc, char** argv) {
     check::report_crashes_instead_of_prompting();
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -452,6 +684,11 @@ int main(int argc, char** argv) {
     test_a_reception_is_a_change_only_if_an_item_uses_it();
     test_a_reception_is_kept_even_with_nothing_to_show_it();
     test_it_pins_no_window_height();
+    test_layer_moves_reorder_and_keep_the_selection();
+    test_a_layer_move_that_cannot_happen_emits_nothing();
+    test_a_reorder_announces_the_new_pointer();
+    test_right_click_selects_and_offers_a_menu();
+    test_the_right_button_does_not_drag();
 
     return check::report("overlay editor");
 }
