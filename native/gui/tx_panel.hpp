@@ -41,6 +41,7 @@ namespace sstvae::gui {
 class AppState;
 class ErrorBanner;
 class OverlayEditor;
+class TextPaletteMenu;
 
 // The output level is stored as a peak amplitude (`transmit.level`,
 // 0..1) because that is what the transmitter scales to, but it is
@@ -169,6 +170,11 @@ private:
 
     AppState* app_ = nullptr;
     OverlayEditor* editor_ = nullptr;
+    // The right-click style palette. Summoned by the editor, which
+    // selects what was clicked before it asks -- so the palette edits
+    // the item under the pointer and this panel's box shows the same
+    // one.
+    TextPaletteMenu* palette_ = nullptr;
     ErrorBanner* banner_ = nullptr;
 
     QPushButton* choose_button_ = nullptr;

@@ -49,6 +49,7 @@
 #include "overlay_editor.hpp"
 #include "overlay_units.hpp"
 #include "style.hpp"
+#include "text_palette.hpp"
 #include "settings/settings.hpp"
 
 namespace sstvae::gui {
@@ -345,6 +346,22 @@ void TransmitPanel::build_ui() {
     editor_ = new OverlayEditor(this);
     connect(editor_, &OverlayEditor::selectionChanged, this,
             &TransmitPanel::on_selection);
+
+    // The right-click palette: a second, richer path to the same fields
+    // this panel's "Selected item" box edits. A child of the panel, so
+    // it lives as long as the editor it edits through.
+    palette_ = new TextPaletteMenu(editor_, this);
+    connect(editor_, &OverlayEditor::contextMenuRequested, palette_,
+            &TextPaletteMenu::popup_for);
+    // **`itemEdited`, not `documentChanged`.** The panel has to re-read
+    // the strip box when the menu changes a field the box also shows,
+    // and `documentChanged` would do it -- but that signal also fires
+    // on every mouse move of a drag, and refilling the property widgets
+    // at mouse-move rate is the path `EDIT_DEBOUNCE_MS` and the colour
+    // swatch's rebuild guard both exist to protect. The palette
+    // announces its own edits separately for exactly this reason.
+    connect(palette_, &TextPaletteMenu::itemEdited, this,
+            [this] { on_selection(editor_->selected_item()); });
     // The debounced form: this signal is emitted per mouse move during
     // a drag, and the slot behind it renders the whole composite.
     connect(editor_, &OverlayEditor::documentChanged, this,

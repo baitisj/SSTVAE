@@ -27,6 +27,7 @@
 // row by some other means later would break the panes the same way.
 
 #include <QApplication>
+#include <QContextMenuEvent>
 #include <QLabel>
 #include <QLayout>
 #include <QPoint>
@@ -37,6 +38,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <cmath>
 #include <string>
 #include <variant>
 
@@ -44,7 +46,9 @@
 #include "check.hpp"
 #include "flow_layout.hpp"
 #include "overlay/model.hpp"
+#include "overlay/render.hpp"
 #include "overlay_editor.hpp"
+#include "text_palette.hpp"
 #include "tx_panel.hpp"
 
 using namespace sstvae;
@@ -349,6 +353,182 @@ void test_the_size_box_is_in_frame_pixels() {
                    "size: and writes back as a fraction of the width");
 }
 
+// Where a canvas point lands inside the editor widget, mirroring its
+// letterboxing: same aspect, centred. The editor's own `canvas_rect` is
+// private, and rightly so -- this is a test of the panel's wiring, not
+// a licence to reach into the widget.
+QPoint canvas_point(QWidget* editor, double canvas_x, double canvas_y) {
+    const double aspect =
+        static_cast<double>(overlay::CANVAS_W) / overlay::CANVAS_H;
+    int w = editor->width();
+    int h = static_cast<int>(std::lround(w / aspect));
+    if (h > editor->height()) {
+        h = editor->height();
+        w = static_cast<int>(std::lround(h * aspect));
+    }
+    const int x0 = (editor->width() - w) / 2;
+    const int y0 = (editor->height() - h) / 2;
+    return QPoint(
+        x0 + static_cast<int>(std::lround(canvas_x * w / overlay::CANVAS_W)),
+        y0 + static_cast<int>(std::lround(canvas_y * h / overlay::CANVAS_H)));
+}
+
+// A right-click on the canvas opens the palette.
+//
+// The end of the chain the two halves are built as: the editor
+// hit-tests, selects what was hit and emits, and the panel is what
+// joins that to the menu. Each half is tested where it lives and
+// neither says anything about the connection between them -- which is
+// one line, and one line that can be left out with every other test in
+// the tree still green.
+void test_a_right_click_opens_the_palette() {
+    AppState state;
+    QWidget host;
+    host.resize(900, 700);
+    auto* panel = new TransmitPanel(&state, &host);
+    panel->setGeometry(0, 0, 900, 700);
+    host.show();
+    QCoreApplication::processEvents();
+
+    auto* editor = panel->findChild<OverlayEditor*>();
+    auto* palette = panel->findChild<TextPaletteMenu*>();
+    check::is_true(editor != nullptr && palette != nullptr,
+                   "right-click: the panel has an editor and a palette");
+    if (editor == nullptr || palette == nullptr) return;
+
+    editor->add_text(std::string("KD8XYZ"));
+    QCoreApplication::processEvents();
+    const overlay::Bbox box =
+        overlay::item_bbox(overlay::CANVAS_W, overlay::CANVAS_H,
+                           editor->doc().items.front(), nullptr);
+    const QPoint at =
+        canvas_point(editor, box.x + box.w / 2.0, box.y + box.h / 2.0);
+
+    QContextMenuEvent event(QContextMenuEvent::Mouse, at, editor->mapToGlobal(at));
+    QApplication::sendEvent(editor, &event);
+    QCoreApplication::processEvents();
+    check::is_true(palette->isVisible(),
+                   "right-click: on an item, the palette opens");
+    palette->close();
+
+    // And empty canvas opens nothing -- the editor emits nothing there,
+    // so this is the panel's half of that agreement.
+    const QPoint empty = canvas_point(editor, overlay::CANVAS_W - 2,
+                                      overlay::CANVAS_H / 2);
+    QContextMenuEvent away(QContextMenuEvent::Mouse, empty,
+                           editor->mapToGlobal(empty));
+    QApplication::sendEvent(editor, &away);
+    QCoreApplication::processEvents();
+    check::is_true(!palette->isVisible(),
+                   "right-click: on empty canvas, nothing opens");
+}
+
+// The palette edits the same fields the strip box shows, so the box
+// has to re-read what the menu changed.
+//
+// Both halves matter and each hides the other's failure. If the two
+// were wired to *different* items the box would simply show the wrong
+// number, and if `itemEdited` were not connected at all the box would
+// show a stale one -- which looks identical to "the edit did not
+// happen" and sends the next person to debug the palette.
+void test_an_edit_through_the_palette_reaches_the_strip_box() {
+    AppState state;
+    QWidget host;
+    host.resize(900, 700);
+    auto* panel = new TransmitPanel(&state, &host);
+    panel->setGeometry(0, 0, 900, 700);
+    host.show();
+    QCoreApplication::processEvents();
+
+    auto* editor = panel->findChild<OverlayEditor*>();
+    auto* palette = panel->findChild<TextPaletteMenu*>();
+    auto* box_size = panel->findChild<QSpinBox*>(QStringLiteral("item_size_px"));
+    check::is_true(editor != nullptr && palette != nullptr && box_size != nullptr,
+                   "palette: the panel builds one, beside its size box");
+    if (editor == nullptr || palette == nullptr || box_size == nullptr) return;
+
+    editor->add_text(std::string("KD8XYZ"));
+    QCoreApplication::processEvents();
+    check::equal(box_size->value(), 38, "palette: the box shows the item's size");
+
+    // Open it the way the editor does, then edit through it.
+    palette->popup_for(editor->selected_item(), QPoint(50, 50));
+    palette->close();
+    auto* menu_size = panel->findChild<QSpinBox*>(QStringLiteral("palette_size"));
+    check::is_true(menu_size != nullptr, "palette: it has a size field");
+    if (menu_size == nullptr) return;
+    check::equal(menu_size->value(), 38,
+                 "palette: opening it shows the same number the box does");
+
+    menu_size->setValue(96);
+    QCoreApplication::processEvents();
+    const auto& text = std::get<overlay::TextItem>(editor->doc().items.front());
+    check::is_true(std::abs(text.size - 0.2) < 1e-12,
+                   "palette: the edit reaches the document");
+    check::equal(box_size->value(), 96,
+                 "palette: and the strip box re-reads it");
+}
+
+// The palette costs the control strip no height at all.
+//
+// **This is the reason the whole feature is a popup.** The two panes'
+// strips are locked to the same height (`PaneContainer::equalise_strips`)
+// so the received picture and the composed one are the same size, and
+// everything added under the canvas is paid for on both sides. A menu
+// is a window of its own: it is in no layout, and an edit made through
+// it must not move the strip either -- `on_selection` runs on every one
+// of those edits, and that is the slot whose refilling used to change
+// the row's height.
+void test_the_palette_costs_the_strip_nothing() {
+    AppState state;
+    QWidget host;
+    host.resize(900, 700);
+    auto* panel = new TransmitPanel(&state, &host);
+    panel->setGeometry(0, 0, 900, 700);
+    host.show();
+    QCoreApplication::processEvents();
+
+    auto* palette = panel->findChild<TextPaletteMenu*>();
+    QWidget* strip = panel->control_strip();
+    check::is_true(palette != nullptr, "palette: the panel has one");
+    if (palette == nullptr) return;
+
+    // In no layout, on either level. A QMenu is a popup and cannot be
+    // laid out anyway; this says so, so that adding it as a widget
+    // later fails here rather than in the receive pane's geometry.
+    check::is_true(panel->layout() == nullptr ||
+                       panel->layout()->indexOf(palette) < 0,
+                   "palette: it is not in the panel's layout");
+    check::is_true(strip->layout() == nullptr ||
+                       strip->layout()->indexOf(palette) < 0,
+                   "palette: nor in the strip's");
+    check::is_true(!palette->isVisible(), "palette: and it starts closed");
+
+    const int idle = strip_height(strip);
+    auto* editor = panel->findChild<OverlayEditor*>();
+    check::is_true(editor != nullptr, "palette: the panel has an editor");
+    if (editor == nullptr) return;
+    editor->add_text(std::string("KD8XYZ"));
+    QCoreApplication::processEvents();
+
+    palette->popup_for(editor->selected_item(), QPoint(50, 50));
+    palette->close();
+    QCoreApplication::processEvents();
+    check::equal(strip_height(strip), idle,
+                 "palette: opening it does not move the strip");
+
+    auto* menu_size = panel->findChild<QSpinBox*>(QStringLiteral("palette_size"));
+    if (menu_size != nullptr) {
+        // The longest number the field can hold, since the strip box
+        // shows the same value and a wider number is the way an edit
+        // could push the row.
+        menu_size->setValue(720);
+        QCoreApplication::processEvents();
+        check::equal(strip_height(strip), idle,
+                     "palette: nor does editing through it");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -362,5 +542,8 @@ int main(int argc, char** argv) {
     test_an_edit_defers_the_rebuild();
     test_a_rebuild_consumes_the_pending_edit();
     test_the_size_box_is_in_frame_pixels();
+    test_a_right_click_opens_the_palette();
+    test_an_edit_through_the_palette_reaches_the_strip_box();
+    test_the_palette_costs_the_strip_nothing();
     return check::report("transmit panel");
 }
