@@ -8,6 +8,15 @@ rationale lives in the plan history.
 ## Commands
 
 - Run tests: `pytest` (fast, ~10 s; includes full modem end-to-end tests)
+  **plus the QRSSTVAE suite (`tests/test_qrss_*`)**, whose non-slow tier is
+  about 355 tests and ~1.5 min on 4 shared CPUs (2026-10-09; it was 6-7
+  min before every test that receives a SHORT pass, 10-15 s each, moved to
+  `slow`). `tests/test_qrss_smoke.py` keeps the chain in the default run:
+  one blind TINY pass from transmit audio to rendered picture and one
+  SHORT pass at -6 dB (header, callsign windows). `pytest
+  --ignore-glob='tests/test_qrss_*'` is the quick SSTVAE check, `pytest
+  -k qrss` the QRSS one, and `pytest -m slow -k qrss` its slow tier
+  (~120 tests, about 2 hours).
 - Slow gate: `pytest -m slow` (~2 min) — the listener state machine and
   the app's transmit→receive loopback. Run it after touching `sstvae/rx/`.
 - Native port: `tools/build_native.sh --test` (builds `native/`, runs
@@ -110,6 +119,55 @@ audio and rig bugs found so far were all invisible to unit tests.
     2026-08-24 in the field, via the `blind_locked`/`blind_score`
     status instrumentation added for exactly that hunt; reproduced
     end-to-end with a ring that wraps before the transmission starts).
+  - **The preamble path measures the whole transmission before it
+    equalizes** (2026-09-22, from Data2G). `_demod_frames` runs twice
+    at acquisition timing and once for real. From the first passes:
+    the residual CFO from every pilot pair (`_residual_cfo`; on mpd
+    the preamble's own estimate reached 2.1 Hz off, this holds
+    0.17), and the window placed from the delay profile so every path
+    sits inside the CP (`_delay_support`/`_window_shift`). The final
+    pass undoes each timing step's phase so the channel estimate never
+    straddles one. Latent SNR, 48 paired seeds, mode A: mpd 8
+    **+1.34 dB**, 80 ppm +0.65, a 6 dB-stronger late path +0.43/+0.83,
+    mpp +0.36, AWGN 0. Placement also runs on the blind path (mpd
+    +0.59). **Measure placement on the stepped pilots, not the
+    unstepped ones**: the frames are demodulated with the steps in, so
+    that is where the paths actually sit. Placing against the
+    unstepped profile cost 0.6 dB on mpd. It also means acquisition's
+    choice of path no longer decides the picture
+    (`test_placement_decodes_either_path_alike`). `scripts/rx_ab.py` is
+    the paired A/B harness; `--blind --ring` is the blind path as a live
+    station sees it, mostly not the transmission.
+    The delay support is **gated on the profile's noise floor** as well
+    as 15 dB under its peak (twice the profile's median): at 0 dB the
+    floor's ripples otherwise read as paths across the whole grid, and
+    placement moved the window up to 28 samples the wrong way.
+  - **The channel estimate is 2-D LMMSE** (`_lmmse_channel`,
+    2026-09-22, from Data2G), replacing Catmull-Rom, which passed every
+    pilot's noise straight to the equalizer. Across carriers a
+    projection onto the measured delay support, in time Wiener
+    interpolation over 8 pilots with a Gaussian Doppler model. The
+    latent weights keep their `|h|/median` meaning, so the decoder is
+    untouched. **+0.21 to +0.56 dB PSNR** through the v5 decoder, every
+    image in 12 cells (modes A/B); latent SNR +0.68 to +1.75 dB on the
+    preamble path and +0.97 to +2.40 in a live ring, every seed. Four
+    things it had to learn, each measured as a loss first:
+    **project with the clock drift taken out** (the timing steps plus a
+    line fitted through each frame's pilot phase slope; 80 ppm cost
+    3.4 dB on the preamble path and 4 dB blind before); **centre the
+    Doppler model on the pilots' own rotation** (the blind path carries
+    up to a few Hz of residual CFO, which a zero-centred model averages
+    away); **take blind statistics from frames coherent with a
+    neighbour** (`_transmission_frames`, pilot coherence > 0.5 --
+    power alone picked a stronger earlier transmission still in the
+    ring, read as junk at this one's timing, and the second of two
+    blind receptions was never delivered; `rx/second-blind` in
+    `test_rx_engine.cpp` caught it); and **gate power on the noise
+    floor, not on 10 dB under the peak** (which threw away a third of a
+    fading transmission's own frames). The C++ finds the projector
+    through the real 2x embedding of the 24x24 Hermitian matrix and a
+    cyclic Jacobi, since `native/` has no linear algebra library; numpy
+    uses `eigh` on the same matrix so both compute the same subspace.
   - `framing.py` per-group interleaver, Golay-coded header.
     `_TX_PERMS` truncates each group's permutation to the transmittable
     budget (dropping the beacon carrier's capacity cost); `interleave`/
@@ -117,8 +175,8 @@ audio and rig bugs found so far were all invisible to unit tests.
     `slot_range_for_frame(abs_frame)` maps a single absolute frame index
     to its canonical latent slice without needing a known mode — used by
     blind decode, which never sees the header.
-  - `modem.py` `Modem.modulate/demodulate`; pilot EQ with Catmull-Rom
-    interpolation, EMA-smoothed sample-clock drift tracking, per-latent
+  - `modem.py` `Modem.modulate/demodulate`; pilot EQ with the 2-D
+    LMMSE estimate above, EMA-smoothed sample-clock drift tracking, per-latent
     confidence weights. `demodulate_blind()` is the preamble-free
     counterpart (via `acquire_blind`): no header, so output is always
     sized for mode C's full range (the one container every mode is a
@@ -161,6 +219,11 @@ audio and rig bugs found so far were all invisible to unit tests.
 - `sstvae/hfchannel.py` — channel sim (AWGN in the `SNR_REF_BW_HZ`
   convention,
   Watterson 2-path fading presets mpg/mpp/mpd, freq/clock offset).
+  **Since 2026-09-22 the taps have the ITU-R F.1487 Gaussian Doppler
+  spectrum** (spread = 2 sigma, tested to 5%) and clock offset is FFT
+  resampling. The old Butterworth taps were 1.5x wide at 2 sigma and
+  `np.interp` added -23 dB of distortion. So every fading figure before
+  that date is pessimistic; `taps="butter"` reproduces them.
 - `sstvae/models/autoencoder.py` — encoder (unit-RMS tanh latents,
   132ch in 3 ordered groups of 44) and decoder (takes latents ×
   weights + weight planes; handles erasures/truncation).
@@ -394,7 +457,81 @@ rule is enforced by `tools/check_layering.py`.
   `ImageItem.source` is a late-bound reference (`"last_rx"` or a path)
   rather than a pasted bitmap, so a saved template keeps meaning "the
   most recent received picture". `item_bbox` is shared with the editor
-  so selection handles can't drift from what is drawn.
+  so selection handles can't drift from what is drawn. `template.py`
+  (2026-09-14, step 1 of `docs/overlay-templates.md`) is the pure
+  string processing that makes a document a template: `{mycall}`-style
+  built-ins, `{field Label}` custom fields, an unknown placeholder left
+  literal, and a line whose placeholders are all empty dropped whole.
+  `OverlayDoc.name` is written only when set, so an unnamed document
+  serializes exactly as before. The shipped templates are data in
+  `sstvae/overlay/templates/` and the C++ test reads those same files,
+  so there is one source of what "Reply" says.
+  **`RectItem` (2026-09-15)** is the third item kind: a rectangle,
+  independently fillable and strokable with a solid color or a
+  gradient (`fill_kind`/`stroke_kind` each "none"/"solid"/"gradient",
+  flat fields rather than a nested gradient struct, matching this
+  module's style). The gradient angle is counter-clockwise, the same
+  sense as `rotation`, deliberately: it is painted into the item's own
+  unrotated layer and rotated with it, so the two numbers add exactly
+  as they read. `render.py` builds a gradient with numpy (PIL has no
+  gradient primitive); `native/core/overlay/render.cpp` builds the
+  identical geometry through Qt's own interpolation, in one
+  `gradient_brush` that text shares. Like `ImageItem`, `item_bbox`
+  reports the *unrotated* extent for a rotated rect — an existing
+  simplification carried over for consistency, not a new gap.
+  **Text style and radial gradients (2026-09-20).** `TextItem` gained
+  `bold`/`italic`/`underline`, a `font_family` (a family name or a
+  generic keyword; `font`, a path, still wins, because a template that
+  ships its own face names the file it needs) and a glyph fill in
+  `RectItem`'s terms — `fill_kind`, `fill_color2`, `fill_angle` — with
+  `color` as the first stop in every kind, which is what keeps an old
+  document unchanged, and "none" drawing outlined text. Every gradient
+  can be radial through `fill_gradient`/`stroke_gradient` ("linear" |
+  "radial"), a field of its own rather than a fourth kind so an older
+  build still draws the gradient, linear, instead of dropping the fill.
+  **`DOC_VERSION` stays 1** — `RectItem`'s own trade — and what makes
+  that honest is that every one of these fields is **written only when
+  it differs from its default**, by both writers (`put_unless_default`,
+  `_SPARSE_FIELDS`): a document using none of them is byte-identical to
+  what an older build writes. `tests/test_native_overlay.py` holds that
+  per field, since a writer emitting the whole group once any of it is
+  set passes a whole-document check. Four renderer facts worth not
+  re-deriving. **Underline is a path of its own**: `QPainterPath::addText`
+  adds outlines only, and a rect sharing the glyphs' path fights them
+  over the fill rule. **Outlined text is clipped to outside the ink**,
+  because a Qt pen straddles the path and its inner half painted every
+  stem solid. **An unknown fill kind draws solid** on text, unlike a
+  rect's "none": a caption that vanishes on an older build is worse
+  than one drawn flat. And **Python's styled path lays lines out from a
+  copy of Pillow's multi-line formula** (its fill, stroke and underline
+  masks must share one layout, and PIL's spacing moves with each mask's
+  stroke width); a parametrized test pins the copy against PIL's own
+  call. An *unstyled* Python item still takes the exact old call on the
+  training face, DejaVu Sans Bold, so existing documents render
+  byte-for-byte as before — which is also why an unstyled caption looks
+  heavier there than in Qt, whose default face is the regular weight.
+  **A glyph's own contours need `Qt::WindingFill`, and `QPainterPath`
+  does not default to it** (2026-09-22, reported from a device: outlined
+  text on Android drew a stray line through a capital A's crossbar,
+  right where its strokes meet). Every font rasterizer fills glyph
+  outlines by nonzero winding — it is what the TrueType and PostScript
+  specs say to — because a design with one contour's boundary passing
+  inside another ("overlapping contours") relies on it: two same-
+  direction contours covering one point make it doubly inside, which
+  nonzero counts as filled and `QPainterPath`'s odd-even default counts
+  as a hole. Wrong on its own for a solid fill, and worse for a hollow
+  outline — `draw_text`'s clip subtracts the glyph path from its bounds
+  to hide the interior, so the wrongly-hollow overlap reads as *not*
+  ink and the seam is not clipped away. `shape.glyphs.setFillRule(Qt::
+  WindingFill)` in `text_shape` is the fix, one line. Not reproducible
+  on any face this suite's desktop CI has, so `native/tests/fixtures/
+  overlap-glyph.ttf` is a two-glyph TrueType font built by hand (two
+  overlapping squares, same winding direction, `gen_overlap_glyph_font.
+  py` regenerates it) — portable and platform-independent, confirmed to
+  reproduce the identical bug an Android system font does. Python is
+  unaffected by construction: PIL/FreeType's own `stroke_width`
+  rasterizes the outline directly, with no separate boolean-path
+  subtraction step to get a fill rule wrong.
 
 Two rules the deleted GUI established, which the native app inherits
 and which are the reason its panels look the way they do: a composition
@@ -966,6 +1103,31 @@ registers and uninstalls inside a throwaway `WINEPREFIX` — checking
 Add/Remove Programs block and that an uninstall leaves nothing behind.
 Seconds against a Windows CI job's minutes. Same caveat as the rest of
 the Wine work here: a pass is suggestive, a failure conclusive.
+
+**Never put a data file under a macOS bundle's `Contents/MacOS`**
+(2026-09-22). codesign treats everything there as code, and a stray
+`.json` fails the whole bundle's signature with "code object is not
+signed at all / In subcomponent: .../templates/reply-picture.json".
+The built-in templates were staged "beside the executable", which in a
+bundle is exactly that directory, and **macdeployqt printed the error
+and exited 0 on every CI run for a week**, so the macOS CI artifacts
+carried no valid signature with nothing red anywhere (no release went
+out in that window, so nothing reached an operator; the first one
+would have). Three things now hold it:
+`sstvae_copy_builtin_templates` puts a bundle's data in
+`Contents/Resources` (and `builtin_templates_dir` looks there first on
+macOS, and at `<prefix>/share/sstvae/templates` on Linux -- resolved
+from the executable's prefix, so a distro package at `/usr` and the
+AppDir are one layout, which is what a packager expects rather than
+data under `bin/`), `package_app.sh` signs ad hoc and *verifies*, so a layout
+mistake fails staging rather than printing, and the packaged-app check
+asserts the templates are where the app looks on each platform --
+and that assertion's first run found that `package_app.sh` had never
+copied them on Linux or Windows at all, so those packages had an empty
+built-in picker for the same week; macOS only had them because `cp -R`
+carries the whole bundle. The
+red X that led here was something else: `hdiutil create` failing
+"Resource busy" on a runner, a Spotlight race, now retried.
 
 **Packaging is two scripts, and the split is what makes it usable.**
 `tools/package_app.sh` stages a runnable tree (Qt, Hamlib, onnxruntime,
@@ -1719,7 +1881,8 @@ need when `--native` fails and you want to know *where*.
 
 - `sstvae/waveform_channel.py` — stage-2 differentiable modem replica
   (torch): OFDM synth, envelope clip/PAPR, symbol-domain fading,
-  noisy-pilot Catmull-Rom EQ, burst erasures. Tested to correlate
+  noisy-pilot Catmull-Rom EQ (the modem has used a 2-D LMMSE estimate
+  since 2026-09-22; see docs/todo.md), burst erasures. Tested to correlate
   >0.98 with the NumPy modem on clean channels. Runs in fp32 outside
   autocast (complex ops); `train.py --stage2` handles that split.
 
@@ -1735,6 +1898,28 @@ need when `--native` fails and you want to know *where*.
 - `docs/slot-domain-precoder.md` — design for the mechanism that *can*
   reach PAPR (DFT spreading / learned unitary precoder in slot domain).
   Not implemented.
+- `docs/overlay-templates.md` — design for overlay *templates* and the
+  overlay on Android (2026-09-14, **steps 1-3 done the same day
+  (module, desktop, Android overlay-on/chips/Reply); step 4, sharing a
+  template between stations as a QR code / text, done 2026-09-21; step
+  5, the Android template editor, not started** — build from it in the
+  order its "Sequencing" section gives). Step 3 was written with no NDK
+  available and **did not link when first compiled on 2026-09-21**
+  (`SSTVAE_BUILD_OVERLAY` forced off, renderer not linked) — fixed, APK
+  builds, still untested on a device; the doc's step-3 entry records
+  it. Step 4's phone side is ML Kit's unbundled scanner plus paste;
+  `native/android-app/README.md` "Importing a template" has the build
+  mechanics (Gradle line spliced into Qt's template; the Java check
+  compiles against six hash-pinned ML Kit jars). The idea is
+  qsstv's: a template is an ordinary `OverlayDoc` with `{theircall}`-style
+  placeholders in its text, the per-over UI is a form derived from which
+  placeholders the chosen template uses, and "Reply" on a reception
+  prefills their call *and the measured SNR* from the sidecar and binds
+  `last_rx` to that picture. `{field Label}` declares an optional custom
+  text field (a pop-up on the phone), which is the free-form path
+  without an editor. Exists because the beacon identifies *this*
+  station and nothing can say whom an over is addressed to. Also
+  records that the desktop persists no overlay at all today.
 - `docs/onnx.md` — the ONNX runtime path, **implemented 2026-07-27**:
   onnxruntime is 53 MB installed against torch's 345 MB, fp32 ONNX is
   the same codec to ~2e-06, and both fp16 and int8 are now essentially
@@ -2288,9 +2473,219 @@ takes their settings and saved receptions with it.
 Desktop app: **one implementation**, `native/` (Phases 0-3), which
 reached parity, passed the loopback shakedown in all three directions
 including both cross-implementation ones, and replaced the PySide6 GUI
-on 2026-08-01 — see "The engines". Overlay *templates* are deliberately
-not implemented, but the document format is built for them (see
-`sstvae/overlay/` and `native/core/overlay/`).
+on 2026-08-01 — see "The engines". **Overlay templates are implemented
+on the desktop** (`docs/overlay-templates.md` step 2, 2026-09-14): a
+Template combo, "Save as template...", and a "Reply fields" box on
+`TransmitPanel`. **The Android half landed the same day (step 3)**:
+template chips and a fields row on Send, and Reply buttons on Pictures,
+the picture viewer and the Listen tab all binding a `last_rx` inset and
+`{theircall}`/`{snr}` to whichever reception was tapped. Written with
+no NDK available in that session, so — unlike the desktop half —
+unbuilt and untested; step 4, an on-phone template editor, is not
+started.
+
+**The desktop overlay editor gained four more things the same week
+(2026-09-15), none of them in the original template design doc.**
+A `RectItem` tool (filled and/or stroked, solid or gradient — see the
+`sstvae/overlay/` bullet above); stacking-order controls, acting on any
+item type by array position, not just rects; the tool row is now an
+icon palette (`QToolButton`s with hand-drawn glyphs, the same reasoning
+`set_swatch` gives for painting its color buttons rather than sourcing
+icon assets) instead of "Add text"/"Add last received"/"Add image..."
+text buttons; and "Save as template..." defaults its name prompt to
+the loaded template's own name (`editor_->doc().name`, which
+`on_template_selected` already carries). **Custom fields also moved
+inline**, superseding step 2's pop-up-only design: up to
+`TransmitPanel::MAX_INLINE_CUSTOM_FIELDS` (4) live in `fields_box_`
+itself, always present and only ever `setEnabled` — the same fixed-
+shape rule as everything else in that box, now stated once rather than
+per-control — updating the composite on every keystroke via
+`on_custom_field_edited`; a template declaring more spills the rest
+into the pop-up, which is what it is for now. `TransmitPanel::ColorSwatch`
+replaced the single `color_button_`/`swatch_color_`/`swatch_set_` trio
+once a rect's four independent colors needed the identical guard
+against rebuilding an icon at drag-frame rate.
+
+**That first pass put every one of those controls in the "Selected
+item" box in `control_strip()`, and it was wrong -- "way too many
+buttons" (Andrew, same day), reworked within hours of landing.** Two
+changes, both still 2026-09-15. **Scale and rotation are on-canvas now,
+not spin boxes**: a resize handle (unchanged) plus a new rotate handle
+-- a circle at the bbox's top-right corner, offset outward the opposite
+way from the square resize grip at the bottom-right, so a press can
+never land on the wrong one -- and `+`/`-` (multiplicative, fine/coarse
+via Shift, matching the existing arrow-key nudge) and `[`/`]`
+(additive) as the keyboard form of the same two drags, clamped and
+normalized by the identical `scale_item`/`rotate_item` helpers either
+path calls. `OverlayEditor::selection_screen_rect()` is the new public
+surface this needed: the selection's on-screen rectangle, for whatever
+wants to anchor itself near it. **Color, gradient, stroke and stacking
+order moved to a floating panel** (`TransmitPanel::build_selection_palette`,
+a `QFrame` parented to the editor itself, not to `control_strip()`) that
+appears beside the selection and only while something is selected --
+`position_selection_palette()` anchors it to `selection_screen_rect()`,
+flipping to the item's other side rather than running off the canvas,
+and re-running at drag-frame rate (`on_selection`, and `documentChanged`
+directly for a keyboard shortcut that moves the item without
+reselecting it). Being outside `control_strip()` is what makes this
+panel exempt from that box's fixed-shape rule (see
+`update_selection_palette`): unlike `properties_`/`fields_box_`, its
+rows actually show and hide by item type and by gradient-kind rather
+than only `setEnabled`, because nothing here is matched against the
+receive pane's height. What is left inside `control_strip()`'s
+"Selected item" box (retitled "Text") is exactly the text editor and
+its alignment combo -- still out-of-line, deliberately: inline editing
+would have to show substituted `{placeholder}` text while the operator
+edits the raw template underneath it, which is not solved yet.
+
+**Five bugs found the same day, using the handles this rework just
+landed -- direct manipulation surfaced them where the old spin boxes
+never had.** All fixed 2026-09-15.
+
+- **The selection outline and both grips did not rotate with the
+  item.** `OverlayEditor::item_screen_polygon` replaces the dashed
+  outline's `drawRect` with a `drawPolygon` of the bbox's four corners,
+  each rotated around the bbox's own centre by a new static helper,
+  `rotate_around` -- the same transform `overlay::render` applies to
+  pixels, worked out algebraically rather than pushed through a
+  `QTransform`, so the outline, `handle_rect` and `rotate_handle_rect`
+  all agree with the picture underneath them at any angle. `handle_rect`
+  and `rotate_handle_rect` both gained a `rotation` parameter for this;
+  every call site already had the item's rotation two lines away.
+- **Text rotated around its own top-left corner while rect/image
+  rotated around their centre.** A real, pre-existing split between
+  `draw_text` (pivoted on the raw anchor point) and `draw_rect`/
+  `draw_image` (pivoted on the anchored box's centre) in both
+  `native/core/overlay/render.cpp` and `sstvae/overlay/render.py` --
+  invisible with a spin box, obvious the moment an operator could drag
+  a corner and watch the block swing out from under the selection box
+  instead of turning in place. Both languages now compute the text
+  block's own bbox centre (the same point `item_bbox` already reported)
+  before rotating and pivot there. Python's fix is the fiddlier one:
+  `Image.rotate(expand=True)` keeps the *pre-rotation* layer's centre
+  fixed and grows the canvas around it, so the old code -- which pasted
+  the bigger, rotated layer at the same offset the small unrotated one
+  used -- let the effective centre drift with the angle; the fix pastes
+  the rotated layer so *its* centre lands on the correct point instead.
+  No golden vector or parity test pinned a rotated `TextItem`'s pixels,
+  so nothing needed updating besides the two render functions.
+- **The rotate handle could land off the canvas** for an item near an
+  edge, since its outward offset (opposite the resize grip, so the two
+  are never ambiguous) was unconditional. `rotate_handle_rect` now
+  clamps the final position to `canvas_rect()`.
+- **Mojibake in the gradient angle suffix ("0.00Â°").**
+  `QStringLiteral("\xC2\xB0")` is two bytes inside a `char16_t` literal,
+  not one -- `QStringLiteral` wraps its argument in `u"..."`, so a raw
+  UTF-8 byte pair for U+00B0 became two separate UTF-16 code units,
+  U+00C2 and U+00B0. `QStringLiteral("°")` names the code point
+  directly and survives the wrapping.
+- **The template dropdown and "Save as template..." could wrap onto
+  separate lines**, reading as two unrelated controls in the `FlowLayout`
+  tool row. Grouped into one `style::row` item ("Template: [combo]
+  [Save...]"), the same fix `test_the_level_controls_are_one_flow_item`
+  already guards for the mode/level/readout trio.
+
+**A "last received" inset with no reception yet is invisible where it
+matters least and was invisible where it mattered too.** `overlay::
+render()` correctly paints nothing for an unresolved `SOURCE_LAST_RX`
+(`draw_image` returns early on a null source) -- it is also what
+encodes the transmission, so a placeholder there could go out over the
+air in place of a picture. But that left the item invisible on the
+*editor's own preview* too, before an operator had clicked anything to
+find it -- a real gap for a template that starts with one already in it
+(the built-in "Reply with picture"). `OverlayEditor::paintEvent` now
+draws its own frame for every such item, over the composed picture
+rather than into it (so nothing about `overlay::render()`'s output or
+what gets transmitted changes) -- same look as the empty-canvas state
+just above it and `PictureBox`'s own "no picture" frame. Drawn for
+*every* unresolved last_rx item, not only the selected one, since
+"findable before it is clicked" is the whole point; `hit_test` and the
+selection handles already worked here (`item_bbox` has always returned
+a real box, defaulting to a 0.75 aspect with nothing to measure), so
+this was purely a missing visual, not a missing interaction.
+
+**The selection palette is a `Qt::Tool` top-level window, not a plain
+child widget** (2026-09-16). It was parented to `editor_` and clamped
+to `editor_`'s own local bounds, which is fine on a wide window where
+the canvas has margin to spare -- but on a narrow one the 4:3 picture
+fills nearly all of that rect, so "beside the selection, flipped to
+the other side if it would run off the canvas" collapses to "on top of
+the selection": there was no room left to flip to *inside* the widget
+that was also its own clip region. `build_selection_palette` now
+constructs it with `Qt::Tool | Qt::FramelessWindowHint` (plus
+`WA_ShowWithoutActivating`, so `show()` doesn't steal focus from
+whatever the operator was doing when a selection appeared) -- a real
+top-level window, positioned in screen coordinates rather than clipped
+to any parent's paint area. `position_selection_palette` follows suit:
+`item_screen_rect` is mapped through `editor_->mapToGlobal`, and the
+flip/clamp logic runs against `editor_->screen()->availableGeometry()`
+instead of `editor_->width()`/`height()`, so the desktop space around
+the window -- not just the canvas -- is where it looks for room. Falls
+back to the item's own rect when no screen resolves (headless/offscreen
+tests), which keeps the clamps from collapsing to an empty region
+rather than needing a special case. `findChild<QFrame*>("selection_
+palette")` and `isVisible()` still work exactly as before -- window
+flags don't change the widget's place in the `QObject` tree -- so
+`test_tx_panel.cpp` needed no changes.
+
+**That change shipped with its own placement bug, found immediately
+(Andrew, same day): every first selection put the palette in the
+middle of the window instead of near the item.** `on_selection` called
+`selection_palette_->show()` and only *then* `update_selection_palette()`
+(which ends in `position_selection_palette()`), which was invisible on
+a plain child widget -- nothing paints between the two calls, so the
+final `setGeometry` is all a viewer ever sees. A `Qt::Tool` window has
+no such grace: `show()` is the event a window manager treats as "place
+this window", and several place a newly-mapped utility window centred
+over its parent regardless of a `setGeometry` sent moments later --
+the app's own position call was losing a race with the window
+manager's default placement, not being ignored outright. The fix is
+the standard Qt idiom for a positioned top-level: set geometry *before*
+the first `show()`, not after, so `on_selection` now calls
+`update_selection_palette()` first and `show()` last.
+`position_selection_palette` had to lose its `!isVisible()` guard to
+make that legal -- it existed to skip positioning a hidden palette, but
+now it must run and set geometry *while* the palette is still hidden,
+immediately before `on_selection` shows it for the first time. Safe to
+drop: with nothing selected `item_rect` is empty regardless of
+visibility, and the function falls through to a `hide()` that is a
+harmless no-op on an already-hidden window -- `resizeEvent` and
+`documentChanged` already called this unconditionally on every
+resize/edit, visible or not.
+
+**The palette's text rows (2026-09-20)** follow its own idiom rather
+than borrowing a rect's Fill rows, which the tests pin as hidden for
+text: a Style row (bold/italic/underline toggles and a family combo —
+safe here, the palette being a window and not a menu), a fill kind
+beside the Color row, and a Gradient row; every gradient row, text or
+rect, gains Linear/Radial, and Radial disables the angle it lacks.
+Selecting an item fires every control's change signal, and two cases
+would write something back if not handled: a family the presets lack
+is shown as itself in one reused extra slot, and an unknown fill kind
+shows as Solid but stays in the document. `edit_color<T>` replaced
+`edit_rect_color` and resolves the item again after the modal colour
+dialog instead of holding a pointer into the item vector across it.
+
+**Fork-only (branch `right-click-menu`): the palette above is gone,
+replaced by a right-click menu** (`gui/item_menu.*`, 2026-09-21). The
+three paragraphs above describe upstream's palette and do not apply on
+this branch. A left-click selects and shows handles, and nothing else;
+`OverlayEditor::contextMenuRequested` (selecting what was clicked,
+grips included, before it emits) opens `ItemMenu` — Format (B/I/U,
+family, size in px), Style (text: Clear, fill mode/stops/angle, stroke,
+rotation; rect: fill and stroke rows, rotation) and Layers (Shift
+relabels to front/back), plus Remove. Sizes are pixels of the 640x480
+frame in the menu and fractions in the document. Three constructions
+are load-bearing. **No `QComboBox` in a `QWidgetAction`** — its popup
+can dismiss the menu on some styles; the family is a nested `QMenu`.
+**The item is never stored** — Layers rotates the vector, so every
+edit asks the editor for its selection afresh. **Hiding a row's action
+is not enough**: `QMenu` skips a hidden action when it lays out and
+never hides its widget, so a row shown once stayed painted over the
+other kind's rows until `popup_for` hid the widget too
+(`test_a_hidden_style_row_is_not_painted`, which has to pop the menu up
+to see it). `sstvae-gui-shot --item-menu` shoots the menu and each
+submenu for a text item and a rect.
 
 ONNX runtime path complete: the codec is onnxruntime, torch is
 training-only, and `cli`/`listen` install ~263 MB instead of
@@ -2342,8 +2737,11 @@ Remaining: run stage-2 fine-tune (start from a good stage-1
 checkpoint, `--lr 1e-4`) — note pre-beacon checkpoints remain
 architecture-compatible (model channel count unchanged), evaluation
 sweeps (PSNR/LPIPS vs SNR per mode), on-air calibration. On the app
-side: overlay templates, and a real on-air (not loopback) shakedown of
-the PTT timing against a physical radio. For the native app: Phase 4 is
+side: step 4 of overlay templates (`docs/overlay-templates.md`, an
+on-phone template editor; steps 1-3 are done), building and testing
+step 3's Android changes on a machine with an NDK (unverified so far
+for want of one), and a real on-air (not loopback) shakedown of the PTT
+timing against a physical radio. For the native app: Phase 4 is
 sequenced in five steps and the first three are done — CI builds five
 packages and five installers (AppImage, `.dmg`, NSIS setup) on every
 push. **Step 4 (signing) is done and green (2026-08-04)**:
