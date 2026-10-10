@@ -6,9 +6,10 @@
 // local time beside each so "alternating hours" can be planned against
 // the operator's own clock. The picture is a snapshot: the composition
 // as it is when "Use the composition" is pressed (or when the window
-// opens), or a file framed the way a loaded picture is. What is shown is
-// what goes out, every time, which is what gives every send of an entry
-// the same picture ID.
+// opens), or a file. A file that is not exactly 640 x 480 opens the
+// Transmit pane's framing dialog (gui/crop_dialog.hpp), and "Framing..."
+// re-opens it on the original. What is shown is what goes out, every
+// time, which is what gives every send of an entry the same picture ID.
 
 #ifndef SSTVAE_GUI_QRSS_SCHEDULE_WINDOW_HPP
 #define SSTVAE_GUI_QRSS_SCHEDULE_WINDOW_HPP
@@ -19,6 +20,7 @@
 #include <optional>
 #include <string>
 
+#include "images/images.hpp"
 #include "images/types.hpp"
 
 class QComboBox;
@@ -51,7 +53,11 @@ public:
     double chosen_slot() const;
     // Take a fresh snapshot of the composition into the form.
     void use_composition();
+    // Load a picture file, asking how to frame it unless it is already
+    // exactly 640 x 480.
     void use_file(const QString& path);
+    // Re-open the framing dialog on the file's original picture.
+    void choose_framing();
 
 public slots:
     void refresh();
@@ -67,6 +73,8 @@ private:
     void set_selected_enabled(bool on);
     void remove_selected();
     QString local_and_utc(double slot) const;
+    // `picture_` from the file's original and `framing_`.
+    void apply_framing();
 
     QrssScheduler* scheduler_ = nullptr;
     Composition composition_;
@@ -74,9 +82,15 @@ private:
 
     std::optional<images::Picture> picture_;
     QString picture_label_;
+    // The file as loaded, at its own size, so re-framing starts from the
+    // original rather than cropping a crop. Empty for the composition.
+    std::optional<images::Picture> file_source_;
+    QString file_path_;
+    images::Framing framing_;
 
     QLabel* thumb_ = nullptr;
     QLabel* picture_name_ = nullptr;
+    QPushButton* framing_button_ = nullptr;
     QComboBox* mode_ = nullptr;
     QSpinBox* freq_ = nullptr;
     QDateEdit* date_ = nullptr;

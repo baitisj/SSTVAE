@@ -1,6 +1,7 @@
 #include "qrss_schedule_window.hpp"
 
 #include <QComboBox>
+#include <QDialog>
 #include <QDateEdit>
 #include <QDateTime>
 #include <QFileDialog>
@@ -23,6 +24,7 @@
 #include <exception>
 #include <utility>
 
+#include "crop_dialog.hpp"
 #include "images/images.hpp"
 #include "qrss_schedule.hpp"
 #include "qrss_tx.hpp"
@@ -108,6 +110,7 @@ void QrssScheduleWindow::build() {
     thumb_->setAlignment(Qt::AlignCenter);
     thumb_->setFrameShape(QFrame::StyledPanel);
     picture_name_ = new QLabel(add_box);
+    picture_name_->setObjectName(QStringLiteral("schedule_picture_name"));
     picture_name_->setWordWrap(true);
     auto* use_comp = new QPushButton(tr("Use the composition"), add_box);
     use_comp->setObjectName(QStringLiteral("schedule_use_composition"));
@@ -121,10 +124,18 @@ void QrssScheduleWindow::build() {
             tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All files (*)"));
         if (!path.isEmpty()) use_file(path);
     });
+    framing_button_ = new QPushButton(tr("Framing..."), add_box);
+    framing_button_->setObjectName(QStringLiteral("schedule_framing"));
+    framing_button_->setToolTip(tr("Choose which part of the file goes on the air"));
+    framing_button_->setEnabled(false);
+    connect(framing_button_, &QPushButton::clicked, this, &QrssScheduleWindow::choose_framing);
+    auto* file_row = new QHBoxLayout;
+    file_row->addWidget(open_file);
+    file_row->addWidget(framing_button_);
     auto* pic_side = new QVBoxLayout;
     pic_side->addWidget(picture_name_);
     pic_side->addWidget(use_comp);
-    pic_side->addWidget(open_file);
+    pic_side->addLayout(file_row);
     pic_side->addStretch(1);
     auto* pic_row = new QHBoxLayout;
     pic_row->addWidget(thumb_);
@@ -253,15 +264,16 @@ void QrssScheduleWindow::build() {
 void QrssScheduleWindow::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     // The composition the operator is looking at, unless a file was chosen.
-    if (!picture_ || picture_label_.isEmpty() || picture_label_.startsWith(tr("composition"))) {
-        use_composition();
-    }
+    if (!picture_ || !file_source_) use_composition();
     refresh();
     update_summary();
 }
 
 void QrssScheduleWindow::use_composition() {
     std::optional<images::Picture> p = composition_ ? composition_() : std::nullopt;
+    file_source_.reset();
+    file_path_.clear();
+    framing_button_->setEnabled(false);
     if (!p) {
         picture_.reset();
         picture_label_.clear();
@@ -282,16 +294,65 @@ void QrssScheduleWindow::use_composition() {
 }
 
 void QrssScheduleWindow::use_file(const QString& path) {
+    images::Picture loaded;
     try {
-        picture_ = images::fit(images::load(path.toStdString()));
+        loaded = images::load(path.toStdString());
     } catch (const std::exception& e) {
         picture_name_->setText(tr("Could not open %1: %2").arg(path, QString::fromUtf8(e.what())));
         return;
     }
-    picture_label_ = QFileInfo(path).fileName();
+    file_source_ = std::move(loaded);
+    file_path_ = path;
+    framing_ = images::Framing{};
+    // The Transmit pane asks only when the picture is not 4:3; here any
+    // size but the one sent asks, so a scheduled picture is never
+    // rescaled or cropped without being seen first. Cancel keeps the
+    // default framing (the centre, full width), as there.
+    if (file_source_->width != images::IMG_W || file_source_->height != images::IMG_H) {
+        CropDialog dialog(*file_source_, framing_, this);
+        if (dialog.exec() == QDialog::Accepted) framing_ = dialog.framing();
+    }
+    apply_framing();
+}
+
+void QrssScheduleWindow::choose_framing() {
+    if (!file_source_) return;
+    CropDialog dialog(*file_source_, framing_, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    framing_ = dialog.framing();
+    apply_framing();
+}
+
+void QrssScheduleWindow::apply_framing() {
+    if (!file_source_) return;
+    try {
+        picture_ = images::fit(*file_source_, framing_);
+    } catch (const std::exception& e) {
+        picture_.reset();
+        picture_name_->setText(tr("Could not frame %1: %2")
+                                   .arg(QFileInfo(file_path_).fileName(),
+                                        QString::fromUtf8(e.what())));
+        update_summary();
+        return;
+    }
+    picture_label_ = QFileInfo(file_path_).fileName();
     thumb_->setPixmap(style::to_pixmap(*picture_).scaled(THUMB_W, THUMB_H, Qt::KeepAspectRatio,
                                                          Qt::SmoothTransformation));
-    picture_name_->setText(picture_label_);
+    // The same caption the Transmit pane gives a loaded picture: what
+    // was done to it to make 640 x 480.
+    const images::Picture& src = *file_source_;
+    QString caption = tr("%1, %2x%3").arg(picture_label_).arg(src.width).arg(src.height);
+    const bool four_by_three = src.width * images::IMG_H == src.height * images::IMG_W;
+    if (framing_.zoom < 1.0) {
+        caption += tr(", padded to 4:3");
+    } else if (!four_by_three || framing_.zoom > 1.0) {
+        caption += tr(", cropped to 4:3");
+    }
+    if (src.width < images::MIN_W || src.height < images::MIN_H) {
+        caption += tr(" (small, so upscaled)");
+    }
+    picture_name_->setText(caption);
+    framing_button_->setEnabled(true);
     update_summary();
 }
 

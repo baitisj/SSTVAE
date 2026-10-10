@@ -283,7 +283,9 @@ is one picture, one QRSS mode and one carrier, sent a number of times
 
 - **Picture**: a snapshot of the composition on the Transmit pane (taken
   when the window opens or when you press *Use the composition*), or a
-  picture file. The snapshot is stored with the schedule, so later edits
+  picture file. A file that is not exactly 640×480 opens the same
+  *Frame picture* dialog the Transmit pane uses, and *Framing...*
+  re-opens it. The snapshot is stored with the schedule, so later edits
   on the Transmit pane do not change it.
 - **First send (UTC)**: a date and a quarter hour, with your local time
   in brackets.

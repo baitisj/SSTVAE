@@ -347,7 +347,7 @@ if(TARGET sstvae_gui)
   sstvae_hamlib_copy_runtime(test_qrss_tx)
   sstvae_onnxruntime_copy_runtime(test_qrss_tx)
   add_test(NAME qrss_tx COMMAND test_qrss_tx)
-  set_tests_properties(qrss_tx PROPERTIES TIMEOUT 60)
+  set_tests_properties(qrss_tx PROPERTIES TIMEOUT 120)
 
   add_executable(test_qrss_schedule test_qrss_schedule.cpp)
   target_link_libraries(test_qrss_schedule PRIVATE sstvae_gui)

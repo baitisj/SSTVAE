@@ -88,7 +88,12 @@ void test_run_keys_the_pass_on_its_start() {
     QElapsedTimer since;
     since.start();
     const double prep = 0.3;
-    const double start = Q - 11.0 - prep;   // the pass's audio is due prep s from now
+    // The pass's audio is due prep s from now, with 0.5 s spare. The
+    // spare is what lets the run plan this quarter hour: with none, a
+    // millisecond spent before `plan` read the clock moved the pass to
+    // the next quarter hour, fifteen (simulated and real) minutes away,
+    // and the test hung whenever the machine was busy.
+    const double start = Q - 11.0 - prep - 0.5;
     auto clock = [&] { return start + since.elapsed() / 1000.0; };
 
     tx::TxEngine engine(
@@ -147,7 +152,9 @@ void check_back_to_back(const std::string& name, const std::string& mode,
     const double prep = 0.2;
     double jump = 0.0;
     int played = 0;
-    const double start = Q - 11.0 - 2 * prep;
+    // 1 s spare before the first pass's making is due, so a busy
+    // machine still plans this quarter hour (see above).
+    const double start = Q - 11.0 - prep - 1.0;
     auto clock = [&] {
         std::lock_guard<std::mutex> lock(mu);
         return start + since.elapsed() / 1000.0 + jump;
@@ -274,11 +281,20 @@ void test_cancel_while_waiting() {
 int main(int argc, char** argv) {
     check::report_crashes_instead_of_prompting();
     QCoreApplication app(argc, argv);
+    // About 20 s when well; a pass planned on the wrong quarter hour
+    // waits fifteen minutes, and this names the step that does.
+    check::Watchdog watchdog(90.0, "qrss tx");
+    check::current_step = "plan";
     test_plan();
+    check::current_step = "problems and args";
     test_problems_and_args();
+    check::current_step = "run keys the pass on its start";
     test_run_keys_the_pass_on_its_start();
+    check::current_step = "passes back to back";
     test_passes_back_to_back();
+    check::current_step = "pass lists are checked";
     test_pass_lists_are_checked();
+    check::current_step = "cancel while waiting";
     test_cancel_while_waiting();
     return check::report("qrss tx");
 }

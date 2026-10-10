@@ -2,7 +2,8 @@
 // schedule asks for, what may not overlap, and the scheduler's clock --
 // due, started, waiting on a busy transmitter, missed -- against a fake
 // clock and a fake transmitter. Then the window, offscreen: the form
-// says what it will do and Add adds it.
+// says what it will do and Add adds it, and a file that is not 640 x 480
+// is framed in the Transmit pane's dialog first.
 
 #include <QApplication>
 #include <QComboBox>
@@ -12,6 +13,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QTreeWidget>
 
 #include <filesystem>
@@ -22,6 +24,8 @@
 #include <vector>
 
 #include "check.hpp"
+#include "crop_dialog.hpp"
+#include "images/images.hpp"
 #include "images/types.hpp"
 #include "qrss_schedule.hpp"
 #include "qrss_schedule_window.hpp"
@@ -327,6 +331,88 @@ void test_the_window(const std::filesystem::path& dir) {
                    "window: the same send again would clash, and says so");
 }
 
+// A solid red picture file of the given size.
+std::string red_png(const std::filesystem::path& dir, int w, int h) {
+    images::Picture p(w, h);
+    for (std::size_t i = 0; i < p.rgb.size(); i += 3) p.rgb[i] = 255;
+    const std::string path = (dir / ("red-" + std::to_string(w) + "x" + std::to_string(h) +
+                                     ".png")).string();
+    images::save_png(p, path);
+    return path;
+}
+
+// Answers the framing dialog, if one opens, the next time events are
+// processed: zooms all the way out (the whole picture, padded) and
+// presses OK. Counts how many opened.
+void answer_framing(int* opened) {
+    QTimer::singleShot(0, [opened] {
+        auto* dialog = qobject_cast<CropDialog*>(QApplication::activeModalWidget());
+        if (!dialog) return;
+        ++*opened;
+        if (auto* view = dialog->findChild<CropView*>()) {
+            images::Framing all;
+            all.zoom = view->min_zoom();
+            view->set_framing(all);
+        }
+        dialog->accept();
+    });
+}
+
+void test_a_file_is_framed_first(const std::filesystem::path& dir) {
+    Fake fake;
+    std::unique_ptr<QrssScheduler> s(make(fake, dir / "f" / "qrss_schedule.json"));
+    QrssScheduleWindow w(
+        s.get(), [] { return std::optional<images::Picture>(images::Picture(640, 480)); },
+        [] { return QrssScheduleWindow::Defaults{"A", 1500.0}; });
+    w.show();
+    QApplication::processEvents();
+    auto* name = w.findChild<QLabel*>(QStringLiteral("schedule_picture_name"));
+    auto* framing = w.findChild<QPushButton*>(QStringLiteral("schedule_framing"));
+    auto* add = w.findChild<QPushButton*>(QStringLiteral("schedule_add"));
+    check::is_true(name && framing && add, "window/file: the picture controls are there");
+    if (!(name && framing && add)) return;
+    check::is_true(!framing->isEnabled(), "window/file: nothing to frame in the composition");
+
+    int opened = 0;
+    answer_framing(&opened);
+    w.use_file(QString::fromStdString(red_png(dir, 640, 480)));
+    QApplication::processEvents();
+    check::equal(opened, 0, "window/file: 640 x 480 goes straight in");
+    check::is_true(framing->isEnabled(), "window/file: but can still be framed");
+
+    answer_framing(&opened);
+    w.use_file(QString::fromStdString(red_png(dir, 800, 450)));
+    QApplication::processEvents();
+    check::equal(opened, 1, "window/file: 16:9 opens the framing dialog");
+    check::is_true(name->text().contains(QStringLiteral("800x450, padded to 4:3")),
+                   "window/file: and says what it did");
+    check::is_true(add->isEnabled(), "window/file: ready to add");
+    add->click();
+    QApplication::processEvents();
+    check::equal(s->entries().size(), std::size_t{1}, "window/file: added");
+    if (s->entries().size() != 1) return;
+    const images::Picture sent = images::load(s->entries()[0].picture);
+    auto red = [&sent](int x, int y) {
+        return sent.rgb[(static_cast<std::size_t>(y) * sent.width + x) * 3] > 200;
+    };
+    check::is_true(sent.width == 640 && sent.height == 480 && !red(320, 10) && red(320, 240) &&
+                       red(5, 240) && red(634, 240),
+                   "window/file: what is scheduled is the framing chosen, whole and padded");
+
+    answer_framing(&opened);
+    w.use_file(QString::fromStdString(red_png(dir, 1280, 960)));
+    QApplication::processEvents();
+    check::equal(opened, 2, "window/file: a 4:3 picture of another size asks too");
+
+    answer_framing(&opened);
+    framing->click();
+    QApplication::processEvents();
+    check::equal(opened, 3, "window/file: Framing... opens it again");
+
+    w.use_composition();
+    check::is_true(!framing->isEnabled(), "window/file: back to the composition, nothing to frame");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -342,5 +428,6 @@ int main(int argc, char** argv) {
     test_the_scheduler_starts_what_is_due(dir);
     test_missed_and_paused(dir);
     test_the_window(dir);
+    test_a_file_is_framed_first(dir);
     return check::report("qrss schedule");
 }
