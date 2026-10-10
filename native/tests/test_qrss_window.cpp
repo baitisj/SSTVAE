@@ -66,7 +66,8 @@ void write_state(const QString& dir, const QJsonArray& tiles, qint64 mtime_ms) {
     st[QStringLiteral("source")] = QStringLiteral("test");
     st[QStringLiteral("tiles")] = tiles;
     QFile f(QDir(dir).filePath(QStringLiteral("state.json")));
-    f.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    check::is_true(f.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                   "qrss/tiles: state file opened for writing");
     f.write(QJsonDocument(st).toJson());
     f.setFileTime(QDateTime::fromMSecsSinceEpoch(mtime_ms), QFileDevice::FileModificationTime);
     f.close();
@@ -120,7 +121,8 @@ void test_tiles_follow_the_state_file() {
     // A half-written file (not JSON) is ignored, not treated as empty.
     {
         QFile f(QDir(dir.path()).filePath(QStringLiteral("state.json")));
-        f.open(QIODevice::WriteOnly | QIODevice::Truncate);
+        check::is_true(f.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                       "qrss/tiles: torn state file opened for writing");
         f.write("{\"tiles\": [");
         f.setFileTime(QDateTime::fromMSecsSinceEpoch(3'000'000),
                       QFileDevice::FileModificationTime);
@@ -231,7 +233,7 @@ void test_audio_reaches_the_listener_once() {
                    "qrss/feed: closing its input ends the listener");
 
     QFile f(out);
-    f.open(QIODevice::ReadOnly);
+    check::is_true(f.open(QIODevice::ReadOnly), "qrss/feed: the listener's input file opened");
     const QByteArray bytes = f.readAll();
     std::vector<float> got(static_cast<std::size_t>(bytes.size()) / sizeof(float));
     std::memcpy(got.data(), bytes.data(), got.size() * sizeof(float));
