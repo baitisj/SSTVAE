@@ -20,6 +20,7 @@
 #include "config.hpp"
 #include "dsp/spectrum.hpp"
 #include "rx/ringbuffer.hpp"
+#include "spectrum_feed.hpp"
 #include "style.hpp"
 
 namespace sstvae::gui {
@@ -81,9 +82,24 @@ Waterfall::Waterfall(QWidget* parent, int fps) : QWidget(parent) {
     // fight the picture below it for height.
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    auto* timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &Waterfall::tick);
-    timer->start(std::max(1, 1000 / std::max(1, fps)));
+    own_feed_ = std::make_unique<SpectrumFeed>();
+    feed_ = own_feed_.get();
+    timer_ = new QTimer(this);
+    connect(timer_, &QTimer::timeout, this, &Waterfall::tick);
+    timer_->start(std::max(1, 1000 / std::max(1, fps)));
+}
+
+void Waterfall::set_feed(SpectrumFeed* feed) {
+    if (feed == nullptr || feed == feed_) return;
+    if (feed_ != own_feed_.get()) disconnect(feed_, nullptr, this, nullptr);
+    feed_ = feed;
+    timer_->stop();
+    connect(feed_, &SpectrumFeed::pumped, this, &Waterfall::draw_new_rows);
+    // Redraw from the shared history at once.
+    drawn_ = feed_->fast().count();
+    image_ = QImage();
+    ensure_image();
+    update();
 }
 
 Waterfall::~Waterfall() = default;
@@ -96,7 +112,7 @@ Waterfall::~Waterfall() = default;
 QSize Waterfall::sizeHint() const { return QSize(520, 160); }
 
 void Waterfall::set_ring(std::shared_ptr<rx::RingBuffer> ring) {
-    ring_ = std::move(ring);
+    feed_->set_ring(std::move(ring));
 }
 
 void Waterfall::clear() {
@@ -126,19 +142,23 @@ void Waterfall::ensure_image() {
         return;
     }
 
-    // Carry the history across a resize rather than blanking it. Rows
-    // are already one pixel each, so they are kept as-is; columns are
-    // point-resampled, which is good enough for pixels that are only
-    // scrolling off anyway.
+    // Carry the history across a resize rather than blanking it: redrawn
+    // from the stored rows, at the new width and as deep as the new
+    // height, so dragging the strip taller shows older rows. A row the
+    // store no longer has is copied from the old image, its columns
+    // point-resampled.
     QImage grown(w, h, QImage::Format_RGB888);
     grown.setDevicePixelRatio(dpr);
     grown.fill(Qt::black);
-    if (!image_.isNull()) {
-        const int rows = std::min(h, image_.height());
-        const int old_w = image_.width();
-        for (int y = 0; y < rows; ++y) {
+    const dsp::WaterfallHistory& history = feed_->fast();
+    const int old_w = image_.isNull() ? 0 : image_.width();
+    for (int y = 0; y < h; ++y) {
+        uchar* dst = grown.scanLine(y);
+        const std::uint64_t seq = drawn_ - 1 - static_cast<std::uint64_t>(y);
+        if (static_cast<std::uint64_t>(y) < drawn_ && history.has(seq)) {
+            paint_row(dst, history.row(seq), w);
+        } else if (y < (image_.isNull() ? 0 : image_.height())) {
             const uchar* src = image_.constScanLine(y);
-            uchar* dst = grown.scanLine(y);
             for (int x = 0; x < w; ++x) {
                 const int sx = std::min(old_w - 1, x * old_w / w);
                 std::copy_n(src + sx * 3, 3, dst + x * 3);
@@ -148,13 +168,28 @@ void Waterfall::ensure_image() {
     image_ = std::move(grown);
 }
 
-void Waterfall::tick() {
-    if (!ring_) return;
-    const std::vector<double> block = ring_->tail(dsp::WATERFALL_NFFT);
-    if (static_cast<int>(block.size()) < dsp::WATERFALL_NFFT) return;
+void Waterfall::paint_row(uchar* dst, const std::vector<double>& db, int width) const {
+    const std::vector<double> reduced = dsp::reduce_to_width(db, width);
+    if (static_cast<int>(reduced.size()) < width) return;
+    const std::array<Rgb, 256>& lut = colormap();
+    for (int x = 0; x < width; ++x) {
+        const double norm =
+            std::clamp((reduced[x] - DB_FLOOR) / (DB_CEIL - DB_FLOOR), 0.0, 1.0);
+        const Rgb& color = lut[static_cast<std::size_t>(norm * 255.0)];
+        std::copy_n(color.data(), 3, dst + x * 3);
+    }
+}
 
-    peak_ = 0.0;
-    for (const double sample : block) peak_ = std::max(peak_, std::abs(sample));
+void Waterfall::tick() {
+    if (feed_ == own_feed_.get()) feed_->pump();
+    draw_new_rows();
+}
+
+void Waterfall::draw_new_rows() {
+    const dsp::WaterfallHistory& history = feed_->fast();
+    const std::uint64_t count = history.count();
+    if (count == drawn_) return;
+    peak_ = feed_->peak();
     // The audio layer hands back floats; anything at or over unity has
     // already been clipped somewhere upstream in the capture chain, so
     // this reports the soundcard's problem rather than ours.
@@ -162,27 +197,21 @@ void Waterfall::tick() {
     if (clipping_) clip_latched_ = true;
 
     ensure_image();
-    const std::vector<double> reduced = dsp::reduce_to_width(
-        dsp::spectrum_db(block, dsp::WATERFALL_BINS), image_.width());
-    if (reduced.empty()) return;
-
-    // One row = one pixel, so this is a 1 px scroll. Bottom-up, in
+    const int h = image_.height();
+    const std::uint64_t from =
+        std::max<std::uint64_t>({drawn_, history.first(),
+                                 count > static_cast<std::uint64_t>(h) ? count - h : 0});
+    // One row = one pixel, so each is a 1 px scroll. Bottom-up, in
     // place: row h-1 is overwritten first, so no row is read after it
     // has been clobbered.
-    const int h = image_.height();
     const std::size_t stride = static_cast<std::size_t>(image_.bytesPerLine());
-    for (int y = h - 1; y > 0; --y) {
-        std::copy_n(image_.constScanLine(y - 1), stride, image_.scanLine(y));
+    for (std::uint64_t seq = from; seq < count; ++seq) {
+        for (int y = h - 1; y > 0; --y) {
+            std::copy_n(image_.constScanLine(y - 1), stride, image_.scanLine(y));
+        }
+        paint_row(image_.scanLine(0), history.row(seq), image_.width());
     }
-
-    const std::array<Rgb, 256>& lut = colormap();
-    uchar* top = image_.scanLine(0);
-    for (int x = 0; x < image_.width(); ++x) {
-        const double norm =
-            std::clamp((reduced[x] - DB_FLOOR) / (DB_CEIL - DB_FLOOR), 0.0, 1.0);
-        const Rgb& color = lut[static_cast<std::size_t>(norm * 255.0)];
-        std::copy_n(color.data(), 3, top + x * 3);
-    }
+    drawn_ = count;
     update();
 }
 

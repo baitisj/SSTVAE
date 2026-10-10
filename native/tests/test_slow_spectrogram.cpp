@@ -49,12 +49,12 @@ void test_columns() {
     check::is_true(fine.size() >= 38 && fine.size() <= 40, "slow/fine: one column a second");
     check::is_true(std::abs(fine.front().t - T0) < 1e-6 && std::abs(fine[1].t - (T0 + 1)) < 1e-6,
                    "slow/fine: each stamped with the second its audio began");
-    const int bin = peak_bin(fine[5].power);
+    const int bin = peak_bin(fine[5].powers());
     check::is_true(std::abs(bin * SlowSpectrogram::BIN_HZ - 1000.0) < 1.0,
                    "slow/fine: a 1000 Hz tone peaks within a hertz of 1000");
     // 0.25 for amplitude 0.5, less the Hann window's scalloping off a
     // bin centre (at most 1.4 dB).
-    check::is_true(fine[5].power[bin] > 0.17 && fine[5].power[bin] < 0.26,
+    check::is_true(fine[5].power(bin) > 0.17 && fine[5].power(bin) < 0.26,
                    "slow/fine: in amplitude squared");
     check::equal(s.coarse().size(), std::size_t{2},
                  "slow/coarse: the two whole 15 s blocks (the third is still filling)");
@@ -64,7 +64,7 @@ void test_columns() {
     const std::vector<float> m = s.mean_between(T0 + 10, T0 + 13, &n);
     check::equal(n, 3, "slow/mean: the columns that overlap the range");
     double expect = 0.0;
-    for (int k = 10; k <= 12; ++k) expect += fine[static_cast<std::size_t>(k)].power[bin];
+    for (int k = 10; k <= 12; ++k) expect += fine[static_cast<std::size_t>(k)].power(bin);
     check::is_true(std::abs(m[static_cast<std::size_t>(bin)] - expect / 3) < 1e-6,
                    "slow/mean: their mean");
     check::is_true(s.mean_between(T0 - 100, T0 - 50).empty(), "slow/mean: nothing before");
@@ -92,20 +92,44 @@ void test_history_comes_from_the_coarse_store() {
     const std::size_t fine_n = s.fine().size();
     check::is_true(s.coarse().size() == 3, "slow/coarse: three whole blocks in a minute");
     int n = 0;
-    s.mean_between(T0, T0 + 45, &n);
-    check::equal(n, static_cast<int>(std::min<std::size_t>(fine_n, 45)),
-                 "slow/mean: from the fine store while it reaches back");
+    s.mean_between(T0 + 20, T0 + 30, &n);
+    check::equal(n, 10, "slow/mean: a short range from the fine store while it reaches back");
+    const std::vector<float> wide = s.mean_between(T0, T0 + 30, &n);
+    check::equal(n, 30, "slow/mean: a block or longer from the coarse one");
+    std::vector<float> by_hand(wide.size(), 0.0f);
+    for (const auto& c : s.coarse()) {
+        if (c.t < T0 + 30) {
+            for (std::size_t k = 0; k < by_hand.size(); ++k) by_hand[k] += c.power[k] / 2;
+        }
+    }
+    const int bin = peak_bin(wide);
+    check::is_true(fine_n > 30 && std::abs(wide[static_cast<std::size_t>(bin)] -
+                                           by_hand[static_cast<std::size_t>(bin)]) < 1e-6,
+                   "slow/mean: the coarse blocks' own mean");
+}
+
+void test_the_fine_store_is_a_byte_a_bin() {
+    for (const float p : {1e-12f, 3.7e-8f, 0.25f, 1.0f}) {
+        const float back = SlowSpectrogram::dequantize(SlowSpectrogram::quantize(p));
+        check::is_true(std::abs(10.0 * std::log10(back / p)) <= SlowSpectrogram::DB_STEP / 2 + 1e-6,
+                       "slow/bytes: a level comes back within half a step");
+    }
+    check::is_true(SlowSpectrogram::quantize(0.0f) == 0, "slow/bytes: silence is the bottom level");
+    check::is_true(SlowSpectrogram::FINE_KEEP_S >= 6 * 3600.0,
+                   "slow/bytes: so the fine store keeps the whole six hours");
 }
 
 void test_older_than_the_fine_store() {
     std::mt19937 rng(5);
-    SlowSpectrogram s;
-    // Past FINE_KEEP_S of audio, so the first minute is only coarse.
-    feed(s, T0, SlowSpectrogram::FINE_KEEP_S + 120.0, 1200.0, 0.3, rng);
+    // A short fine store, so the test need not make six hours of audio.
+    constexpr double KEEP = 600.0;
+    SlowSpectrogram s(KEEP);
+    // Past its length, so the first minute is only coarse.
+    feed(s, T0, KEEP + 120.0, 1200.0, 0.3, rng);
     check::is_true(s.fine().front().t > T0 + 60.0, "slow/old: the fine store has moved on");
     int n = 0;
-    const std::vector<float> m = s.mean_between(T0, T0 + 30.0, &n);
-    check::equal(n, 30, "slow/old: two coarse blocks, counted as 30 s of audio");
+    const std::vector<float> m = s.mean_between(T0, T0 + 5.0, &n);
+    check::equal(n, 15, "slow/old: even a short range, from the coarse block (15 s of audio)");
     const int bin = peak_bin(m);
     check::is_true(!m.empty() && std::abs(bin * SlowSpectrogram::BIN_HZ - 1200.0) < 1.0 &&
                        m[static_cast<std::size_t>(bin)] > 0.05 &&
@@ -157,6 +181,7 @@ int main() {
     test_a_gap_stays_a_gap();
     test_history_comes_from_the_coarse_store();
     test_older_than_the_fine_store();
+    test_the_fine_store_is_a_byte_a_bin();
     test_the_time_scale();
     return check::report("slow spectrogram");
 }

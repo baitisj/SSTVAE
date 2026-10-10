@@ -17,8 +17,9 @@
 // Signals the QRSS listener has synced on (its tiles) are drawn in shades
 // of red over their own frequency and pass instead of grey.
 //
-// The audio is the receive pane's capture ring, read with a cursor of
-// its own, so this hears what the listener hears. The arithmetic is in
+// The audio is the receive pane's capture ring, through the spectrum
+// feed this shares with the waterfall (spectrum_feed.hpp), so this hears
+// what the listener hears and keeps six hours of it. The arithmetic is in
 // core/dsp/slow_spectrogram.hpp; this file draws it.
 
 #ifndef SSTVAE_GUI_QRSS_SPECTROGRAM_HPP
@@ -42,6 +43,8 @@ class RingBuffer;
 }
 
 namespace sstvae::gui {
+
+class SpectrumFeed;
 
 class QrssSpectrogram : public QWidget {
     Q_OBJECT
@@ -68,6 +71,10 @@ public:
     ~QrssSpectrogram() override;
 
     void set_ring(std::shared_ptr<rx::RingBuffer> ring);
+    // Draw from a shared feed (spectrum_feed.hpp) instead of this
+    // widget's own; `set_ring` then sets the feed's ring.
+    void set_feed(SpectrumFeed* feed);
+    SpectrumFeed* feed() const { return feed_; }
     // Audio whose last sample was captured at `end_time` (unix seconds).
     void push_audio(const std::vector<double>& samples, double end_time);
     void set_markers(std::vector<Marker> markers);
@@ -83,7 +90,7 @@ public:
     double f_lo() const { return f_lo_; }
     double f_hi() const { return f_hi_; }
     void set_frequency_range(double lo, double hi);
-    const dsp::SlowSpectrogram& data() const { return data_; }
+    const dsp::SlowSpectrogram& data() const;
 
     // Where things are, for tests and for the mouse.
     QRect plot_rect() const;
@@ -116,12 +123,11 @@ private:
     double freq_at_y(double y) const;
     double y_of_freq(double f) const;
 
-    dsp::SlowSpectrogram data_;
+    std::unique_ptr<SpectrumFeed> own_feed_;
+    SpectrumFeed* feed_ = nullptr;
     dsp::TimeScale scale_;
     std::vector<Marker> markers_;
     std::function<double()> clock_;
-    std::shared_ptr<rx::RingBuffer> ring_;
-    std::uint64_t cursor_ = 0;
     QTimer* timer_ = nullptr;
     QImage image_;
     bool dirty_ = true;

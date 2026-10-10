@@ -6,7 +6,11 @@
 // for hours. Two stores:
 //
 //   * **Fine**: one power spectrum per second of audio (8192-point FFT,
-//     Hann, a hop of one second), kept for FINE_KEEP_S.
+//     Hann, a hop of one second), kept for FINE_KEEP_S -- six hours, so
+//     the time axis can magnify any of the history to a second a pixel.
+//     Held as one byte a bin (0.75 dB steps over 192 dB), about 11 MB an
+//     hour: the rounding is an eighth of the noise's own spread in one
+//     column, and nothing compresses noise much further.
 //   * **Coarse**: the mean of each whole COARSE_S block of fine columns,
 //     kept for COARSE_KEEP_S. Averaging is what lets a weak carrier show
 //     at a slow scale: the noise in a 15 s mean is a quarter as rough.
@@ -22,6 +26,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <vector>
 
@@ -36,13 +41,28 @@ public:
     static constexpr int BINS = static_cast<int>(MAX_HZ / BIN_HZ) + 1;
     static constexpr double COLUMN_S = 1.0;
     static constexpr double COARSE_S = 15.0;
-    static constexpr double FINE_KEEP_S = 20 * 60.0;
+    static constexpr double FINE_KEEP_S = 6 * 3600.0;
     static constexpr double COARSE_KEEP_S = 6 * 3600.0;
+    // The fine store's byte: level L is DB_MIN + L * DB_STEP dB.
+    static constexpr double DB_MIN = -180.0;
+    static constexpr double DB_STEP = 0.75;
 
     struct Column {
         double t = 0.0;            // unix seconds its audio began
         std::vector<float> power;  // BINS linear power values
     };
+    // A fine column, a byte a bin.
+    struct FineColumn {
+        double t = 0.0;
+        std::vector<std::uint8_t> level;
+        float power(int k) const { return dequantize(level[static_cast<std::size_t>(k)]); }
+        std::vector<float> powers() const;
+    };
+    static std::uint8_t quantize(float power);
+    static float dequantize(std::uint8_t level);
+
+    // `fine_keep_s` is FINE_KEEP_S but for tests.
+    explicit SlowSpectrogram(double fine_keep_s = FINE_KEEP_S) : fine_keep_s_(fine_keep_s) {}
 
     // Audio at 8 kHz whose last sample was captured at `end_time`.
     void push(const std::vector<double>& samples, double end_time);
@@ -50,24 +70,26 @@ public:
     void restart();
     void clear();
 
-    // The mean power of every column beginning in [t0, t1), from the
-    // fine store where it reaches back that far, else the coarse one.
+    // The mean power of every column beginning in [t0, t1): from the
+    // coarse store when the range is a block or longer (the same mean,
+    // fifteen times cheaper), else from the fine one where it reaches.
     // Empty when no column falls in the range. `count` is how many
     // seconds of audio went into it (a coarse column counts COARSE_S).
     std::vector<float> mean_between(double t0, double t1, int* count = nullptr) const;
 
-    const std::deque<Column>& fine() const { return fine_; }
+    const std::deque<FineColumn>& fine() const { return fine_; }
     const std::deque<Column>& coarse() const { return coarse_; }
     // The newest column's start, or 0 with none.
     double newest() const { return fine_.empty() ? 0.0 : fine_.back().t; }
 
 private:
     void add_fine(Column column);
+    double fine_keep_s_;
     void flush_coarse();
 
     std::vector<double> pending_;
     double pending_end_ = 0.0;   // time of the last pending sample
-    std::deque<Column> fine_;
+    std::deque<FineColumn> fine_;
     std::deque<Column> coarse_;
     std::vector<double> block_sum_;
     double block_t_ = -1.0;

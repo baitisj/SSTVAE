@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "rx/ringbuffer.hpp"
+#include "spectrum_feed.hpp"
 
 namespace sstvae::gui {
 
@@ -50,6 +51,8 @@ QrssSpectrogram::QrssSpectrogram(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("qrss_spectrogram"));
     setMouseTracking(true);
     clock_ = [] { return static_cast<double>(QDateTime::currentMSecsSinceEpoch()) / 1000.0; };
+    own_feed_ = std::make_unique<SpectrumFeed>();
+    feed_ = own_feed_.get();
     timer_ = new QTimer(this);
     timer_->setInterval(1000);
     connect(timer_, &QTimer::timeout, this, &QrssSpectrogram::pump);
@@ -67,37 +70,32 @@ QrssSpectrogram::~QrssSpectrogram() = default;
 
 void QrssSpectrogram::set_clock(std::function<double()> clock) {
     clock_ = std::move(clock);
+    own_feed_->set_clock(clock_);
     invalidate();
 }
 
 double QrssSpectrogram::now() const { return clock_(); }
 
 void QrssSpectrogram::set_ring(std::shared_ptr<rx::RingBuffer> ring) {
-    if (ring == ring_) return;
-    ring_ = std::move(ring);
-    // Start from what the new ring has now; the old one's audio is
-    // already in the store.
-    cursor_ = 0;
-    if (ring_) ring_->read_since(0, &cursor_);
-    data_.restart();
+    feed_->set_ring(std::move(ring));
 }
 
+void QrssSpectrogram::set_feed(SpectrumFeed* feed) {
+    if (feed == nullptr) return;
+    feed_ = feed;
+    invalidate();
+}
+
+const dsp::SlowSpectrogram& QrssSpectrogram::data() const { return feed_->slow(); }
+
 void QrssSpectrogram::push_audio(const std::vector<double>& samples, double end_time) {
-    data_.push(samples, end_time);
+    feed_->push_audio(samples, end_time);
     invalidate();
 }
 
 void QrssSpectrogram::pump() {
-    if (ring_) {
-        std::uint64_t total = 0;
-        std::vector<double> x = ring_->read_since(cursor_, &total);
-        if (total < cursor_) {
-            x = ring_->read_since(0, &total);
-            data_.restart();
-        }
-        cursor_ = total;
-        if (!x.empty()) data_.push(x, now());
-    }
+    // A shared feed pumps itself; this one only redraws.
+    if (feed_ == own_feed_.get()) feed_->pump();
     // The picture moves with the clock even with no audio.
     invalidate();
 }
@@ -197,7 +195,7 @@ void QrssSpectrogram::render() {
         const double t_hi = t_now - scale_.age_at(x);
         const double t_lo = t_now - scale_.age_at(x + 1);
         int n_cols = 0;
-        const std::vector<float> col = data_.mean_between(t_lo, t_hi, &n_cols);
+        const std::vector<float> col = data().mean_between(t_lo, t_hi, &n_cols);
         if (col.empty()) continue;
         cumsum[0] = 0.0;
         for (int k = 0; k < dsp::SlowSpectrogram::BINS; ++k) cumsum[k + 1] = cumsum[k] + col[k];

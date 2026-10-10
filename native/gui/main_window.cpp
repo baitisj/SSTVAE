@@ -29,6 +29,7 @@
 #include "pane_container.hpp"
 #include "qrss_page.hpp"
 #include "qrss_window.hpp"
+#include "spectrum_feed.hpp"
 #include "waterfall.hpp"
 #include "rig/hamlib.hpp"
 #include "rx_panel.hpp"
@@ -179,6 +180,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // with this: a QRSS send is scheduled. The waterfall stays above
     // both, since both are tuned by it.
     qrss_page_ = new QrssPage(qrss_);
+    // One spectrum feed for the waterfall and the QRSS spectrogram: the
+    // audio is read once and both histories kept (spectrum_feed.hpp).
+    spectrum_feed_ = new SpectrumFeed(this);
+    spectrum_feed_->start(20);
+    waterfall_->set_feed(spectrum_feed_);
+    qrss_page_->spectrogram()->set_feed(spectrum_feed_);
     modes_ = new QStackedWidget(this);
     modes_->setObjectName(QStringLiteral("main_modes"));
     modes_->addWidget(panes_);

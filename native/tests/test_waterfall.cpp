@@ -22,6 +22,8 @@
 #include "config.hpp"
 #include "dsp/spectrum.hpp"
 #include "rx/ringbuffer.hpp"
+#include "qrss_spectrogram.hpp"
+#include "spectrum_feed.hpp"
 #include "waterfall.hpp"
 
 using namespace sstvae;
@@ -264,6 +266,40 @@ void test_clear_blanks_it() {
 
 }  // namespace
 
+// The waterfall and the QRSS spectrogram share one feed (Jeff,
+// 2026-10-10): the audio is read once and both histories are kept, so
+// a strip dragged taller shows older rows rather than black.
+void test_a_shared_feed() {
+    gui::SpectrumFeed feed;
+    gui::Waterfall widget;
+    gui::QrssSpectrogram spectrogram;
+    widget.resize(W, 60);
+    widget.set_feed(&feed);
+    spectrogram.set_feed(&feed);
+    check::is_true(&spectrogram.data() == &feed.slow(),
+                   "waterfall/shared: the spectrogram draws from the feed's store");
+    // Two seconds of tone: enough for a QRSS column too.
+    auto ring = std::make_shared<rx::RingBuffer>(4.0);
+    std::vector<double> tone(2 * config::FS);
+    for (std::size_t i = 0; i < tone.size(); ++i) {
+        tone[i] = 0.5 * std::sin(2.0 * std::numbers::pi * TONE_HZ * static_cast<double>(i) /
+                                 config::FS);
+    }
+    widget.set_ring(ring);
+    ring->write(tone);
+    check::is_true(feed.ring() != nullptr, "waterfall/shared: set_ring sets the feed's ring");
+    for (int i = 0; i < 150; ++i) feed.pump();
+    check::is_true(feed.fast().count() == 150, "waterfall/shared: a row a pump, kept");
+    check::is_true(!feed.slow().fine().empty(),
+                   "waterfall/shared: and the same audio went to the QRSS store");
+    check::is_true(!is_dark(shot(widget), tone_column(), 5),
+                   "waterfall/shared: rows arrive when the feed pumps");
+    // Taller than it has ever been: the extra rows come from the history.
+    widget.resize(W, 140);
+    check::is_true(!is_dark(shot(widget), tone_column(), 120),
+                   "waterfall/shared: dragged taller, it shows older rows, not black");
+}
+
 int main(int argc, char** argv) {
     check::report_crashes_instead_of_prompting();
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -276,6 +312,7 @@ int main(int argc, char** argv) {
     test_clipping_latches_until_cleared();
     test_disabled_looks_different();
     test_clear_blanks_it();
+    test_a_shared_feed();
 
     return check::report("waterfall widget");
 }

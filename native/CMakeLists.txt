@@ -508,6 +508,7 @@ if(_want_gui)
     gui/qrss_timeline.cpp
     gui/qrss_page.cpp
     gui/qrss_spectrogram.cpp
+    gui/spectrum_feed.cpp
     gui/tx_panel.cpp
     gui/banner.cpp
     gui/crop_dialog.cpp

@@ -1,6 +1,7 @@
 #include "dsp/slow_spectrogram.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <numbers>
@@ -37,11 +38,10 @@ double power_scale() {
 }
 
 // The columns of `d` whose [t, t + len) overlaps [t0, t1).
-template <class Fn>
-int each_overlapping(const std::deque<SlowSpectrogram::Column>& d, double len, double t0,
-                     double t1, Fn fn) {
+template <class Col, class Fn>
+int each_overlapping(const std::deque<Col>& d, double len, double t0, double t1, Fn fn) {
     auto it = std::lower_bound(d.begin(), d.end(), t0 - len,
-                               [](const SlowSpectrogram::Column& c, double t) { return c.t < t; });
+                               [](const Col& c, double t) { return c.t < t; });
     int n = 0;
     for (; it != d.end() && it->t < t1; ++it) {
         if (it->t + len <= t0) continue;
@@ -99,9 +99,13 @@ void SlowSpectrogram::add_fine(Column column) {
     for (int k = 0; k < BINS; ++k) block_sum_[k] += column.power[k];
     ++block_n_;
     if (!fine_.empty() && column.t <= fine_.back().t) fine_.clear();   // the clock went back
-    fine_.push_back(std::move(column));
+    FineColumn f;
+    f.t = column.t;
+    f.level.resize(column.power.size());
+    for (std::size_t k = 0; k < column.power.size(); ++k) f.level[k] = quantize(column.power[k]);
+    fine_.push_back(std::move(f));
     const double newest = fine_.back().t;
-    while (!fine_.empty() && fine_.front().t < newest - FINE_KEEP_S) fine_.pop_front();
+    while (!fine_.empty() && fine_.front().t < newest - fine_keep_s_) fine_.pop_front();
     while (!coarse_.empty() && coarse_.front().t < newest - COARSE_KEEP_S) coarse_.pop_front();
 }
 
@@ -116,16 +120,51 @@ void SlowSpectrogram::flush_coarse() {
     block_n_ = 0;
 }
 
+namespace {
+
+const std::array<float, 256>& level_power() {
+    static const std::array<float, 256> lut = [] {
+        std::array<float, 256> v{};
+        for (int i = 0; i < 256; ++i) {
+            v[static_cast<std::size_t>(i)] = static_cast<float>(
+                std::pow(10.0, (SlowSpectrogram::DB_MIN + i * SlowSpectrogram::DB_STEP) / 10.0));
+        }
+        return v;
+    }();
+    return lut;
+}
+
+}  // namespace
+
+std::uint8_t SlowSpectrogram::quantize(float power) {
+    if (!(power > 0.0f)) return 0;
+    const double l = std::round((10.0 * std::log10(static_cast<double>(power)) - DB_MIN) / DB_STEP);
+    return static_cast<std::uint8_t>(std::clamp(l, 0.0, 255.0));
+}
+
+float SlowSpectrogram::dequantize(std::uint8_t level) { return level_power()[level]; }
+
+std::vector<float> SlowSpectrogram::FineColumn::powers() const {
+    std::vector<float> out(level.size());
+    for (std::size_t k = 0; k < level.size(); ++k) out[k] = dequantize(level[k]);
+    return out;
+}
+
 std::vector<float> SlowSpectrogram::mean_between(double t0, double t1, int* count) const {
     std::vector<double> sum;
     const auto add = [&sum](const Column& c) {
         if (sum.empty()) sum.assign(c.power.size(), 0.0);
         for (std::size_t k = 0; k < c.power.size(); ++k) sum[k] += c.power[k];
     };
+    const std::array<float, 256>& lut = level_power();
+    const auto add_fine = [&sum, &lut](const FineColumn& c) {
+        if (sum.empty()) sum.assign(c.level.size(), 0.0);
+        for (std::size_t k = 0; k < c.level.size(); ++k) sum[k] += lut[c.level[k]];
+    };
     int columns = 0;   // how many were summed
     int seconds = 0;   // how much audio they hold
     const bool fine_reaches = !fine_.empty() && t0 >= fine_.front().t - COLUMN_S;
-    if (!fine_reaches) {
+    if (!fine_reaches || t1 - t0 >= COARSE_S) {
         columns = each_overlapping(coarse_, COARSE_S, t0, t1, add);
         // Counted in seconds of audio, as a fine column is: what the
         // mean's noise depends on.
@@ -134,7 +173,7 @@ std::vector<float> SlowSpectrogram::mean_between(double t0, double t1, int* coun
     // Recent enough for the fine store, or the block still filling,
     // which is not in the coarse one yet.
     if (columns == 0 && !fine_.empty()) {
-        columns = each_overlapping(fine_, COLUMN_S, t0, t1, add);
+        columns = each_overlapping(fine_, COLUMN_S, t0, t1, add_fine);
         seconds = columns;
     }
     if (count != nullptr) *count = seconds;

@@ -50,6 +50,7 @@ class QTimer;
 namespace sstvae::gui {
 
 class AppState;
+class SpectrumFeed;
 class LogPane;
 class QrssWindow;
 class QrssPage;
@@ -121,6 +122,7 @@ private:
     // SSTVAE (the two panes) or QRSSTVAE (the QRSS signals), one at a
     // time, under the waterfall, which both use.
     QStackedWidget* modes_ = nullptr;
+    SpectrumFeed* spectrum_feed_ = nullptr;
     QAction* sstvae_action_ = nullptr;
     QAction* qrsstvae_action_ = nullptr;
     QMenu* layout_menu_ = nullptr;
