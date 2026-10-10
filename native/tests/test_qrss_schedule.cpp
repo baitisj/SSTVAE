@@ -498,6 +498,16 @@ void test_the_window(const std::filesystem::path& dir) {
     if (s->entries().size() != 1) return;
     const std::string id = s->entries()[0].id;
     check::equal(table->topLevelItemCount(), 1, "window: and it is listed");
+    {
+        // What the app finds after a restart: the schedule, its Send and
+        // its picture, from disk.
+        Fake later;
+        std::unique_ptr<QrssScheduler> again(make(later, dir / "c" / "qrss_schedule.json"));
+        check::is_true(again->entries().size() == 1 && again->entries()[0].id == id &&
+                           again->entries()[0].send_id == blue &&
+                           std::filesystem::exists(again->entries()[0].picture),
+                       "window: the schedule and its link to the Send survive a restart");
+    }
     check::is_true(images::load(s->entries()[0].picture).rgb[2] == 255,
                    "window: with its own copy of the Send's picture");
 
