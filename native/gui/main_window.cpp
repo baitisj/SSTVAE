@@ -499,6 +499,11 @@ void MainWindow::set_ui_mode(UiMode mode) {
     modes_->setCurrentWidget(qrss ? static_cast<QWidget*>(qrss_page_) : panes_);
     sstvae_action_->setChecked(!qrss);
     qrsstvae_action_->setChecked(qrss);
+    // The SSTVAE waterfall is for tuning SSTVAE; QRSSTVAE has its own
+    // spectrogram, so the strip goes and its height goes to the page
+    // (Jeff, 2026-10-10). Its rows keep arriving from the shared feed, so
+    // it comes back with its history.
+    waterfall_->setVisible(!qrss);
     // Side by side or tabbed is about the SSTVAE panes only.
     if (layout_menu_ != nullptr) layout_menu_->setEnabled(!qrss);
     const QString app = QString::fromLatin1(APP_NAME);
