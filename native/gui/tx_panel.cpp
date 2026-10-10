@@ -62,6 +62,7 @@
 #include "overlay/template.hpp"
 #include "overlay/template_catalog.hpp"
 #include "overlay_editor.hpp"
+#include "qrss_schedule_window.hpp"
 #include "qrss_tx.hpp"
 #include "share_dialog.hpp"
 #include "style.hpp"
@@ -234,6 +235,26 @@ TransmitPanel::TransmitPanel(AppState* state, QWidget* parent)
     refresh_templates();
     sync_custom_field_rows();
     refresh_fields();
+
+    // Scheduled QRSS sends. The file sits beside the config, so a test's
+    // temporary config directory gets a temporary schedule too.
+    scheduler_ = new QrssScheduler(
+        settings::config_dir() / "qrss_schedule.json",
+        [this](const qrss_schedule::Entry& entry, const std::vector<qrss_tx::Pass>& passes,
+               std::string* why) { return start_scheduled(entry, passes, why); },
+        {}, 5000, this);
+    connect(scheduler_, &QrssScheduler::logged, this, [this](int severity, const QString& m) {
+        const auto level = static_cast<log::Severity>(std::clamp(severity, 0, 2));
+        if (level == log::Severity::Error) {
+            // The banner as well: a send that will not happen is worth
+            // finding on the screen, not only in the log.
+            place_banner();
+            banner_->show_error(m);
+        }
+        app_->log_event("tx", level, m);
+    });
+    connect(scheduler_, &QrssScheduler::changed, this, &TransmitPanel::update_schedule_button);
+    update_schedule_button();
 }
 
 TransmitPanel::~TransmitPanel() {
@@ -940,6 +961,9 @@ QWidget* TransmitPanel::build_send_bar() {
     send_button_->setToolTip(
         tr("Encode the composition, key the radio and send it. Any refinement "
            "still running is finished first."));
+    schedule_button_ = new QPushButton(tr("Sched&ule..."), bar);
+    schedule_button_->setObjectName(QStringLiteral("qrss_schedule_button"));
+    connect(schedule_button_, &QPushButton::clicked, this, &TransmitPanel::show_schedule);
     cancel_button_ = new QPushButton(tr("&Cancel"), bar);
     cancel_button_->setToolTip(
         tr("Stop the transmission and unkey the radio."));
@@ -979,6 +1003,7 @@ QWidget* TransmitPanel::build_send_bar() {
     layout->addWidget(style::row(
         bar, {new QLabel(tr("QRSS carrier:"), bar), qrss_slider_, qrss_label_}));
     layout->addWidget(send_button_);
+    layout->addWidget(schedule_button_);
     layout->addWidget(cancel_button_);
     layout->addWidget(status_);
     update_qrss_controls();
@@ -1584,9 +1609,31 @@ void TransmitPanel::send() {
         return;
     }
     if (!qrss_mode().empty()) {
+        // A send by hand that would still be on the air when a scheduled
+        // one needs the transmitter costs that one its slot: say so first.
+        const std::string mode = qrss_mode();
+        const double now = scheduler_->now();
+        const std::vector<double> quarter_hours =
+            qrss_tx::plan(now + 60.0, qrss_tx::passes_for(mode));
+        if (!quarter_hours.empty()) {
+            if (const auto c = qrss_schedule::clash_with(scheduler_->entries(), now,
+                                                         qrss_tx::audio_end(quarter_hours.back()), now)) {
+                const qrss_schedule::Entry& e = scheduler_->entries()[c->entry];
+                const auto answer = QMessageBox::question(
+                    this, tr("Scheduled send in the way"),
+                    tr("This send would be on the air until about %1, over the %2 scheduled "
+                       "send of \"%3\", which would then be skipped. Send anyway?")
+                        .arg(QString::fromStdString(
+                                 qrss_schedule::when(qrss_tx::audio_end(quarter_hours.back()), now)),
+                             QString::fromStdString(qrss_schedule::when(c->slot, now)),
+                             QString::fromStdString(e.label)),
+                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+                if (answer != QMessageBox::Yes) return;
+            }
+        }
         if (thread_.joinable()) thread_.join();
         banner_->clear();
-        begin_qrss(*image);
+        begin_qrss(*image, mode, qrss_slider_->value(), {}, true);
         return;
     }
     codec::OnnxCodec* model = app_->model();
@@ -1702,12 +1749,15 @@ void TransmitPanel::begin_transmit(const images::Picture& picture,
     });
 }
 
-void TransmitPanel::begin_qrss(const images::Picture& picture) {
+std::string TransmitPanel::begin_qrss(const images::Picture& picture, const std::string& mode,
+                                      double freq_hz, std::vector<qrss_tx::Pass> passes,
+                                      bool interactive) {
     const settings::Config& config = app_->config();
     qrss_tx::Request request;
     request.picture = picture;
-    request.mode = qrss_mode();
-    request.freq_hz = qrss_slider_->value();
+    request.mode = mode;
+    request.freq_hz = freq_hz;
+    request.passes = std::move(passes);
     request.callsign = config.callsign;
     request.grid = config.grid;
     request.tx.device = config.audio.output_device;
@@ -1719,28 +1769,33 @@ void TransmitPanel::begin_qrss(const images::Picture& picture) {
     request.tx.cw_id = false;
     request.tx.vox_lead_s = 0.0;
 
+    // The schedule reports a refusal itself, on the banner and in the log.
+    auto refuse = [&](const QString& title, const QString& why) {
+        if (interactive) QMessageBox::warning(this, title, why);
+        return why.toStdString();
+    };
     const std::string problem = qrss_tx::problem(request);
     if (!problem.empty()) {
-        QMessageBox::warning(this, tr("Cannot send QRSS"), QString::fromStdString(problem));
-        return;
+        return refuse(tr("Cannot send QRSS"), QString::fromStdString(problem));
     }
     const std::optional<qrss_tx::Tools> tools = qrss_tx::find_tools();
     if (!tools) {
-        QMessageBox::warning(
-            this, tr("QRSS tools not found"),
+        return refuse(
+            tr("QRSS tools not found"),
             tr("QRSS sending runs qrss_encode.py and qrss_transmit.py from the "
                "repository, and they were not found near this program. Set "
                "SSTVAE_QRSS_DIR to the repository (and SSTVAE_QRSS_PYTHON to its "
                "Python, if it has no .venv)."));
-        return;
     }
     // Which quarter hours the passes take is decided once encoding is
     // done (`qrss_tx::run`), and logged then as the "waiting for" line.
+    const int n_passes = request.passes.empty() ? qrss_tx::passes_for(request.mode)
+                                                : static_cast<int>(request.passes.size());
     app_->log_event("tx", log::Severity::Info,
                     tr("QRSS CE mode %1 at %2 Hz: %3 pass(es) of 1782.7 s")
                         .arg(QString::fromStdString(request.mode))
                         .arg(request.freq_hz, 0, 'f', 0)
-                        .arg(qrss_tx::passes_for(request.mode)));
+                        .arg(n_passes));
 
     engine_ = std::make_unique<tx::TxEngine>(
         app_->ptt(),
@@ -1784,6 +1839,70 @@ void TransmitPanel::begin_qrss(const images::Picture& picture) {
         running_.store(false);
         emit sendFinished(ok);
     });
+    return {};
+}
+
+QrssScheduler::Start TransmitPanel::start_scheduled(const qrss_schedule::Entry& entry,
+                                                    const std::vector<qrss_tx::Pass>& passes,
+                                                    std::string* why) {
+    // Not until the last send is wholly over: `on_finished` joins its
+    // thread, and a run started before that would be re-enabled under.
+    if (transmitting() || awaiting_optimizer_ || thread_.joinable()) {
+        *why = "the transmitter is busy";
+        return QrssScheduler::Start::Busy;
+    }
+    images::Picture picture;
+    try {
+        picture = images::load(entry.picture);
+    } catch (const std::exception& e) {
+        *why = std::string("its picture could not be read: ") + e.what();
+        return QrssScheduler::Start::Failed;
+    }
+    const std::string problem = begin_qrss(picture, entry.mode, entry.freq_hz, passes, false);
+    if (!problem.empty()) {
+        *why = problem;
+        return QrssScheduler::Start::Failed;
+    }
+    return QrssScheduler::Start::Started;
+}
+
+void TransmitPanel::show_schedule() {
+    if (schedule_window_ == nullptr) {
+        schedule_window_ = new QrssScheduleWindow(
+            scheduler_, [this] { return editor_->composed_image(); },
+            [this] {
+                QrssScheduleWindow::Defaults d;
+                const std::string mode = qrss_mode();
+                if (!mode.empty()) d.mode = mode;
+                d.freq_hz = qrss_slider_->value();
+                return d;
+            },
+            this);
+    }
+    schedule_window_->show();
+    schedule_window_->raise();
+    schedule_window_->activateWindow();
+}
+
+void TransmitPanel::hide_windows() {
+    if (schedule_window_ != nullptr) schedule_window_->hide();
+}
+
+void TransmitPanel::update_schedule_button() {
+    // The tooltip only: new text would resize the button, and this row
+    // must not reflow under the receive pane's matched strip.
+    if (schedule_button_ == nullptr || scheduler_ == nullptr) return;
+    const double now = scheduler_->now();
+    const auto next = qrss_schedule::upcoming(scheduler_->entries(), now, 30 * 86400.0, 1);
+    QString tip = tr("Schedule QRSS sends for later: a picture sent several times back to "
+                     "back, every other hour, and so on.");
+    if (!next.empty()) {
+        const qrss_schedule::Entry& e = scheduler_->entries()[next.front().entry];
+        tip += tr(" Next: \"%1\", mode %2 at %3.")
+                   .arg(QString::fromStdString(e.label), QString::fromStdString(e.mode),
+                        QString::fromStdString(qrss_schedule::when(next.front().slot, now)));
+    }
+    schedule_button_->setToolTip(tip);
 }
 
 void TransmitPanel::cancel() {
@@ -1856,6 +1975,7 @@ void TransmitPanel::on_error(const QString& message) {
 
 void TransmitPanel::on_finished(bool ok) {
     if (thread_.joinable()) thread_.join();
+    if (scheduler_ != nullptr) scheduler_->run_finished();
     // Only re-armed if an edit was deferred while the send was
     // committed. Otherwise the composition is unchanged and still has
     // its optimized latents -- `take_result` consumes nothing -- so a

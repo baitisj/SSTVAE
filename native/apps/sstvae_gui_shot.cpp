@@ -33,13 +33,18 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "app_state.hpp"
 #include "banner.hpp"
 #include "crop_dialog.hpp"
 #include "images/types.hpp"
 #include "item_menu.hpp"
+#include "qrss_schedule.hpp"
+#include "qrss_schedule_window.hpp"
 #include "qrss_window.hpp"
 #include "log/log.hpp"
 #include "log_pane.hpp"
@@ -74,6 +79,8 @@ void usage() {
                  "               and its submenus, for a text item and a rect\n"
                  "  --qrss DIR   also shoot the QRSS signals window showing the\n"
                  "               listener tiles in DIR (qrss_listen.py --state)\n"
+                 "  --qrss-schedule DIR  also shoot the QRSS schedule window over\n"
+                 "               DIR/qrss_schedule.json (two demo sends if empty)\n"
                  "\n"
                  "Writes settings-<n>-<name>.png, one per tab.\n");
 }
@@ -112,6 +119,7 @@ int main(int argc, char** argv) {
     bool panes = false;
     bool item_menu = false;
     QString qrss_dir;
+    QString schedule_dir;
 
     const QStringList args = QCoreApplication::arguments();
     for (int i = 1; i < args.size(); ++i) {
@@ -146,6 +154,8 @@ int main(int argc, char** argv) {
             item_menu = true;
         } else if (arg == QLatin1String("--qrss") && i + 1 < args.size()) {
             qrss_dir = args[++i];
+        } else if (arg == QLatin1String("--qrss-schedule") && i + 1 < args.size()) {
+            schedule_dir = args[++i];
         } else {
             usage();
             return 2;
@@ -197,6 +207,49 @@ int main(int argc, char** argv) {
         const QString path = QStringLiteral("%1/qrss.png").arg(out);
         qrss.grab().save(path);
         std::printf("%s (%d tiles)\n", path.toLocal8Bit().constData(), qrss.tile_count());
+    }
+
+    // Sends nothing: the scheduler's timer is off and its transmitter
+    // refuses.
+    if (!schedule_dir.isEmpty()) {
+        namespace qs = sstvae::gui::qrss_schedule;
+        sstvae::gui::QrssScheduler scheduler(
+            std::filesystem::path(schedule_dir.toStdString()) / "qrss_schedule.json",
+            [](const qs::Entry&, const std::vector<sstvae::gui::qrss_tx::Pass>&, std::string* why) {
+                *why = "a screenshot sends nothing";
+                return sstvae::gui::QrssScheduler::Start::Failed;
+            },
+            {}, 0);
+        sstvae::images::Picture pic(sstvae::overlay::CANVAS_W, sstvae::overlay::CANVAS_H);
+        for (std::size_t i = 0; i < pic.rgb.size(); ++i) {
+            pic.rgb[i] = static_cast<std::uint8_t>(40 + (i / 3 % 640) * 180 / 640);
+        }
+        if (scheduler.entries().empty()) {
+            const double first = qs::earliest_slot(scheduler.now()) + 3600.0;
+            qs::Entry aa;
+            aa.label = "sunset.png";
+            aa.first_slot = first;
+            aa.count = 2;
+            scheduler.add(aa, pic);
+            qs::Entry b;
+            b.label = "composition 10 Oct 14:02Z";
+            b.mode = "B";
+            b.freq_hz = 1650.0;
+            b.first_slot = first + 3 * 3600.0;
+            b.count = 0;
+            b.every_min = 240;
+            scheduler.add(b, pic);
+        }
+        sstvae::gui::QrssScheduleWindow w(
+            &scheduler, [pic] { return std::optional<sstvae::images::Picture>(pic); },
+            [] { return sstvae::gui::QrssScheduleWindow::Defaults{"A", 1500.0}; });
+        w.resize(width > 0 ? width : 720, height > 0 ? height : 640);
+        w.show();
+        app.processEvents();
+        const QString path = QStringLiteral("%1/qrss-schedule.png").arg(out);
+        w.grab().save(path);
+        std::printf("%s (%zu scheduled)\n", path.toLocal8Bit().constData(),
+                    scheduler.entries().size());
     }
 
     if (item_menu) {

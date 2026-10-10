@@ -25,6 +25,8 @@
 #include "optimize/speculative.hpp"
 #include "overlay/model.hpp"
 #include "overlay/template.hpp"
+#include "qrss_schedule.hpp"
+#include "qrss_tx.hpp"
 #include "tx/engine.hpp"
 
 class QComboBox;
@@ -46,6 +48,7 @@ class AppState;
 class ErrorBanner;
 class ItemMenu;
 class OverlayEditor;
+class QrssScheduleWindow;
 
 // The output level is stored as a peak amplitude (`transmit.level`,
 // 0..1) because that is what the transmitter scales to, but it is
@@ -91,9 +94,17 @@ public:
     // Everything below the canvas, as one widget, so the container can
     // hold it to the same height as the receive pane's strip.
     QWidget* control_strip() const;
+    // Scheduled QRSS sends (gui/qrss_schedule.hpp), and the window the
+    // "Schedule..." button opens. The window is made on first use.
+    QrssScheduler* scheduler() const { return scheduler_; }
+    QrssScheduleWindow* schedule_window() const { return schedule_window_; }
+    // Hide the schedule window, so it does not keep the app running as
+    // its last window.
+    void hide_windows();
 
 public slots:
     void send();
+    void show_schedule();
     // The settings dialog was accepted, or the model finished loading.
     // Both can turn refinement on or off underneath us, and both must
     // take effect at once rather than at the next edit.
@@ -176,9 +187,20 @@ private:
     // for the optimizer first, and that wait must not block the GUI.
     void begin_transmit(const images::Picture& picture,
                         std::vector<double> latents);
-    // A QRSS mode's send (gui/qrss_tx.hpp): encode, then each pass on its
-    // half hour, keyed through the same engine and PTT.
-    void begin_qrss(const images::Picture& picture);
+    // A QRSS send (gui/qrss_tx.hpp): encode, then each pass on its half
+    // hour, keyed through the same engine and PTT. `passes` empty: the
+    // mode's own, from the next quarter hour there is time for. Empty
+    // when it started; otherwise why not, which `interactive` shows in a
+    // dialog (Send); the schedule, which nobody may be watching, puts it
+    // on the banner and in the log itself.
+    std::string begin_qrss(const images::Picture& picture, const std::string& mode,
+                           double freq_hz, std::vector<qrss_tx::Pass> passes,
+                           bool interactive);
+    // The scheduler's way in.
+    QrssScheduler::Start start_scheduled(const qrss_schedule::Entry& entry,
+                                         const std::vector<qrss_tx::Pass>& passes,
+                                         std::string* why);
+    void update_schedule_button();
     // The selected SSTVAE mode ("A"/"B"/"C"); with a QRSS mode selected,
     // the SSTVAE mode last saved, so the optimizer and `{mode}` always
     // see a real SSTVAE mode.
@@ -316,6 +338,7 @@ private:
     QSlider* qrss_slider_ = nullptr;   // the QRSS carrier, Hz; enabled for QRSS modes
     QLabel* qrss_label_ = nullptr;
     QPushButton* send_button_ = nullptr;
+    QPushButton* schedule_button_ = nullptr;
     QPushButton* cancel_button_ = nullptr;
     QProgressBar* progress_ = nullptr;
     QLabel* status_ = nullptr;
@@ -323,6 +346,9 @@ private:
     std::unique_ptr<tx::TxEngine> engine_;
     std::thread thread_;
     std::atomic<bool> running_{false};
+
+    QrssScheduler* scheduler_ = nullptr;          // a child of this panel
+    QrssScheduleWindow* schedule_window_ = nullptr;
 
     // Null when the feature is off or the model has not loaded yet.
     std::unique_ptr<optimize::Speculative> optimizer_;

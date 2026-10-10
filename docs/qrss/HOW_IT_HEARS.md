@@ -104,6 +104,9 @@ same picture sent again, in the same mode, always gets the same
 fingerprint. That's how a receiver knows that a pass it heard tonight
 and a pass it hears tomorrow are the same picture and should be added
 together. The callsign plus the picture ID name each picture uniquely.
+The desktop app's schedule window sends a picture again automatically
+(twice in a row, every other hour, and so on), and every one of those
+sends has the same fingerprint.
 
 ## How the listener hears: step by step
 

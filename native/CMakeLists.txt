@@ -494,6 +494,8 @@ if(_want_gui)
     gui/rx_panel.cpp
     gui/qrss_window.cpp
     gui/qrss_tx.cpp
+    gui/qrss_schedule.cpp
+    gui/qrss_schedule_window.cpp
     gui/rig_config.cpp
     gui/settings_dialog.cpp
     gui/overlay_editor.cpp

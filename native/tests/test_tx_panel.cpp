@@ -43,6 +43,7 @@
 #include <QPoint>
 #include <QPushButton>
 #include <QSlider>
+#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QWidget>
@@ -55,6 +56,8 @@
 #include "item_menu.hpp"
 #include "overlay/model.hpp"
 #include "overlay_editor.hpp"
+#include "qrss_schedule.hpp"
+#include "qrss_schedule_window.hpp"
 #include "tx_panel.hpp"
 
 using namespace sstvae;
@@ -206,6 +209,38 @@ void test_qrss_modes_and_the_carrier_slider() {
     combo->setCurrentIndex(combo->findData(QStringLiteral("A")));
     check::equal(state.config().transmit.qrss_mode, std::string(),
                  "qrss: an SSTVAE mode clears it");
+}
+
+void test_the_schedule_button_opens_the_window() {
+    AppState state;
+    QWidget host;
+    host.resize(1400, 700);
+    auto* panel = new TransmitPanel(&state, &host);
+    host.show();
+    auto* combo = panel->findChild<QComboBox*>(QStringLiteral("mode_combo"));
+    auto* slider = panel->findChild<QSlider*>(QStringLiteral("qrss_freq_slider"));
+    auto* button = panel->findChild<QPushButton*>(QStringLiteral("qrss_schedule_button"));
+    check::is_true(combo && slider && button, "schedule: a Schedule button beside Send");
+    if (!combo || !slider || !button) return;
+    check::is_true(panel->scheduler() != nullptr && panel->scheduler()->entries().empty(),
+                   "schedule: an empty schedule in a fresh profile");
+    combo->setCurrentIndex(combo->findData(QStringLiteral("QRSS-C")));
+    slider->setValue(777);
+    button->click();
+    QCoreApplication::processEvents();
+    QWidget* window = panel->schedule_window();
+    check::is_true(window != nullptr && window->isVisible() && window->isWindow() &&
+                       window->objectName() == QStringLiteral("qrss_schedule_window"),
+                   "schedule: the button opens the schedule as a window of its own");
+    if (window == nullptr) return;
+    auto* mode = window->findChild<QComboBox*>(QStringLiteral("schedule_mode"));
+    auto* freq = window->findChild<QSpinBox*>(QStringLiteral("schedule_freq"));
+    check::is_true(mode && freq && mode->currentData().toString() == QStringLiteral("C") &&
+                       freq->value() == 777,
+                   "schedule: starting from the pane's QRSS mode and carrier");
+    panel->hide_windows();
+    check::is_true(!window->isVisible(), "schedule: and closes with the app");
+    combo->setCurrentIndex(combo->findData(QStringLiteral("A")));
 }
 
 // Editing defers the composite rebuild instead of doing it inline.
@@ -748,6 +783,7 @@ int main(int argc, char** argv) {
     test_the_strip_height_survives_a_selection();
     test_the_level_controls_are_one_flow_item();
     test_qrss_modes_and_the_carrier_slider();
+    test_the_schedule_button_opens_the_window();
     test_an_edit_defers_the_rebuild();
     test_a_rebuild_consumes_the_pending_edit();
     test_the_template_combo_lists_none_then_the_builtins();

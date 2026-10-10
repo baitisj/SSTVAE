@@ -10,10 +10,14 @@
 // one 50,600-latent group in one pass, B two and C three, one pass per
 // half hour: a pass lasts 1782.7 s from t0 = quarter hour + 1 s, and its
 // audio (qrss_transmit.py's WAV) starts 12 s before t0, so one pass's
-// audio ends about 2 s before the next one's starts. Every pass's audio
-// is therefore made (a minute per pass) before the first is keyed. Each
-// carries the callsign in its own Morse ID windows (spec 2.7), so the
-// SSTVAE CW ID is not added.
+// audio ends about 2 s before the next one's starts. So the first pass's
+// audio is made before it is keyed, and each later pass's is made and
+// read in while the one before it plays. A scheduled send
+// (gui/qrss_schedule.hpp) hands over its own list of passes, which can
+// repeat the picture back to back for hours; making each pass during
+// the one before keeps that to two passes' audio on disk at a time.
+// Each pass carries the callsign in its own Morse ID windows (spec
+// 2.7), so the SSTVAE CW ID is not added.
 
 #ifndef SSTVAE_GUI_QRSS_TX_HPP
 #define SSTVAE_GUI_QRSS_TX_HPP
@@ -33,9 +37,10 @@ namespace sstvae::gui::qrss_tx {
 
 inline constexpr double PASS_S = 1782.7;        // FULL frame, t0 to the end
 inline constexpr double AUDIO_LEAD_S = 12.0;    // the WAV starts this long before t0
+inline constexpr double AUDIO_TAIL_S = 3.0;     // and ends this long after the frame
 inline constexpr double T0_OFFSET_S = 1.0;      // t0 = quarter hour + 1 s
 inline constexpr double PASS_SPACING_S = 1800.0;
-inline constexpr double PREP_S = 60.0;          // make a pass's audio this long ahead
+inline constexpr double PREP_S = 60.0;          // make the first pass's audio this long ahead
 inline constexpr double FREQ_MIN_HZ = 300.0;    // CARRIER_BAND_HZ
 inline constexpr double FREQ_MAX_HZ = 2700.0;
 inline constexpr double FREQ_DEFAULT_HZ = 1500.0;
@@ -50,6 +55,17 @@ int minutes_for(const std::string& mode);
 // the first whose audio starts at least `prep_s` from now, then one
 // every half hour.
 std::vector<double> plan(double now, int passes, double prep_s = PREP_S);
+
+// When a pass's audio starts, and when it ends, for its quarter hour.
+double audio_start(double slot);
+double audio_end(double slot);
+
+// One pass on the air: its quarter hour and which of the picture's
+// latent groups it carries (0 .. passes_for(mode) - 1).
+struct Pass {
+    double slot = 0.0;
+    int segment = 0;
+};
 
 // "2026-10-10T03:00Z" for a quarter hour.
 QString slot_iso(double slot);
@@ -71,7 +87,10 @@ struct Request {
     std::string callsign;
     std::string grid;                  // used only when it is a 4-character locator
     tx::TxConfig tx;                   // device, level, PTT timing
-    double prep_s = PREP_S;            // per pass: start making the audio this long ahead
+    double prep_s = PREP_S;            // start making the first pass's audio this long ahead
+    // The passes to send, in order. Empty: the mode's passes, from the
+    // first quarter hour `plan` finds once the picture is encoded.
+    std::vector<Pass> passes;
 };
 
 // The command lines `run` executes, for tests and the log.
@@ -86,10 +105,11 @@ std::string problem(const Request& request);
 using Clock = std::function<double()>;               // unix seconds
 using Runner = std::function<bool(const QStringList& argv, QString* output)>;
 
-// The whole sequence, on the calling (worker) thread: encode, then for
-// each pass wait, make its audio, wait for its start and key it. True
-// when every pass was sent. Errors go to `on_error`; cancelling the
-// engine stops it at the next wait or mid-pass.
+// The whole sequence, on the calling (worker) thread: encode, make the
+// first pass's audio, then key each pass on its start while the next
+// one's audio is made. True when every pass was sent. Errors go to
+// `on_error`; cancelling the engine stops it at the next wait or
+// mid-pass.
 bool run(tx::TxEngine& engine, const Request& request, const Tools& tools,
          const std::function<void(const std::string&)>& on_error,
          Clock clock = {}, Runner runner = {});

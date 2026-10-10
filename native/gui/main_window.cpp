@@ -765,6 +765,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     // A visible QRSS window would otherwise keep the app running as its
     // last window; its listener stops when the window is destroyed.
     if (qrss_) qrss_->hide();
+    tx_panel_->hide_windows();
     state_->disconnect_rig();
     state_->save_config();
     QMainWindow::closeEvent(event);

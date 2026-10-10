@@ -38,6 +38,10 @@ std::vector<double> plan(double now, int passes, double prep_s) {
     return out;
 }
 
+double audio_start(double slot) { return slot + T0_OFFSET_S - AUDIO_LEAD_S; }
+
+double audio_end(double slot) { return slot + T0_OFFSET_S + PASS_S + AUDIO_TAIL_S; }
+
 QString slot_iso(double slot) {
     return QDateTime::fromSecsSinceEpoch(static_cast<qint64>(std::llround(slot)),
                                          QTimeZone::utc())
@@ -155,6 +159,17 @@ std::string problem(const Request& request) {
     if (!(request.freq_hz >= FREQ_MIN_HZ && request.freq_hz <= FREQ_MAX_HZ)) {
         return "the QRSS carrier must be between 300 and 2700 Hz";
     }
+    const int n = passes_for(request.mode);
+    for (std::size_t k = 0; k < request.passes.size(); ++k) {
+        const Pass& p = request.passes[k];
+        if (p.segment < 0 || p.segment >= n) {
+            return "mode " + request.mode + " has no pass " + std::to_string(p.segment + 1);
+        }
+        if (std::fmod(p.slot, 900.0) != 0.0) return "QRSS passes start on a quarter hour";
+        if (k > 0 && p.slot - request.passes[k - 1].slot < PASS_SPACING_S) {
+            return "QRSS passes last half an hour, so they must be at least that far apart";
+        }
+    }
     return {};
 }
 
@@ -192,47 +207,60 @@ bool run(tx::TxEngine& engine, const Request& request, const Tools& tools,
         return fail("QRSS encode failed: " + out.toStdString());
     }
 
-    // Passes follow each other with about 2 s between one's audio and the
-    // next (a pass's audio lasts ~1798 s, passes are 1800 s apart), so
-    // every pass's audio is made before the first is keyed, and the next
-    // pass's is read in while the current one plays.
-    const int n = passes_for(request.mode);
-    const std::vector<double> pass_slots = plan(clock(), n, request.prep_s * n);
+    // Passes can follow each other with about 2 s between one's audio and
+    // the next (a pass's audio lasts ~1798 s, passes are 1800 s apart),
+    // so only the first pass's audio is made before keying, and each
+    // later one is made and read in while the pass before it plays.
+    const int segments = passes_for(request.mode);
+    std::vector<Pass> passes = request.passes;
+    if (passes.empty()) {
+        const std::vector<double> quarter_hours = plan(clock(), segments, request.prep_s);
+        for (int k = 0; k < segments; ++k) passes.push_back({quarter_hours[static_cast<std::size_t>(k)], k});
+    }
+    const int n = static_cast<int>(passes.size());
     auto what = [&](int k) {
-        return "QRSS pass " + std::to_string(k + 1) + " of " + std::to_string(n) + " at " +
-               hhmm(pass_slots[static_cast<std::size_t>(k)]) + ", " +
+        const Pass& p = passes[static_cast<std::size_t>(k)];
+        std::string w = "QRSS pass " + std::to_string(k + 1) + " of " + std::to_string(n);
+        if (n != segments && segments > 1) {
+            w += " (part " + std::to_string(p.segment + 1) + " of " + std::to_string(segments) +
+                 ")";
+        }
+        return w + " at " + hhmm(p.slot) + ", " +
                QString::number(request.freq_hz, 'f', 0).toStdString() + " Hz";
     };
-    std::vector<QString> wavs;
-    for (int k = 0; k < n; ++k) {
-        const double slot = pass_slots[static_cast<std::size_t>(k)];
-        if (k == 0 && !engine.wait(slot + T0_OFFSET_S - AUDIO_LEAD_S - request.prep_s * n - clock(),
-                                   tx::TxPhase::Waiting, "waiting to make " + what(0))) {
-            engine.report(tx::TxPhase::Cancelled, "cancelled");
-            return false;
+    auto wav_of = [&](int k) { return tmp.filePath(QStringLiteral("pass%1.wav").arg(k)); };
+    // Make pass k's audio and read it in; empty with `*error` set if not.
+    auto make = [&](int k, std::string* error) {
+        const Pass& p = passes[static_cast<std::size_t>(k)];
+        const QString wav = wav_of(k);
+        QString output;
+        if (!runner(transmit_args(tools, qrsp, wav, p.slot, p.segment, request), &output)) {
+            *error = output.toStdString();
+            return std::vector<double>();
         }
-        engine.report(tx::TxPhase::Modulating, "making " + what(k));
-        wavs.push_back(tmp.filePath(QStringLiteral("pass%1.wav").arg(k)));
-        if (!runner(transmit_args(tools, qrsp, wavs.back(), slot, k, request), &out)) {
-            if (engine.cancelled()) {
-                engine.report(tx::TxPhase::Cancelled, "cancelled");
-                return false;
-            }
-            return fail("QRSS pass audio failed: " + out.toStdString());
-        }
-    }
-    auto load = [&](int k) {
-        const QString& wav = wavs[static_cast<std::size_t>(k)];
         std::vector<double> w =
             tx::condition_for_output(audio::read_wav(wav.toStdString()), request.tx.level);
         QFile::remove(wav);
         return w;
     };
-    std::vector<double> wave = load(0);
+    if (!engine.wait(audio_start(passes[0].slot) - request.prep_s - clock(),
+                     tx::TxPhase::Waiting, "waiting to make " + what(0))) {
+        engine.report(tx::TxPhase::Cancelled, "cancelled");
+        return false;
+    }
+    engine.report(tx::TxPhase::Modulating, "making " + what(0));
+    std::string error;
+    std::vector<double> wave = make(0, &error);
+    if (wave.empty()) {
+        if (engine.cancelled()) {
+            engine.report(tx::TxPhase::Cancelled, "cancelled");
+            return false;
+        }
+        return fail("QRSS pass audio failed: " + error);
+    }
     for (int k = 0; k < n; ++k) {
-        const double audio_start =
-            pass_slots[static_cast<std::size_t>(k)] + T0_OFFSET_S - AUDIO_LEAD_S;
-        const double lead = audio_start - request.tx.ptt_lead_s - clock();
+        const double lead =
+            audio_start(passes[static_cast<std::size_t>(k)].slot) - request.tx.ptt_lead_s - clock();
         if (lead < -1.0) {
             return fail("QRSS: " + what(k) + " was due to start " + std::to_string(-lead) +
                         " s ago; not sending it late");
@@ -241,11 +269,19 @@ bool run(tx::TxEngine& engine, const Request& request, const Tools& tools,
             engine.report(tx::TxPhase::Cancelled, "cancelled");
             return false;
         }
+        std::string next_error;
         std::future<std::vector<double>> next;
-        if (k + 1 < n) next = std::async(std::launch::async, load, k + 1);
+        if (k + 1 < n) next = std::async(std::launch::async, make, k + 1, &next_error);
         const bool sent = engine.transmit_wave(wave, request.tx);
         if (next.valid()) wave = next.get();
         if (!sent) return false;
+        if (k + 1 < n && wave.empty()) {
+            if (engine.cancelled()) {
+                engine.report(tx::TxPhase::Cancelled, "cancelled");
+                return false;
+            }
+            return fail("QRSS audio for " + what(k + 1) + " failed: " + next_error);
+        }
     }
     engine.report(tx::TxPhase::Done, "QRSS sent");
     return true;

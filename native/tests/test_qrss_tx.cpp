@@ -7,13 +7,16 @@
 #include <QElapsedTimer>
 #include <QStringList>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <functional>
+#include <mutex>
 #include <span>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "audio/wavio.hpp"
@@ -130,37 +133,52 @@ void test_run_keys_the_pass_on_its_start() {
                    "qrss_tx/run: and not before its start");
 }
 
-void test_passes_back_to_back(const std::string& mode, int n) {
-    // A pass's audio ends ~2 s before the next one's starts: the player
-    // jumps the clock to that moment, and making a pass's audio takes a
-    // while, so it has to be made before the first pass is keyed.
-    const std::string name = "qrss_tx/mode " + mode + ": ";
+// A pass's audio ends ~2 s before the next one's starts: the player
+// jumps the clock to that moment, so the next pass's audio has to have
+// been made while this one played. `passes` empty sends the mode's own
+// passes; otherwise those (a scheduled send's repeats).
+void check_back_to_back(const std::string& name, const std::string& mode,
+                        std::vector<qrss_tx::Pass> passes, std::vector<int> segments) {
+    const int n = static_cast<int>(segments.size());
+    std::mutex mu;
     std::vector<std::string> events;
     QElapsedTimer since;
     since.start();
     const double prep = 0.2;
     double jump = 0.0;
     int played = 0;
-    const double start = Q - 11.0 - n * prep;
-    auto clock = [&] { return start + since.elapsed() / 1000.0 + jump; };
+    const double start = Q - 11.0 - 2 * prep;
+    auto clock = [&] {
+        std::lock_guard<std::mutex> lock(mu);
+        return start + since.elapsed() / 1000.0 + jump;
+    };
     tx::TxEngine engine(
         [](bool) {},
         [&](const std::string&, std::span<const double> wave, int,
             const std::function<void(double)>&, const std::function<bool()>&,
             const std::function<void(const std::string&)>&) {
+            // Long enough for the next pass to be made "during" this one.
+            std::this_thread::sleep_for(std::chrono::milliseconds(120));
+            std::lock_guard<std::mutex> lock(mu);
             events.push_back("play " + std::to_string(wave.size()));
             ++played;
-            jump += (Q - 11.0 + 1800.0 * played - 2.0) - clock();
+            jump += (Q - 11.0 + 1800.0 * played - 2.0) -
+                    (start + since.elapsed() / 1000.0 + jump);
             return true;
         },
         [](const images::ImageArray&) { return std::vector<double>(); });
+    int made = 0;
     auto runner = [&](const QStringList& argv, QString*) {
         if (argv.at(1).endsWith(QStringLiteral("qrss_transmit.py"))) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             const int seg = argv.at(argv.indexOf(QStringLiteral("--segment")) + 1).toInt();
+            std::lock_guard<std::mutex> lock(mu);
+            // Pass k's audio is 700 + 10 k + segment samples long, so a
+            // play names both which pass it is and which part it carries.
             audio::write_wav_float(argv.at(3).toStdString(),
-                                   std::vector<double>(700 + seg, 0.25));
-            events.push_back("make " + std::to_string(seg));
+                                   std::vector<double>(700 + 10 * made + seg, 0.25));
+            events.push_back("make " + std::to_string(made));
+            ++made;
         }
         return true;
     };
@@ -169,6 +187,7 @@ void test_passes_back_to_back(const std::string& mode, int n) {
     r.callsign = "AG7EW";
     r.mode = mode;
     r.prep_s = prep;
+    r.passes = std::move(passes);
     r.tx.ptt_lead_s = 0.0;
     r.tx.ptt_tail_s = 0.0;
     std::vector<std::string> errors;
@@ -176,10 +195,55 @@ void test_passes_back_to_back(const std::string& mode, int n) {
                                  [&](const std::string& e) { errors.push_back(e); }, clock,
                                  runner);
     check::is_true(ok && errors.empty(), name + "every pass sent");
-    std::vector<std::string> want;
-    for (int k = 0; k < n; ++k) want.push_back("make " + std::to_string(k));
-    for (int k = 0; k < n; ++k) want.push_back("play " + std::to_string(700 + k));
-    check::is_true(events == want, name + "every pass made before the first is keyed, in order");
+    auto at = [&](const std::string& e) {
+        return std::find(events.begin(), events.end(), e) - events.begin();
+    };
+    bool order = static_cast<int>(events.size()) == 2 * n && events.front() == "make 0";
+    for (int k = 0; k < n && order; ++k) {
+        const std::string play = "play " + std::to_string(700 + 10 * k + segments[k]);
+        order = at("make " + std::to_string(k)) < at(play);
+        if (k > 0) {
+            const std::string before =
+                "play " + std::to_string(700 + 10 * (k - 1) + segments[k - 1]);
+            // In order, and made while the pass before it played: there
+            // is no time to make it after.
+            order = order && at(before) < at(play) && at("make " + std::to_string(k)) < at(before);
+        }
+        // Never more than one pass ahead: two passes' audio on disk.
+        if (k >= 2) {
+            order = order && at("make " + std::to_string(k)) >
+                                 at("play " + std::to_string(700 + 10 * (k - 2) +
+                                                             segments[k - 2]));
+        }
+    }
+    check::is_true(order, name + "each pass made while the one before plays, in order");
+}
+
+void test_passes_back_to_back() {
+    check_back_to_back("qrss_tx/mode B: ", "B", {}, {0, 1});
+    check_back_to_back("qrss_tx/mode C: ", "C", {}, {0, 1, 2});
+    // A scheduled "2 x A": the same one-pass picture, twice in a row.
+    check_back_to_back("qrss_tx/2 x A: ", "A", {{Q, 0}, {Q + 1800.0, 0}}, {0, 0});
+    // Mode B twice: parts 1, 2, 1, 2.
+    check_back_to_back("qrss_tx/2 x B: ", "B",
+                       {{Q, 0}, {Q + 1800.0, 1}, {Q + 3600.0, 0}, {Q + 5400.0, 1}},
+                       {0, 1, 0, 1});
+}
+
+void test_pass_lists_are_checked() {
+    qrss_tx::Request r;
+    r.callsign = "AG7EW";
+    r.mode = "A";
+    r.passes = {{Q, 0}, {Q + 1800.0, 0}};
+    check::is_true(qrss_tx::problem(r).empty(), "qrss_tx/passes: two A passes, back to back");
+    r.passes = {{Q, 0}, {Q + 900.0, 0}};
+    check::is_true(!qrss_tx::problem(r).empty(), "qrss_tx/passes: overlapping passes refused");
+    r.passes = {{Q, 1}};
+    check::is_true(!qrss_tx::problem(r).empty(), "qrss_tx/passes: mode A has no part 2");
+    r.passes = {{Q + 60.0, 0}};
+    check::is_true(!qrss_tx::problem(r).empty(), "qrss_tx/passes: off the quarter hour");
+    check::is_true(qrss_tx::audio_start(Q) == Q - 11.0 && qrss_tx::audio_end(Q) == Q + 1786.7,
+                   "qrss_tx/passes: a pass's audio runs from 11 s before its quarter hour");
 }
 
 void test_cancel_while_waiting() {
@@ -213,8 +277,8 @@ int main(int argc, char** argv) {
     test_plan();
     test_problems_and_args();
     test_run_keys_the_pass_on_its_start();
-    test_passes_back_to_back("B", 2);
-    test_passes_back_to_back("C", 3);
+    test_passes_back_to_back();
+    test_pass_lists_are_checked();
     test_cancel_while_waiting();
     return check::report("qrss tx");
 }

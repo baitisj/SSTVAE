@@ -245,23 +245,67 @@ moves 50 Hz, about one CE channel). It is disabled for SSTVAE modes.
 Send composes the picture as usual, then:
 
 1. runs `qrss_encode.py --mode A|B|C` on it once (a stored picture);
-2. runs `qrss_transmit.py` for every pass's slot and segment with your
-   callsign (and your grid, when it is a locator), starting a minute per
-   pass before the first pass, because the passes follow each other
-   with only about 2 s between one's audio and the next one's (about
-   7 s per pass on a desktop, 57 MB of temporary audio each), and
+2. runs `qrss_transmit.py` for the first pass's slot and segment with
+   your callsign (and your grid, when it is a locator), a minute before
+   that pass (about 7 s on a desktop, 57 MB of temporary audio), and
 3. keys the radio 11 s before each pass's quarter hour, with the same
-   PTT lead, tail and watchdog as an SSTVAE send, and plays the pass,
-   reading the next pass's audio in while this one plays.
+   PTT lead, tail and watchdog as an SSTVAE send, and plays the pass.
+   The next pass's audio is made and read in while this one plays,
+   because the passes follow each other with only about 2 s between
+   one's audio and the next one's.
 
 The first pass takes the first quarter hour at least 11 s plus a minute
-per pass away. Every pass carries its own Morse callsign windows (spec 2.7), so
+away. Every pass carries its own Morse callsign windows (spec 2.7), so
 the SSTVAE CW ID and VOX leader are not added. Receive is paused from
 Send to the end of the last pass; Cancel stops at once, keyed or not.
 A callsign is required. The app looks for the scripts beside its
 executable and up to four directories above it; set `SSTVAE_QRSS_DIR`
 (and `SSTVAE_QRSS_PYTHON`) otherwise. The computer's clock must be right
 to about a second.
+
+### Scheduling sends
+
+**Schedule...**, beside Send, opens the QRSS schedule window. An entry
+is one picture, one QRSS mode and one carrier, sent a number of times
+(or until removed) from a chosen quarter hour:
+
+- **Picture**: a snapshot of the composition on the Transmit pane (taken
+  when the window opens or when you press *Use the composition*), or a
+  picture file. The snapshot is stored with the schedule, so later edits
+  on the Transmit pane do not change it.
+- **First send (UTC)**: a date and a quarter hour, with your local time
+  in brackets.
+- **Repeat**: how many sends, and how far apart their starts are. *Back
+  to back* starts the next send the half hour after the last pass of
+  the one before, so two mode A sends back to back ("2 x A") are two
+  passes, half an hour apart, both carrying the picture's first part.
+  *2 hours (alternating hours)* sends every other hour. Back-to-back
+  sends need a count and are limited to a day on the air (48 passes);
+  a repeat must be at least as long as the mode's own send.
+
+Every send of an entry is the same picture in the same mode, so it has
+the same picture ID and receivers add the passes together.
+
+The window shows what each choice means before you add it (the send
+times and the total time on the air), and refuses an entry whose sends
+would need the transmitter while another entry's do: one entry's
+back-to-back sends go out as one run, but a different picture needs
+about four minutes to encode and make its first pass, so two entries
+need at least a quarter hour between one's last pass and the other's
+first. *Coming up* lists the next sends across all entries; entries can
+be paused, resumed and removed.
+
+Scheduled sends go out only while the app is running. Each one starts
+four minutes before its first pass's audio, through the same radio,
+level and callsign as Send, and receive pauses from then until its last
+pass ends. A send that cannot start by 90 s before its audio (the app
+was closed, or the transmitter was busy with a send by hand) is
+skipped and logged as missed; Send warns before starting a send by hand
+that would run over a scheduled one. Cancel during a scheduled send
+stops it, including the rest of a back-to-back run; the schedule then
+carries on with its next send. The schedule is kept in
+`qrss_schedule.json` beside the app's `config.json`, with its pictures
+in `qrss_schedule/`.
 
 ## The command-line tools
 
