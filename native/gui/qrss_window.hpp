@@ -94,6 +94,11 @@ public:
     QString command() const;
     void set_command(const QString& command);
 
+    // The listener's command row and its output log. Shown in a window
+    // of its own; the QRSSTVAE tab hides them behind a toggle.
+    void set_details_visible(bool on);
+    bool details_visible() const;
+
     bool listener_running() const;
     int tile_count() const { return tiles_.size(); }
     // The tile for a listener tile id, or null.
@@ -121,6 +126,7 @@ private:
     void update_markers(std::vector<QrssSpectrogram::Marker> markers);
 
     QString state_dir_;
+    QWidget* listener_row_ = nullptr;
     QLineEdit* command_edit_ = nullptr;
     QPushButton* start_button_ = nullptr;
     QPushButton* stop_button_ = nullptr;

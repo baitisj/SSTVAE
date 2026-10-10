@@ -52,6 +52,7 @@ private:
     QPushButton* listen_ = nullptr;
     QLabel* listen_state_ = nullptr;
     QLabel* schedule_summary_ = nullptr;
+    QPushButton* details_ = nullptr;
     bool listening_ = false;
 };
 

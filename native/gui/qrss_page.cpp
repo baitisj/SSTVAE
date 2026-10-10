@@ -19,9 +19,9 @@ QrssPage::QrssPage(QrssWindow* signals_view, QWidget* parent)
     auto* row = new QHBoxLayout;
     listen_ = new QPushButton(this);
     listen_->setObjectName(QStringLiteral("qrss_listen"));
-    listen_->setToolTip(tr("Starts the radio's audio and the QRSS listener. The audio also "
-                           "feeds the SSTVAE decoder, so this is the same switch as Start "
-                           "receiving on the SSTVAE tab."));
+    listen_->setToolTip(tr("Starts and stops the radio's audio and the QRSS listener "
+                           "together. The audio also feeds the SSTVAE decoder, the same "
+                           "as Start receiving on the SSTVAE tab."));
     connect(listen_, &QPushButton::clicked, this, [this] { emit listenRequested(!listening_); });
     row->addWidget(listen_);
     listen_state_ = new QLabel(this);
@@ -37,6 +37,12 @@ QrssPage::QrssPage(QrssWindow* signals_view, QWidget* parent)
                             "every few hours."));
     connect(schedule, &QPushButton::clicked, this, &QrssPage::scheduleRequested);
     row->addWidget(schedule);
+    // The listener's command line and output: for when it misbehaves.
+    details_ = new QPushButton(tr("Listener &details"), this);
+    details_->setObjectName(QStringLiteral("qrss_details"));
+    details_->setCheckable(true);
+    details_->setToolTip(tr("Show the QRSS listener's command line and its output."));
+    row->addWidget(details_);
     box->addLayout(row);
 
     // The spectrogram and the received pane, side by side, the divider
@@ -50,6 +56,8 @@ QrssPage::QrssPage(QrssWindow* signals_view, QWidget* parent)
         signals_->setParent(splitter_, Qt::Widget);
         splitter_->addWidget(signals_);
         signals_->set_spectrogram(spectrogram_);
+        signals_->set_details_visible(false);
+        connect(details_, &QPushButton::toggled, signals_, &QrssWindow::set_details_visible);
         signals_->show();
     }
     splitter_->setStretchFactor(0, 3);

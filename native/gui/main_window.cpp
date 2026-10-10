@@ -188,7 +188,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             // Start on this tab means "hear QRSS": the listener too.
             if (rx_panel_->start() && !qrss_->listener_running()) qrss_->start_listener();
         } else {
+            // And Stop here stops both, so there is one switch.
             rx_panel_->stop();
+            qrss_->stop_listener();
         }
     });
     connect(rx_panel_, &ReceivePanel::listeningChanged, qrss_page_, &QrssPage::set_listening);

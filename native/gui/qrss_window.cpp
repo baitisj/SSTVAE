@@ -295,7 +295,13 @@ QrssWindow::QrssWindow(QWidget* parent, Qt::WindowFlags flags) : QWidget(parent,
 
     auto* box = new QVBoxLayout(this);
 
-    auto* row = new QHBoxLayout;
+    // The listener's own controls: its command and a Start/Stop for the
+    // process alone. On the QRSSTVAE tab one Start runs both the audio and
+    // the listener, so these and the log are details the page hides.
+    listener_row_ = new QWidget(this);
+    listener_row_->setObjectName(QStringLiteral("qrss_listener_row"));
+    auto* row = new QHBoxLayout(listener_row_);
+    row->setContentsMargins(0, 0, 0, 0);
     row->addWidget(new QLabel(tr("Listener:"), this));
     command_edit_ = new QLineEdit(default_command(), this);
     command_edit_->setToolTip(
@@ -307,7 +313,7 @@ QrssWindow::QrssWindow(QWidget* parent, Qt::WindowFlags flags) : QWidget(parent,
     stop_button_->setEnabled(false);
     row->addWidget(start_button_);
     row->addWidget(stop_button_);
-    box->addLayout(row);
+    box->addWidget(listener_row_);
 
     status_label_ = new QLabel(this);
     status_label_->setWordWrap(true);
@@ -371,6 +377,7 @@ QrssWindow::QrssWindow(QWidget* parent, Qt::WindowFlags flags) : QWidget(parent,
     box->addLayout(columns, 1);
 
     log_ = new QPlainTextEdit(this);
+    log_->setObjectName(QStringLiteral("qrss_log"));
     log_->setReadOnly(true);
     log_->setMaximumBlockCount(LOG_LINES);
     log_->setMaximumHeight(110);
@@ -433,6 +440,13 @@ QString QrssWindow::default_command() {
     }
     return QStringLiteral("python3 qrss_listen.py");
 }
+
+void QrssWindow::set_details_visible(bool on) {
+    listener_row_->setVisible(on);
+    log_->setVisible(on);
+}
+
+bool QrssWindow::details_visible() const { return !listener_row_->isHidden(); }
 
 QString QrssWindow::command() const { return command_edit_->text(); }
 void QrssWindow::set_command(const QString& command) { command_edit_->setText(command); }

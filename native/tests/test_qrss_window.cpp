@@ -290,6 +290,22 @@ void test_the_qrss_tab() {
     check::equal(opened, 1, "tab: Schedule... asks for the schedule");
     page->set_schedule_summary(QStringLiteral("Next send: x"));
     check::is_true(summary->text() == QStringLiteral("Next send: x"), "tab: and shows the next send");
+
+    // One switch: the listener's own Start/Stop row and its log are
+    // details, hidden until asked for.
+    auto* details = page->findChild<QPushButton*>(QStringLiteral("qrss_details"));
+    auto* row = signals_view->findChild<QWidget*>(QStringLiteral("qrss_listener_row"));
+    auto* log = signals_view->findChild<QWidget*>(QStringLiteral("qrss_log"));
+    check::is_true(details && row && log, "tab: a Listener details toggle, the row and the log");
+    if (!(details && row && log)) return;
+    check::is_true(!row->isVisible() && !log->isVisible() && !signals_view->details_visible(),
+                   "tab: the listener's own controls are hidden by default");
+    details->click();
+    QApplication::processEvents();
+    check::is_true(row->isVisible() && log->isVisible(), "tab: Listener details shows them");
+    details->click();
+    QApplication::processEvents();
+    check::is_true(!row->isVisible() && !log->isVisible(), "tab: and hides them again");
 }
 
 // Headerless passes go in the Provisional column, and the "mode A
