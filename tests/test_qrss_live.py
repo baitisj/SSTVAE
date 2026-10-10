@@ -474,3 +474,24 @@ def test_a_header_decoded_once_stays_with_its_signal(tmp_path, monkeypatch):
     assert t.callsign == "AG7EW" and t.mode == "B" and live.GUESS_NOTE not in t.note
     L.step(t0 + live.frame_seconds(TINY) + frontend.PB_TAIL_S + 0.5)
     assert stored == [hdr]
+
+
+def test_a_late_joined_pass_is_kept_for_the_store(tmp_path):
+    """A pass whose header was never heard (the listener started mid-slot)
+    is kept: when it is strong if its callsign windows read a call, and
+    whatever a slot other than its two neighbours decoded at its frequency
+    (the same picture sent again later), so the store can match it."""
+    from types import SimpleNamespace
+
+    L = live.LiveListener(tmp_path, live.LiveConfig(spec=TINY, render=False),
+                          log=lambda m: None)
+    s = live.SlotState(Q_TEST)
+    later = live.SlotState(Q_TEST + 2)
+    L.slots = {Q_TEST: s, Q_TEST + 2: later}
+    L.now = slot_t0(Q_TEST + 2)
+    L._tile_for(later, 1500.0).callsign = "AG7EW"    # the repeat, half an hour later
+    assert L._plausible(s, _Pass(1503.0))
+    strong = _Pass(1700.0, snr=2.0)
+    assert not L._plausible(s, strong)
+    strong.cw = SimpleNamespace(text="AG7EW")
+    assert L._plausible(s, strong)

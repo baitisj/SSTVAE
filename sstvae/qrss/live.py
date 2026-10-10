@@ -375,7 +375,8 @@ class LiveListener:
             if t.get("status") in ("complete", "lost") and "q" in t:
                 self.finished.add(int(t["q"]))       # (a state file from before "finished")
             if t.get("status") != "receiving":
-                if not t.get("callsign") and (t.get("snr_db") or -99.0) > HEADERLESS_MAX_SNR_DB:
+                if (not t.get("callsign") and not t.get("cw_text")
+                        and (t.get("snr_db") or -99.0) > HEADERLESS_MAX_SNR_DB):
                     continue           # kept by an older listener; see _plausible
                 try:
                     self.done_tiles.append(Tile(**{k: t[k] for k in Tile.__dataclass_fields__
@@ -707,8 +708,12 @@ class LiveListener:
         hours), whose carriers the whole-slot search can lock onto at the
         wrong timing: a headerless pass within GHOST_HZ of a tile of
         another slot that did decode its header is taken to be that
-        signal, and dropped. A headerless pass stronger than
-        HEADERLESS_MAX_SNR_DB is dropped too.
+        signal, and dropped; only the two neighbouring slots overlap this
+        one, so a decoded tile of any other slot (the same picture sent
+        again half an hour later, say) never drops it. A headerless pass
+        stronger than HEADERLESS_MAX_SNR_DB is dropped too, unless its
+        callsign windows read a callsign: a pass joined after its header
+        (a listener started mid-slot) is headerless however strong.
         """
         f = float(p.f_hz)
         if not (math.isfinite(f) and CARRIER_BAND_HZ[0] <= f <= CARRIER_BAND_HZ[1]):
@@ -719,10 +724,11 @@ class LiveListener:
         # without one is something else locked on (a carrier, a birdie, a
         # voice on a phone band), not a QRSSTVAE signal.
         snr = float(p.report.snr2500_db)
-        if not math.isfinite(snr) or snr > HEADERLESS_MAX_SNR_DB:
+        called = p.cw is not None and bool(p.cw.text)
+        if not called and (not math.isfinite(snr) or snr > HEADERLESS_MAX_SNR_DB):
             return False
-        others = [t for q, o in self.slots.items() if q != s.q for t in o.tiles.values()]
-        others += [t for t in self.done_tiles if t.q != s.q]
+        others = [t for q, o in self.slots.items() if abs(q - s.q) == 1 for t in o.tiles.values()]
+        others += [t for t in self.done_tiles if abs(t.q - s.q) == 1]
         return not any(t.callsign and abs(t.f_hz - f) < receiver.GHOST_HZ for t in others)
 
     def _update_tile(self, t: Tile, p: PassResult, heard: float, key=None) -> None:
