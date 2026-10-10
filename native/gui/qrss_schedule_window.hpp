@@ -1,15 +1,25 @@
-// The QRSS schedule window: add a picture to send later, again and again
-// (gui/qrss_schedule.hpp), and see what is coming up. Opened by the
-// "Schedule..." button beside Send.
+// The QRSS schedule window, opened by the "Schedule..." button beside
+// Send.
+//
+// Three parts, in order of what the operator looks at most:
+//
+// - **Upcoming**, across the top: the schedule as a timeline of quarter
+//   hours (gui/qrss_timeline.hpp), each send a block with its picture,
+//   mode and repeat number. Click a block to select it and its Send; drag
+//   it to another slot to move it; right-click it to remove it, change
+//   its mode or set how soon it repeats. Clicking an empty slot with a
+//   Send selected sets the form's start time to that slot.
+// - **Sends**, on the left: pictures prepared for the schedule and kept
+//   on disk (gui/qrss_sends.hpp). New, From composition and Open file
+//   open the Editor (gui/qrss_editor.hpp); a Send on the schedule is
+//   tinted, and selecting one tints its blocks on the timeline.
+// - **Schedule**, on the right: mode, carrier, first quarter hour and
+//   repeats for the selected Send, enabled once a Send is chosen, then
+//   the list of what is scheduled, with Pause, Resume and Remove.
 //
 // Times are quarter hours in UTC, as everywhere else in QRSS, with the
-// local time beside each so "alternating hours" can be planned against
-// the operator's own clock. The picture is a snapshot: the composition
-// as it is when "Use the composition" is pressed (or when the window
-// opens), or a file. A file that is not exactly 640 x 480 opens the
-// Transmit pane's framing dialog (gui/crop_dialog.hpp), and "Framing..."
-// re-opens it on the original. What is shown is what goes out, every
-// time, which is what gives every send of an entry the same picture ID.
+// local time beside them. A scheduled entry keeps its own copy of the
+// Send's picture, so every send of it has the same picture ID.
 
 #ifndef SSTVAE_GUI_QRSS_SCHEDULE_WINDOW_HPP
 #define SSTVAE_GUI_QRSS_SCHEDULE_WINDOW_HPP
@@ -19,15 +29,20 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
-#include "images/images.hpp"
 #include "images/types.hpp"
+#include "overlay/model.hpp"
+#include "qrss_editor.hpp"
 
 class QComboBox;
 class QDateEdit;
+class QGroupBox;
 class QLabel;
 class QListWidget;
+class QMenu;
 class QPushButton;
+class QScrollArea;
 class QSpinBox;
 class QTimer;
 class QTreeWidget;
@@ -35,62 +50,103 @@ class QTreeWidget;
 namespace sstvae::gui {
 
 class QrssScheduler;
+class QrssSends;
+class QrssTimeline;
 
 class QrssScheduleWindow : public QWidget {
     Q_OBJECT
 
 public:
-    using Composition = std::function<std::optional<images::Picture>()>;
+    // The Transmit pane's picture (framed, 640 x 480) and its overlay.
+    struct Composition {
+        images::Picture base;
+        overlay::Doc doc;
+    };
+    using CompositionFn = std::function<std::optional<Composition>()>;
     struct Defaults {
         std::string mode = "A";
         double freq_hz = 1500.0;
     };
+    // How far ahead the timeline reaches.
+    static constexpr double TIMELINE_HOURS = 48.0;
 
-    QrssScheduleWindow(QrssScheduler* scheduler, Composition composition,
-                       std::function<Defaults()> defaults, QWidget* parent = nullptr);
+    QrssScheduleWindow(QrssScheduler* scheduler, QrssSends* sends, CompositionFn composition,
+                       std::function<Defaults()> defaults, QrssEditor::Context editor_context,
+                       QWidget* parent = nullptr);
 
-    // The form's current entry, as Add would add it (for tests).
+    // The form's first quarter hour, as Add would use it.
     double chosen_slot() const;
-    // Take a fresh snapshot of the composition into the form.
-    void use_composition();
-    // Load a picture file, asking how to frame it unless it is already
-    // exactly 640 x 480.
-    void use_file(const QString& path);
-    // Re-open the framing dialog on the file's original picture.
-    void choose_framing();
+    void set_chosen_slot(double slot);
+    // The selected Send, or empty.
+    std::string selected_send() const;
+    void select_send(const std::string& id);
+    QrssTimeline* timeline() const { return timeline_; }
+
+    // The Editor, modal: a new Send, the Transmit pane's composition, a
+    // picture file, or an existing Send. Each selects what was saved.
+    void new_send();
+    void new_from_composition();
+    void new_from_file(const QString& path);
+    void edit_send(const std::string& id);
+    void delete_send(const std::string& id);
+
+    // What the timeline's right-click menu does. Each returns empty on
+    // success, else why not (also shown in the window).
+    std::string remove_entry(const std::string& entry);
+    std::string remove_from(const std::string& entry, int send);
+    std::string change_mode(const std::string& entry, const std::string& mode);
+    std::string repeat_every(const std::string& entry, int minutes);
+    std::string move_send(const std::string& entry, int send, double slot);
+    // The "Repeat in" choices for a mode, in minutes: never sooner than
+    // its passes take (a mode B send lasts an hour).
+    static std::vector<int> repeat_choices(const std::string& mode);
+    // The menu a right-click on send `send` of `entry` opens. The caller
+    // owns it.
+    QMenu* menu_for(const std::string& entry, int send);
 
 public slots:
     void refresh();
 
 protected:
     void showEvent(QShowEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void build();
+    QWidget* build_sends(QWidget* parent);
+    QWidget* build_form(QWidget* parent);
     void update_summary();
     void fill_times();
     void add();
     void set_selected_enabled(bool on);
     void remove_selected();
+    void refresh_sends();
+    void refresh_timeline();
+    void on_send_selected();
+    void on_block_clicked(const QString& entry, int send);
+    void select_entry(const std::string& entry);
+    void show_result(const std::string& why, const QString& done);
     QString local_and_utc(double slot) const;
-    // `picture_` from the file's original and `framing_`.
-    void apply_framing();
+    void open_editor(const std::function<bool(QrssEditor&)>& prepare);
 
     QrssScheduler* scheduler_ = nullptr;
-    Composition composition_;
+    QrssSends* sends_ = nullptr;
+    CompositionFn composition_;
     std::function<Defaults()> defaults_;
+    QrssEditor::Context editor_context_;
+    std::string selected_entry_;
 
-    std::optional<images::Picture> picture_;
-    QString picture_label_;
-    // The file as loaded, at its own size, so re-framing starts from the
-    // original rather than cropping a crop. Empty for the composition.
-    std::optional<images::Picture> file_source_;
-    QString file_path_;
-    images::Framing framing_;
+    QrssTimeline* timeline_ = nullptr;
+    QScrollArea* timeline_scroll_ = nullptr;
+    QLabel* message_ = nullptr;
 
+    QListWidget* sends_list_ = nullptr;
+    QPushButton* edit_send_ = nullptr;
+    QPushButton* delete_send_ = nullptr;
+
+    QGroupBox* form_box_ = nullptr;
     QLabel* thumb_ = nullptr;
-    QLabel* picture_name_ = nullptr;
-    QPushButton* framing_button_ = nullptr;
+    QLabel* send_name_ = nullptr;
     QComboBox* mode_ = nullptr;
     QSpinBox* freq_ = nullptr;
     QDateEdit* date_ = nullptr;
@@ -103,7 +159,6 @@ private:
     QPushButton* pause_ = nullptr;
     QPushButton* resume_ = nullptr;
     QPushButton* remove_ = nullptr;
-    QListWidget* coming_ = nullptr;
     QTimer* clock_timer_ = nullptr;
 };
 

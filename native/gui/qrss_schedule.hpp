@@ -60,6 +60,7 @@ struct Entry {
     std::string id;            // also the picture file's name
     std::string picture;       // PNG, already 640 x 480
     std::string label;         // what the operator calls it
+    std::string send_id;       // the Send it was made from (gui/qrss_sends.hpp), if any
     std::string mode = "A";    // QRSS A, B or C
     double freq_hz = qrss_tx::FREQ_DEFAULT_HZ;
     double first_slot = 0.0;   // unix seconds, a quarter hour: the first send's first pass
@@ -153,6 +154,17 @@ public:
     // in here. Empty on success, else why not (nothing is added).
     std::string add(qrss_schedule::Entry entry, const images::Picture& picture);
     void remove(const std::string& id);
+    // Changes an entry -- its mode, its repeats, when it starts -- through
+    // `edit`, refusing (and changing nothing) when the result could not
+    // be scheduled: an impossible repeat, too soon to start, or a clash.
+    // An entry that has already sent some of its sends is first cut down
+    // to the ones still to come, so the change moves only those. Empty on
+    // success, else why not.
+    std::string change(const std::string& id,
+                       const std::function<void(qrss_schedule::Entry&)>& edit);
+    // Ends an entry after its send `k`'s predecessor: send k and the ones
+    // after it are dropped. Removes the entry when nothing would be left.
+    void truncate(const std::string& id, int k);
     // Empty on success; resuming an entry that would clash is refused.
     std::string set_enabled(const std::string& id, bool on);
 

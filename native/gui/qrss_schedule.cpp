@@ -191,6 +191,7 @@ std::string to_json(const std::vector<Entry>& entries) {
         o[QStringLiteral("id")] = QString::fromStdString(e.id);
         o[QStringLiteral("picture")] = QString::fromStdString(e.picture);
         o[QStringLiteral("label")] = QString::fromStdString(e.label);
+        if (!e.send_id.empty()) o[QStringLiteral("send_id")] = QString::fromStdString(e.send_id);
         o[QStringLiteral("mode")] = QString::fromStdString(e.mode);
         o[QStringLiteral("freq_hz")] = e.freq_hz;
         o[QStringLiteral("first_slot")] = e.first_slot;
@@ -215,6 +216,7 @@ std::vector<Entry> from_json(const std::string& text) {
         e.id = o.value(QStringLiteral("id")).toString().toStdString();
         e.picture = o.value(QStringLiteral("picture")).toString().toStdString();
         e.label = o.value(QStringLiteral("label")).toString().toStdString();
+        e.send_id = o.value(QStringLiteral("send_id")).toString().toStdString();
         e.mode = o.value(QStringLiteral("mode")).toString(QStringLiteral("A")).toStdString();
         e.freq_hz = o.value(QStringLiteral("freq_hz")).toDouble(qrss_tx::FREQ_DEFAULT_HZ);
         e.first_slot = o.value(QStringLiteral("first_slot")).toDouble();
@@ -340,6 +342,61 @@ void QrssScheduler::remove(const std::string& id) {
                                 "on (Cancel stops it)")
                                  .arg(label)
                            : tr("QRSS schedule: removed \"%1\"").arg(label));
+    emit changed();
+}
+
+std::string QrssScheduler::change(const std::string& id,
+                                  const std::function<void(qs::Entry&)>& edit) {
+    qs::Entry* e = find(id);
+    if (e == nullptr) return "it is no longer on the schedule";
+    if (active_ == id) return "it is on the air now; Cancel on the Transmit pane stops it";
+    if (qs::finished(*e)) return "every send of it is past";
+    const double now = clock_();
+    qs::Entry trial = *e;
+    // The sends already made stay made: what changes is the rest.
+    if (trial.next > 0) {
+        trial.first_slot = qs::send_slot(trial, trial.next);
+        if (trial.count > 0) trial.count -= trial.next;
+        trial.next = 0;
+    }
+    const double before = qs::send_slot(trial, 0);
+    edit(trial);
+    if (std::string why = qs::problem(trial); !why.empty()) return why;
+    const double first = qs::send_slot(trial, trial.next);
+    if (first != before && first < qs::earliest_slot(now)) {
+        return "that is too soon: the earliest a send can start now is " +
+               qs::when(qs::earliest_slot(now), now);
+    }
+    if (trial.enabled) {
+        if (const auto c = qs::clash(trial, entries_, now)) {
+            return "its " + qs::when(c->slot, now) + " send would overlap the " +
+                   qs::when(c->other_slot, now) + " send of \"" + c->other +
+                   "\"; the transmitter sends one thing at a time";
+        }
+    }
+    *e = trial;
+    save();
+    emit logged(0, tr("QRSS schedule: changed \"%1\" to %2, next send %3")
+                           .arg(QString::fromStdString(e->label),
+                                QString::fromStdString(qs::describe(*e)),
+                                QString::fromStdString(qs::when(qs::send_slot(*e, e->next), now))));
+    emit changed();
+    return {};
+}
+
+void QrssScheduler::truncate(const std::string& id, int k) {
+    qs::Entry* e = find(id);
+    if (e == nullptr) return;
+    if (k <= e->next) {
+        remove(id);
+        return;
+    }
+    if (e->count > 0 && k >= e->count) return;
+    e->count = k;
+    save();
+    emit logged(0, tr("QRSS schedule: \"%1\" now ends after send %2")
+                           .arg(QString::fromStdString(e->label))
+                           .arg(k));
     emit changed();
 }
 

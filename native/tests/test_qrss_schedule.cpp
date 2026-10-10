@@ -1,13 +1,18 @@
 // Scheduled QRSS sends (gui/qrss_schedule.*): which quarter hours a
 // schedule asks for, what may not overlap, and the scheduler's clock --
 // due, started, waiting on a busy transmitter, missed -- against a fake
-// clock and a fake transmitter. Then the window, offscreen: the form
-// says what it will do and Add adds it, and a file that is not 640 x 480
-// is framed in the Transmit pane's dialog first.
+// clock and a fake transmitter. Changing and cutting short what is
+// scheduled. The Sends kept on disk. Then the window, offscreen: a Send
+// chosen enables the form, Add schedules it, the timeline shows it and
+// its right-click menu changes it; and the Editor, which frames a file
+// that is not 640 x 480 first and saves to the Sends.
 
 #include <QApplication>
 #include <QComboBox>
 #include <QFile>
+#include <QGroupBox>
+#include <QLineEdit>
+#include <QMenu>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
@@ -16,7 +21,9 @@
 #include <QTimer>
 #include <QTreeWidget>
 
+#include <cstdint>
 #include <filesystem>
+#include <variant>
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,7 +35,12 @@
 #include "images/images.hpp"
 #include "images/types.hpp"
 #include "qrss_schedule.hpp"
+#include "overlay/model.hpp"
+#include "overlay_editor.hpp"
+#include "qrss_editor.hpp"
 #include "qrss_schedule_window.hpp"
+#include "qrss_sends.hpp"
+#include "qrss_timeline.hpp"
 
 using namespace sstvae;
 using namespace sstvae::gui;
@@ -284,53 +296,6 @@ void test_missed_and_paused(const std::filesystem::path& dir) {
                    "scheduler/paused: what fell due while paused is skipped quietly");
 }
 
-void test_the_window(const std::filesystem::path& dir) {
-    Fake fake;
-    std::unique_ptr<QrssScheduler> s(make(fake, dir / "c" / "qrss_schedule.json"));
-    QrssScheduleWindow w(
-        s.get(), [] { return std::optional<images::Picture>(images::Picture(640, 480)); },
-        [] { return QrssScheduleWindow::Defaults{"B", 1234.0}; });
-    w.show();
-    QApplication::processEvents();
-    auto* mode = w.findChild<QComboBox*>(QStringLiteral("schedule_mode"));
-    auto* freq = w.findChild<QSpinBox*>(QStringLiteral("schedule_freq"));
-    auto* count = w.findChild<QSpinBox*>(QStringLiteral("schedule_count"));
-    auto* every = w.findChild<QComboBox*>(QStringLiteral("schedule_every"));
-    auto* summary = w.findChild<QLabel*>(QStringLiteral("schedule_summary"));
-    auto* add = w.findChild<QPushButton*>(QStringLiteral("schedule_add"));
-    auto* table = w.findChild<QTreeWidget*>(QStringLiteral("schedule_table"));
-    auto* coming = w.findChild<QListWidget*>(QStringLiteral("schedule_coming"));
-    check::is_true(mode && freq && count && every && summary && add && table && coming,
-                   "window: every control is there");
-    if (!(mode && freq && count && every && summary && add && table && coming)) return;
-    check::is_true(mode->currentData().toString() == QStringLiteral("B") && freq->value() == 1234,
-                   "window: mode and carrier start as the Transmit pane has them");
-    check::is_true(w.chosen_slot() == qs::earliest_slot(fake.now),
-                   "window: the first send starts at the earliest quarter hour");
-    check::is_true(summary->text().contains(QStringLiteral("2 x mode B, back to back")) &&
-                       add->isEnabled(),
-                   "window: the default is two sends back to back");
-    mode->setCurrentIndex(mode->findData(QStringLiteral("A")));
-    count->setValue(0);
-    every->setCurrentIndex(every->findData(120));
-    check::is_true(summary->text().contains(QStringLiteral("(alternating hours), until removed")),
-                   "window: every other hour, until removed");
-    every->setCurrentIndex(every->findData(0));
-    check::is_true(!add->isEnabled() && summary->text().startsWith(QStringLiteral("Can't add")),
-                   "window: back to back forever is refused, and says why");
-    count->setValue(2);
-    add->click();
-    QApplication::processEvents();
-    check::is_true(s->entries().size() == 1 && s->entries()[0].mode == "A" &&
-                       s->entries()[0].count == 2 && s->entries()[0].freq_hz == 1234.0,
-                   "window: Add adds what the form says");
-    check::equal(table->topLevelItemCount(), 1, "window: and it is listed");
-    check::equal(coming->count(), 2, "window: with its two sends coming up");
-    freq->setValue(1235);
-    check::is_true(!add->isEnabled() && summary->text().contains(QStringLiteral("would overlap")),
-                   "window: the same send again would clash, and says so");
-}
-
 // A solid red picture file of the given size.
 std::string red_png(const std::filesystem::path& dir, int w, int h) {
     images::Picture p(w, h);
@@ -358,59 +323,355 @@ void answer_framing(int* opened) {
     });
 }
 
-void test_a_file_is_framed_first(const std::filesystem::path& dir) {
+// A 640 x 480 picture of one colour.
+images::Picture solid(int r, int g, int b) {
+    images::Picture p(images::IMG_W, images::IMG_H);
+    for (std::size_t i = 0; i < p.rgb.size(); i += 3) {
+        p.rgb[i] = static_cast<std::uint8_t>(r);
+        p.rgb[i + 1] = static_cast<std::uint8_t>(g);
+        p.rgb[i + 2] = static_cast<std::uint8_t>(b);
+    }
+    return p;
+}
+
+overlay::Doc caption(const std::string& text) {
+    overlay::Doc doc;
+    overlay::TextItem t;
+    t.text = text;
+    doc.items.emplace_back(t);
+    return doc;
+}
+
+void test_the_sends_store(const std::filesystem::path& dir) {
+    const std::filesystem::path where = dir / "sends";
+    QrssSends sends(where);
+    check::is_true(sends.sends().empty(), "sends: a new store is empty");
+    int changed = 0;
+    QObject::connect(&sends, &QrssSends::changed, [&changed] { ++changed; });
+    const std::string a = sends.add("Sunset", solid(200, 0, 0), caption("AG7EW"), solid(255, 0, 0));
+    const std::string b = sends.add("CQ card", solid(0, 0, 200), {}, solid(0, 0, 255));
+    check::is_true(!a.empty() && !b.empty() && a != b, "sends: two added, each with its own id");
+    check::equal(changed, 2, "sends: and each says so");
+    check::is_true(sends.sends().size() == 2, "sends: both listed");
+    const QrssSend* sa = sends.find(a);
+    check::is_true(sa != nullptr && std::filesystem::exists(sa->picture) &&
+                       std::filesystem::exists(sa->base) &&
+                       std::filesystem::exists(where / (a + ".json")),
+                   "sends: the picture, its base and its composition are on disk");
+
+    // Read back by a store that never saw them added: what survives a
+    // restart of the app.
+    QrssSends again(where);
+    check::is_true(again.sends().size() == 2 && again.find(a) != nullptr &&
+                       again.find(a)->label == "Sunset",
+                   "sends: read back from disk");
+    const overlay::Doc doc = again.load_doc(a);
+    const auto* t = doc.items.empty() ? nullptr : std::get_if<overlay::TextItem>(&doc.items[0]);
+    check::is_true(t != nullptr && t->text == "AG7EW", "sends: the composition can be edited again");
+    const auto base = again.load_base(a);
+    check::is_true(base && base->width == images::IMG_W && base->rgb[0] == 200,
+                   "sends: on the picture it was made on");
+    check::is_true(again.update(a, "Sunset 2", solid(0, 200, 0), caption("CN85"), solid(0, 255, 0)),
+                   "sends: updated");
+    check::is_true(again.find(a)->label == "Sunset 2" &&
+                       images::load(again.find(a)->picture.string()).rgb[1] == 255,
+                   "sends: the update replaces the picture and the name");
+    check::is_true(again.rename(b, "CQ"), "sends: renamed");
+    again.remove(a);
+    check::is_true(again.find(a) == nullptr && !std::filesystem::exists(where / (a + ".png")) &&
+                       !std::filesystem::exists(where / (a + ".json")),
+                   "sends: removed, files and all");
+    QrssSends third(where);
+    check::is_true(third.sends().size() == 1 && third.sends()[0].label == "CQ",
+                   "sends: and the rename and removal stick");
+}
+
+void test_change_and_truncate(const std::filesystem::path& dir) {
     Fake fake;
-    std::unique_ptr<QrssScheduler> s(make(fake, dir / "f" / "qrss_schedule.json"));
-    QrssScheduleWindow w(
-        s.get(), [] { return std::optional<images::Picture>(images::Picture(640, 480)); },
-        [] { return QrssScheduleWindow::Defaults{"A", 1500.0}; });
+    std::unique_ptr<QrssScheduler> s(make(fake, dir / "ch" / "qrss_schedule.json"));
+    const images::Picture pic(64, 48);
+    qs::Entry e = entry("B", Q, 3, 120, "three B");
+    e.id.clear();
+    e.picture.clear();
+    check::is_true(s->add(e, pic).empty(), "change: 3 x B every 2 hours from 01:00Z");
+    qs::Entry other = entry("A", Q + 5.25 * H, 1, 0, "later");
+    other.id.clear();
+    other.picture.clear();
+    check::is_true(s->add(other, pic).empty(), "change: and one A at 06:15Z");
+    const std::string id = s->entries()[0].id;
+
+    check::is_true(s->change(id, [](qs::Entry& x) { x.freq_hz = 1600; }).empty() &&
+                       s->entries()[0].freq_hz == 1600,
+                   "change: a new carrier");
+    check::is_true(!s->change(id, [](qs::Entry& x) { x.mode = "C"; }).empty() &&
+                       s->entries()[0].mode == "B",
+                   "change: mode C would run into the 06:15Z send: refused, unchanged");
+    check::is_true(!s->change(id, [](qs::Entry& x) { x.first_slot = Q - 2 * H; }).empty() &&
+                       s->entries()[0].first_slot == Q,
+                   "change: moving into the past is refused");
+    check::is_true(!s->change(id, [](qs::Entry& x) { x.every_min = 30; }).empty(),
+                   "change: B every 30 minutes is refused");
+    check::is_true(!s->change("nobody", [](qs::Entry&) {}).empty(),
+                   "change: an entry that is not there");
+
+    // The first send goes on the air; it may not be changed, and once it
+    // is over only the sends still to come change.
+    fake.now = Q - 200;
+    s->tick();
+    check::is_true(s->active() == id && s->entries()[0].next == 1, "change: the first send started");
+    check::is_true(!s->change(id, [](qs::Entry& x) { x.mode = "A"; }).empty(),
+                   "change: not while it is on the air");
+    s->run_finished();
+    fake.now = Q + H;
+    check::is_true(s->change(id, [](qs::Entry& x) { x.mode = "A"; }).empty(),
+                   "change: after it, the rest become mode A");
+    const qs::Entry& r = s->entries()[0];
+    check::is_true(r.next == 0 && r.count == 2 && r.first_slot == Q + 2 * H && r.mode == "A",
+                   "change: rebased on the two sends still to come");
+
+    s->truncate(id, 1);
+    check::is_true(s->entries()[0].count == 1, "truncate: stops after the first remaining send");
+    s->truncate(id, 0);
+    check::is_true(s->entries().size() == 1 && s->entries()[0].label == "later",
+                   "truncate: from the next send on removes the entry");
+}
+
+void test_the_window(const std::filesystem::path& dir) {
+    Fake fake;
+    std::unique_ptr<QrssScheduler> s(make(fake, dir / "c" / "qrss_schedule.json"));
+    QrssSends sends(dir / "c" / "qrss_sends");
+    const std::string red = sends.add("Red", solid(200, 0, 0), {}, solid(255, 0, 0));
+    const std::string blue = sends.add("Blue", solid(0, 0, 200), {}, solid(0, 0, 255));
+    QrssScheduleWindow w(s.get(), &sends, [] { return std::optional<QrssScheduleWindow::Composition>(); },
+                         [] { return QrssScheduleWindow::Defaults{"B", 1234.0}; }, {});
+    w.resize(1000, 700);
     w.show();
     QApplication::processEvents();
-    auto* name = w.findChild<QLabel*>(QStringLiteral("schedule_picture_name"));
-    auto* framing = w.findChild<QPushButton*>(QStringLiteral("schedule_framing"));
+    auto* list = w.findChild<QListWidget*>(QStringLiteral("schedule_sends"));
+    auto* form = w.findChild<QGroupBox*>(QStringLiteral("schedule_form"));
+    auto* mode = w.findChild<QComboBox*>(QStringLiteral("schedule_mode"));
+    auto* freq = w.findChild<QSpinBox*>(QStringLiteral("schedule_freq"));
+    auto* count = w.findChild<QSpinBox*>(QStringLiteral("schedule_count"));
+    auto* every = w.findChild<QComboBox*>(QStringLiteral("schedule_every"));
+    auto* summary = w.findChild<QLabel*>(QStringLiteral("schedule_summary"));
     auto* add = w.findChild<QPushButton*>(QStringLiteral("schedule_add"));
-    check::is_true(name && framing && add, "window/file: the picture controls are there");
-    if (!(name && framing && add)) return;
-    check::is_true(!framing->isEnabled(), "window/file: nothing to frame in the composition");
+    auto* table = w.findChild<QTreeWidget*>(QStringLiteral("schedule_table"));
+    const bool all = list && form && mode && freq && count && every && summary && add && table;
+    check::is_true(all, "window: every control is there");
+    if (!all) return;
+    check::is_true(w.findChild<QListWidget*>(QStringLiteral("schedule_coming")) == nullptr,
+                   "window: the timeline replaces the coming-up list");
+    check::equal(list->count(), 2, "window: both Sends listed");
+    check::is_true(!form->isEnabled() && !add->isEnabled(),
+                   "window: nothing to schedule until a Send is chosen");
 
-    int opened = 0;
-    answer_framing(&opened);
-    w.use_file(QString::fromStdString(red_png(dir, 640, 480)));
+    w.select_send(blue);
     QApplication::processEvents();
-    check::equal(opened, 0, "window/file: 640 x 480 goes straight in");
-    check::is_true(framing->isEnabled(), "window/file: but can still be framed");
+    check::is_true(w.selected_send() == blue && form->isEnabled(),
+                   "window: choosing a Send enables the form");
+    check::is_true(mode->currentData().toString() == QStringLiteral("B") && freq->value() == 1234,
+                   "window: mode and carrier start as the Transmit pane has them");
+    check::is_true(w.chosen_slot() == qs::earliest_slot(fake.now),
+                   "window: the first send starts at the earliest quarter hour");
+    check::is_true(summary->text().contains(QStringLiteral("2 x mode B, back to back")) &&
+                       add->isEnabled(),
+                   "window: the default is two sends back to back");
+    mode->setCurrentIndex(mode->findData(QStringLiteral("A")));
+    count->setValue(0);
+    every->setCurrentIndex(every->findData(120));
+    check::is_true(summary->text().contains(QStringLiteral("(alternating hours), until removed")),
+                   "window: every other hour, until removed");
+    every->setCurrentIndex(every->findData(0));
+    check::is_true(!add->isEnabled() && summary->text().startsWith(QStringLiteral("Can't add")),
+                   "window: back to back endless is refused, and says why");
 
-    answer_framing(&opened);
-    w.use_file(QString::fromStdString(red_png(dir, 800, 450)));
-    QApplication::processEvents();
-    check::equal(opened, 1, "window/file: 16:9 opens the framing dialog");
-    check::is_true(name->text().contains(QStringLiteral("800x450, padded to 4:3")),
-                   "window/file: and says what it did");
-    check::is_true(add->isEnabled(), "window/file: ready to add");
+    // A slot clicked on the timeline is where the form starts.
+    w.set_chosen_slot(Q);
+    count->setValue(2);
     add->click();
     QApplication::processEvents();
-    check::equal(s->entries().size(), std::size_t{1}, "window/file: added");
+    check::is_true(s->entries().size() == 1 && s->entries()[0].mode == "A" &&
+                       s->entries()[0].count == 2 && s->entries()[0].freq_hz == 1234.0 &&
+                       s->entries()[0].send_id == blue && s->entries()[0].label == "Blue" &&
+                       s->entries()[0].first_slot == Q,
+                   "window: Add schedules the chosen Send as the form says");
     if (s->entries().size() != 1) return;
-    const images::Picture sent = images::load(s->entries()[0].picture);
-    auto red = [&sent](int x, int y) {
-        return sent.rgb[(static_cast<std::size_t>(y) * sent.width + x) * 3] > 200;
-    };
-    check::is_true(sent.width == 640 && sent.height == 480 && !red(320, 10) && red(320, 240) &&
-                       red(5, 240) && red(634, 240),
-                   "window/file: what is scheduled is the framing chosen, whole and padded");
+    const std::string id = s->entries()[0].id;
+    check::equal(table->topLevelItemCount(), 1, "window: and it is listed");
+    check::is_true(images::load(s->entries()[0].picture).rgb[2] == 255,
+                   "window: with its own copy of the Send's picture");
+
+    // The Send on the schedule is tinted in the list; the other is not.
+    bool blue_marked = false;
+    bool red_marked = false;
+    for (int i = 0; i < list->count(); ++i) {
+        const std::string sid = list->item(i)->data(Qt::UserRole).toString().toStdString();
+        const bool marked = list->item(i)->data(Qt::UserRole + 1).toBool() &&
+                            list->item(i)->text().contains(QStringLiteral("scheduled"));
+        (sid == blue ? blue_marked : red_marked) = marked;
+    }
+    check::is_true(blue_marked && !red_marked, "window: the scheduled Send is marked in the list");
+
+    // Its two sends are blocks on the timeline, a half hour each.
+    QrssTimeline* t = w.timeline();
+    const auto& blocks = t->blocks();
+    check::equal(blocks.size(), std::size_t{2}, "timeline: one block per send");
+    if (blocks.size() != 2) return;
+    check::is_true(blocks[0].slot == Q && blocks[0].end == Q + 1800.0 &&
+                       blocks[1].slot == Q + 1800.0 && blocks[0].send_id == blue,
+                   "timeline: back to back, half an hour each, from its Send");
+    check::is_true(t->block_caption(blocks[0]) == QStringLiteral("A 1/2") &&
+                       t->block_caption(blocks[1]) == QStringLiteral("A 2/2"),
+                   "timeline: captioned with the mode and which repeat");
+    const QRect r0 = t->block_rect(blocks[0]);
+    check::is_true(r0.width() > 1.5 * QrssTimeline::CELL_W && t->block_at(r0.center()) == 0 &&
+                       t->slot_at(r0.left() + 2) == Q,
+                   "timeline: a block spans its two quarter hours, where its slot is");
+    QrssTimeline::Block endless = blocks[0];
+    endless.count = 0;
+    endless.send = 4;
+    check::is_true(t->block_caption(endless) == QStringLiteral("A #5"),
+                   "timeline: an until-removed series counts up");
+
+    // Clicking a block selects its entry and its Send.
+    w.select_send(red);
+    emit t->blockClicked(QString::fromStdString(id), 1);
+    QApplication::processEvents();
+    check::is_true(w.selected_send() == blue && !table->selectedItems().isEmpty(),
+                   "timeline: a click selects the entry and its Send");
+
+    // The right-click menu.
+    check::is_true(QrssScheduleWindow::repeat_choices("A").front() == 30 &&
+                       QrssScheduleWindow::repeat_choices("B").front() == 60 &&
+                       QrssScheduleWindow::repeat_choices("C").front() == 90,
+                   "menu: repeat no sooner than the mode's own length");
+    std::unique_ptr<QMenu> menu(w.menu_for(id, 1));
+    auto* change = menu->findChild<QMenu*>(QStringLiteral("menu_change_mode"));
+    auto* repeat = menu->findChild<QMenu*>(QStringLiteral("menu_repeat_in"));
+    check::is_true(menu->findChild<QAction*>(QStringLiteral("menu_remove")) && change && repeat &&
+                       menu->findChild<QAction*>(QStringLiteral("menu_remove_from")),
+                   "menu: Remove, Remove from here, Change Mode, Repeat in");
+    if (!(change && repeat)) return;
+    check::equal(change->actions().size(), qsizetype{3}, "menu: three modes");
+    QAction* to_b = nullptr;
+    for (QAction* a : change->actions()) {
+        if (a->text().startsWith(QStringLiteral("Mode B"))) to_b = a;
+    }
+    check::is_true(to_b != nullptr && !to_b->isChecked(), "menu: mode B on offer");
+    if (to_b) to_b->trigger();
+    check::is_true(s->entries()[0].mode == "B" && s->entries()[0].count == 2,
+                   "menu: Change Mode makes it 2 x B");
+    menu.reset(w.menu_for(id, 0));
+    repeat = menu->findChild<QMenu*>(QStringLiteral("menu_repeat_in"));
+    bool short_offered = false;
+    QAction* in_3h = nullptr;
+    for (QAction* a : repeat->actions()) {
+        if (a->data().toInt() < 60) short_offered = true;
+        if (a->data().toInt() == 180) in_3h = a;
+    }
+    check::is_true(!short_offered && in_3h != nullptr,
+                   "menu: a mode B send repeats in an hour at the soonest");
+    check::is_true(menu->findChild<QAction*>(QStringLiteral("menu_remove_from")) == nullptr,
+                   "menu: from the first send, Remove is all there is");
+    if (in_3h) in_3h->trigger();
+    check::is_true(s->entries()[0].every_min == 180 && s->entries()[0].count == 2,
+                   "menu: Repeat in 180 minutes");
+    check::is_true(w.change_mode(id, "C").empty() && s->entries()[0].mode == "C",
+                   "menu: C fits every 3 hours");
+    check::is_true(!w.repeat_every(id, 60).empty() && s->entries()[0].every_min == 180,
+                   "menu: but not every hour, and says why");
+
+    // A single send asked to repeat becomes two.
+    w.select_send(red);
+    w.set_chosen_slot(Q + 12 * H);
+    mode->setCurrentIndex(mode->findData(QStringLiteral("A")));
+    count->setValue(1);
+    add->click();
+    QApplication::processEvents();
+    check::equal(s->entries().size(), std::size_t{2}, "window: a second entry, one A");
+    if (s->entries().size() != 2) return;
+    const std::string single = s->entries()[1].id;
+    check::is_true(w.repeat_every(single, 45).empty() && s->entries()[1].count == 2 &&
+                       s->entries()[1].every_min == 45,
+                   "menu: Repeat in on a single send makes it two");
+
+    // Dragging a send moves the whole series.
+    check::is_true(w.move_send(id, 1, Q + 6 * H).empty() &&
+                       s->entries()[0].first_slot == Q + 3 * H,
+                   "drag: the second send to 07:00Z moves the first to 04:00Z");
+    check::is_true(!w.move_send(id, 0, Q + 12 * H).empty() &&
+                       s->entries()[0].first_slot == Q + 3 * H,
+                   "drag: onto another send is refused, unchanged");
+    check::is_true(w.remove_from(id, 1).empty() && s->entries()[0].count == 1,
+                   "menu: Remove from the second send keeps the first");
+    check::is_true(w.remove_entry(id).empty() && s->entries().size() == 1 &&
+                       s->entries()[0].id == single,
+                   "menu: Remove removes it");
+    w.delete_send(blue);
+    QApplication::processEvents();
+    check::equal(list->count(), 1, "window: a deleted Send leaves the list");
+}
+
+void test_the_editor(const std::filesystem::path& dir) {
+    QrssSends sends(dir / "e" / "qrss_sends");
+    QrssEditor::Context context;
+    context.default_text = "AG7EW";
+    QrssEditor e(&sends, context);
+    e.show();
+    QApplication::processEvents();
+    auto* framing = e.findChild<QPushButton*>(QStringLiteral("editor_framing"));
+    auto* save_new = e.findChild<QPushButton*>(QStringLiteral("editor_save_new"));
+    auto* name = e.findChild<QLineEdit*>(QStringLiteral("editor_name"));
+    check::is_true(framing && save_new && name && e.findChild<OverlayEditor*>(),
+                   "editor: the canvas and its controls are there");
+    if (!(framing && save_new && name)) return;
+
+    e.start_blank();
+    check::is_true(!framing->isEnabled() && !save_new->isVisible(),
+                   "editor: a blank picture, nothing to frame, a new Send");
+    int opened = 0;
+    answer_framing(&opened);
+    check::is_true(e.load_picture(QString::fromStdString(red_png(dir, 640, 480))),
+                   "editor: a 640 x 480 picture loads");
+    QApplication::processEvents();
+    check::equal(opened, 0, "editor: and goes straight in");
+    check::is_true(framing->isEnabled(), "editor: but can still be framed");
+    check::is_true(name->text() == QStringLiteral("red-640x480"), "editor: named after its file");
 
     answer_framing(&opened);
-    w.use_file(QString::fromStdString(red_png(dir, 1280, 960)));
+    e.load_picture(QString::fromStdString(red_png(dir, 800, 450)));
     QApplication::processEvents();
-    check::equal(opened, 2, "window/file: a 4:3 picture of another size asks too");
-
+    check::equal(opened, 1, "editor: 16:9 opens the framing dialog");
     answer_framing(&opened);
     framing->click();
     QApplication::processEvents();
-    check::equal(opened, 3, "window/file: Framing... opens it again");
+    check::equal(opened, 2, "editor: Framing... opens it again");
 
-    w.use_composition();
-    check::is_true(!framing->isEnabled(), "window/file: back to the composition, nothing to frame");
+    e.editor()->add_text("CQ");
+    name->setText(QStringLiteral("Red card"));
+    const std::string id = e.save();
+    check::is_true(!id.empty() && sends.find(id) != nullptr && sends.find(id)->label == "Red card",
+                   "editor: Save puts it in the Sends");
+    if (id.empty()) return;
+    const images::Picture sent = images::load(sends.find(id)->picture.string());
+    auto is_red = [&sent](int x, int y) {
+        return sent.rgb[(static_cast<std::size_t>(y) * sent.width + x) * 3] > 200;
+    };
+    check::is_true(sent.width == 640 && sent.height == 480 && !is_red(320, 10) &&
+                       is_red(5, 300) && is_red(634, 300),
+                   "editor: the Send is the framing chosen, whole and padded");
+    const images::Picture base = *sends.load_base(id);
+    check::is_true(base.rgb != sent.rgb, "editor: the text is in the picture, not the base");
+
+    check::is_true(e.open_send(id) && save_new->isVisible() && e.send_id() == id,
+                   "editor: a Send opens again for changes");
+    name->setText(QStringLiteral("Red card 2"));
+    check::is_true(e.save() == id && sends.sends().size() == 1 &&
+                       sends.find(id)->label == "Red card 2",
+                   "editor: Save changes replaces it");
+    const std::string copy = e.save(true);
+    check::is_true(!copy.empty() && copy != id && sends.sends().size() == 2,
+                   "editor: Save as new Send keeps the old one");
 }
 
 }  // namespace
@@ -427,7 +688,9 @@ int main(int argc, char** argv) {
     test_upcoming_and_the_file();
     test_the_scheduler_starts_what_is_due(dir);
     test_missed_and_paused(dir);
+    test_the_sends_store(dir);
+    test_change_and_truncate(dir);
     test_the_window(dir);
-    test_a_file_is_framed_first(dir);
+    test_the_editor(dir);
     return check::report("qrss schedule");
 }

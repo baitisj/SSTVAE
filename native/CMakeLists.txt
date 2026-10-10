@@ -500,6 +500,10 @@ if(_want_gui)
     gui/settings_dialog.cpp
     gui/overlay_editor.cpp
     gui/item_menu.cpp
+    gui/compose_tools.cpp
+    gui/qrss_sends.cpp
+    gui/qrss_editor.cpp
+    gui/qrss_timeline.cpp
     gui/tx_panel.cpp
     gui/banner.cpp
     gui/crop_dialog.cpp

@@ -49,6 +49,7 @@ class ErrorBanner;
 class ItemMenu;
 class OverlayEditor;
 class QrssScheduleWindow;
+class QrssSends;
 
 // The output level is stored as a peak amplitude (`transmit.level`,
 // 0..1) because that is what the transmitter scales to, but it is
@@ -98,6 +99,7 @@ public:
     // "Schedule..." button opens. The window is made on first use.
     QrssScheduler* scheduler() const { return scheduler_; }
     QrssScheduleWindow* schedule_window() const { return schedule_window_; }
+    QrssSends* sends() const { return sends_; }
     // Hide the schedule window, so it does not keep the app running as
     // its last window.
     void hide_windows();
@@ -349,6 +351,9 @@ private:
 
     QrssScheduler* scheduler_ = nullptr;          // a child of this panel
     QrssScheduleWindow* schedule_window_ = nullptr;
+    QrssSends* sends_ = nullptr;                  // a child of this panel
+    // The newest reception, for a "last received" inset in the Editor.
+    std::optional<images::Picture> last_rx_;
 
     // Null when the feature is off or the model has not loaded yet.
     std::unique_ptr<optimize::Speculative> optimizer_;

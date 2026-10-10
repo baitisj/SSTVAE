@@ -44,7 +44,11 @@
 #include "images/types.hpp"
 #include "item_menu.hpp"
 #include "qrss_schedule.hpp"
+#include "qrss_editor.hpp"
 #include "qrss_schedule_window.hpp"
+#include "qrss_sends.hpp"
+#include "qrss_timeline.hpp"
+#include "images/images.hpp"
 #include "qrss_window.hpp"
 #include "log/log.hpp"
 #include "log_pane.hpp"
@@ -80,7 +84,8 @@ void usage() {
                  "  --qrss DIR   also shoot the QRSS signals window showing the\n"
                  "               listener tiles in DIR (qrss_listen.py --state)\n"
                  "  --qrss-schedule DIR  also shoot the QRSS schedule window over\n"
-                 "               DIR/qrss_schedule.json (two demo sends if empty)\n"
+                 "               DIR/qrss_schedule.json and DIR/qrss_sends (demo\n"
+                 "               Sends and sends if empty), its menu and the Editor\n"
                  "\n"
                  "Writes settings-<n>-<name>.png, one per tab.\n");
 }
@@ -220,36 +225,109 @@ int main(int argc, char** argv) {
                 return sstvae::gui::QrssScheduler::Start::Failed;
             },
             {}, 0);
-        sstvae::images::Picture pic(sstvae::overlay::CANVAS_W, sstvae::overlay::CANVAS_H);
-        for (std::size_t i = 0; i < pic.rgb.size(); ++i) {
-            pic.rgb[i] = static_cast<std::uint8_t>(40 + (i / 3 % 640) * 180 / 640);
+        // Three Sends, each a coloured gradient with a caption, made
+        // through the Editor itself so its save path is what is shot.
+        sstvae::gui::QrssSends sends(std::filesystem::path(schedule_dir.toStdString()) /
+                                     "qrss_sends");
+        const auto gradient = [](int r, int g, int b) {
+            sstvae::images::Picture pic(sstvae::overlay::CANVAS_W, sstvae::overlay::CANVAS_H);
+            for (int y = 0; y < pic.height; ++y) {
+                for (int x = 0; x < pic.width; ++x) {
+                    const std::size_t i = (static_cast<std::size_t>(y) * pic.width + x) * 3;
+                    const int k = 40 + x * 180 / pic.width;
+                    pic.rgb[i] = static_cast<std::uint8_t>(k * r / 255);
+                    pic.rgb[i + 1] = static_cast<std::uint8_t>(k * g / 255);
+                    pic.rgb[i + 2] = static_cast<std::uint8_t>(k * b / 255);
+                }
+            }
+            return pic;
+        };
+        sstvae::gui::QrssEditor::Context context;
+        context.default_text = config.callsign;
+        sstvae::gui::QrssEditor editor(&sends, context);
+        editor.resize(width > 0 ? width : 900, height > 0 ? height : 640);
+        std::vector<std::string> ids;
+        if (sends.sends().empty()) {
+            const struct { const char* label; const char* text; int r, g, b; } demo[] = {
+                {"Sunset", "AG7EW CN85", 255, 150, 60},
+                {"Antenna farm", "630 m test", 80, 200, 120},
+                {"CQ card", "CQ QRSS", 90, 140, 255},
+            };
+            for (const auto& d : demo) {
+                editor.start_from(gradient(d.r, d.g, d.b), {}, d.label);
+                editor.editor()->add_text(d.text);
+                ids.push_back(editor.save());
+            }
+        } else {
+            for (const auto& s : sends.sends()) ids.push_back(s.id);
         }
-        if (scheduler.entries().empty()) {
+        if (scheduler.entries().empty() && ids.size() >= 2) {
             const double first = qs::earliest_slot(scheduler.now()) + 3600.0;
+            const auto picture_of = [&](const std::string& id) {
+                auto p = sstvae::images::load(sends.find(id)->picture.string());
+                return p;
+            };
             qs::Entry aa;
-            aa.label = "sunset.png";
+            aa.label = sends.find(ids[0])->label;
+            aa.send_id = ids[0];
             aa.first_slot = first;
             aa.count = 2;
-            scheduler.add(aa, pic);
+            scheduler.add(aa, picture_of(ids[0]));
             qs::Entry b;
-            b.label = "composition 10 Oct 14:02Z";
+            b.label = sends.find(ids[1])->label;
+            b.send_id = ids[1];
             b.mode = "B";
             b.freq_hz = 1650.0;
             b.first_slot = first + 3 * 3600.0;
             b.count = 0;
             b.every_min = 240;
-            scheduler.add(b, pic);
+            scheduler.add(b, picture_of(ids[1]));
         }
         sstvae::gui::QrssScheduleWindow w(
-            &scheduler, [pic] { return std::optional<sstvae::images::Picture>(pic); },
-            [] { return sstvae::gui::QrssScheduleWindow::Defaults{"A", 1500.0}; });
-        w.resize(width > 0 ? width : 720, height > 0 ? height : 640);
+            &scheduler, &sends, [] { return std::optional<sstvae::gui::QrssScheduleWindow::Composition>(); },
+            [] { return sstvae::gui::QrssScheduleWindow::Defaults{"A", 1500.0}; }, context);
+        w.resize(width > 0 ? width : 1000, height > 0 ? height : 720);
         w.show();
+        if (!ids.empty()) w.select_send(ids[0]);
         app.processEvents();
         const QString path = QStringLiteral("%1/qrss-schedule.png").arg(out);
         w.grab().save(path);
-        std::printf("%s (%zu scheduled)\n", path.toLocal8Bit().constData(),
-                    scheduler.entries().size());
+        std::printf("%s (%zu scheduled, %zu sends)\n", path.toLocal8Bit().constData(),
+                    scheduler.entries().size(), sends.sends().size());
+
+        // The right-click menu on the first block, and its two submenus.
+        const auto& blocks = w.timeline()->blocks();
+        if (!blocks.empty()) {
+            QMenu* menu = w.menu_for(blocks.front().entry, blocks.front().send);
+            menu->popup(QPoint(80, 80));
+            app.processEvents();
+            const QString mpath = QStringLiteral("%1/qrss-schedule-menu.png").arg(out);
+            menu->grab().save(mpath);
+            std::printf("%s\n", mpath.toLocal8Bit().constData());
+            for (const char* name : {"menu_change_mode", "menu_repeat_in"}) {
+                if (auto* sub = menu->findChild<QMenu*>(QString::fromLatin1(name))) {
+                    sub->popup(QPoint(260, 80));
+                    app.processEvents();
+                    const QString spath =
+                        QStringLiteral("%1/qrss-schedule-%2.png").arg(out, QString::fromLatin1(name));
+                    sub->grab().save(spath);
+                    std::printf("%s\n", spath.toLocal8Bit().constData());
+                    sub->hide();
+                }
+            }
+            menu->hide();
+            delete menu;
+        }
+
+        // The Editor, open on the first Send.
+        if (!ids.empty() && editor.open_send(ids[0])) {
+            editor.show();
+            app.processEvents();
+            const QString epath = QStringLiteral("%1/qrss-editor.png").arg(out);
+            editor.grab().save(epath);
+            std::printf("%s\n", epath.toLocal8Bit().constData());
+            editor.hide();
+        }
     }
 
     if (item_menu) {

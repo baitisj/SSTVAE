@@ -55,6 +55,7 @@
 #include "codec/codec.hpp"
 #include "codec/grad_session.hpp"
 #include "config.hpp"
+#include "compose_tools.hpp"
 #include "crop_dialog.hpp"
 #include "images/images.hpp"
 #include "flow_layout.hpp"
@@ -63,120 +64,13 @@
 #include "overlay/template_catalog.hpp"
 #include "overlay_editor.hpp"
 #include "qrss_schedule_window.hpp"
+#include "qrss_sends.hpp"
 #include "qrss_tx.hpp"
 #include "share_dialog.hpp"
 #include "style.hpp"
 #include "settings/settings.hpp"
 
 namespace sstvae::gui {
-
-namespace {
-
-const char* IMAGE_FILTER =
-    "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;All files (*)";
-
-// --- the tool palette's icons -------------------------------------------
-//
-// Hand-drawn rather than shipped as asset files: four tiny glyphs are
-// cheaper to draw once than to source, license and keep in step with
-// the platform's icon theme (which several of this project's target
-// platforms do not reliably have one of). `PM_LargeIconSize` and
-// `devicePixelRatioF`, so a HiDPI screen gets a crisp glyph.
-
-QIcon draw_tool_icon(const QWidget* metrics,
-                     const std::function<void(QPainter&, int, const QColor&)>& paint) {
-    const int size = metrics->style()->pixelMetric(QStyle::PM_LargeIconSize);
-    const qreal dpr = metrics->devicePixelRatioF();
-    QPixmap pixmap(static_cast<int>(std::lround(size * dpr)),
-                   static_cast<int>(std::lround(size * dpr)));
-    pixmap.setDevicePixelRatio(dpr);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    // Palette, not a literal color: a hand-drawn icon that ignored the
-    // palette would go invisible on a dark theme.
-    paint(painter, size, metrics->palette().color(QPalette::WindowText));
-    return QIcon(pixmap);
-}
-
-// The "picture" glyph shared by the image-inset and last-received tools
-// -- a frame, a sun and a mountain range, the generic photo icon every
-// platform already uses this shape for.
-void draw_picture_glyph(QPainter& p, int size, const QColor& ink) {
-    const QRectF frame(size * 0.12, size * 0.12, size * 0.76, size * 0.76);
-    p.setPen(QPen(ink, std::max(1.0, size / 16.0)));
-    p.setBrush(Qt::NoBrush);
-    p.drawRoundedRect(frame, size * 0.06, size * 0.06);
-
-    p.setPen(Qt::NoPen);
-    p.setBrush(ink);
-    p.drawEllipse(QPointF(frame.left() + frame.width() * 0.3,
-                          frame.top() + frame.height() * 0.32),
-                 size * 0.07, size * 0.07);
-
-    QPainterPath mountains;
-    mountains.moveTo(frame.left() + frame.width() * 0.06, frame.bottom() - frame.height() * 0.1);
-    mountains.lineTo(frame.left() + frame.width() * 0.38, frame.bottom() - frame.height() * 0.55);
-    mountains.lineTo(frame.left() + frame.width() * 0.58, frame.bottom() - frame.height() * 0.3);
-    mountains.lineTo(frame.left() + frame.width() * 0.78, frame.bottom() - frame.height() * 0.52);
-    mountains.lineTo(frame.right() - frame.width() * 0.06, frame.bottom() - frame.height() * 0.1);
-    mountains.closeSubpath();
-    p.drawPath(mountains);
-}
-
-QIcon text_tool_icon(const QWidget* metrics) {
-    return draw_tool_icon(metrics, [](QPainter& p, int size, const QColor& ink) {
-        QFont font = p.font();
-        font.setBold(true);
-        font.setPixelSize(static_cast<int>(size * 0.72));
-        p.setFont(font);
-        p.setPen(ink);
-        p.drawText(QRect(0, 0, size, size), Qt::AlignCenter, QStringLiteral("T"));
-    });
-}
-
-QIcon image_tool_icon(const QWidget* metrics) {
-    return draw_tool_icon(metrics, [](QPainter& p, int size, const QColor& ink) {
-        draw_picture_glyph(p, size, ink);
-    });
-}
-
-QIcon last_rx_tool_icon(const QWidget* metrics) {
-    return draw_tool_icon(metrics, [](QPainter& p, int size, const QColor& ink) {
-        draw_picture_glyph(p, size, ink);
-        // A small curved "history" arrow badge over the bottom-right
-        // corner, so the glyph reads as "that picture again" rather
-        // than a second, redundant photo icon.
-        const QRectF badge(size * 0.48, size * 0.48, size * 0.46, size * 0.46);
-        QPainterPath arrow;
-        arrow.arcMoveTo(badge, 30);
-        arrow.arcTo(badge, 30, 260);
-        p.setPen(QPen(ink, std::max(1.0, size / 14.0)));
-        p.setBrush(Qt::NoBrush);
-        p.drawPath(arrow);
-        const QPointF tip = arrow.currentPosition();
-        QPolygonF head;
-        head << tip << QPointF(tip.x() - size * 0.09, tip.y() - size * 0.02)
-             << QPointF(tip.x() - size * 0.01, tip.y() + size * 0.09);
-        p.setPen(Qt::NoPen);
-        p.setBrush(ink);
-        p.drawPolygon(head);
-    });
-}
-
-QIcon rect_tool_icon(const QWidget* metrics) {
-    return draw_tool_icon(metrics, [](QPainter& p, int size, const QColor& ink) {
-        const QRectF box(size * 0.15, size * 0.26, size * 0.7, size * 0.48);
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(ink.red(), ink.green(), ink.blue(), 90));
-        p.drawRect(box);
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(ink, std::max(1.0, size / 14.0)));
-        p.drawRect(box);
-    });
-}
-
-}  // namespace
 
 double level_to_db(double level) {
     if (level <= 0.0) return LEVEL_MIN_DB;
@@ -596,7 +490,7 @@ QWidget* TransmitPanel::build_tool_row() {
     // does the same thing, it is only condensed on screen. The full
     // sentence survives as each button's tooltip.
     add_text_button_ = new QToolButton(overlay_box);
-    add_text_button_->setIcon(text_tool_icon(this));
+    add_text_button_->setIcon(compose::text_tool_icon(this));
     add_text_button_->setToolTip(tr("Add text"));
     connect(add_text_button_, &QToolButton::clicked, this, [this] {
         const std::string& callsign = app_->config().callsign;
@@ -604,7 +498,7 @@ QWidget* TransmitPanel::build_tool_row() {
     });
 
     add_rx_button_ = new QToolButton(overlay_box);
-    add_rx_button_->setIcon(last_rx_tool_icon(this));
+    add_rx_button_->setIcon(compose::last_rx_tool_icon(this));
     // Nothing to insert until something has been received: the item it
     // adds resolves at render time, so before the first reception it
     // drew nothing and looked like a button that did not work.
@@ -616,19 +510,19 @@ QWidget* TransmitPanel::build_tool_row() {
             &OverlayEditor::add_last_rx_inset);
 
     add_image_button_ = new QToolButton(overlay_box);
-    add_image_button_->setIcon(image_tool_icon(this));
+    add_image_button_->setIcon(compose::image_tool_icon(this));
     add_image_button_->setToolTip(tr("Add image..."));
     connect(add_image_button_, &QToolButton::clicked, this, [this] {
         const QString path = QFileDialog::getOpenFileName(
             this, tr("Choose an inset image"),
             QString::fromStdString(app_->config().folders.transmit_dir),
-            QString::fromLatin1(IMAGE_FILTER));
+            QString::fromLatin1(compose::IMAGE_FILTER));
         if (!path.isEmpty()) editor_->add_image_inset(path.toStdString());
     });
 
     add_rect_button_ = new QToolButton(overlay_box);
     add_rect_button_->setObjectName(QStringLiteral("add_rect_button"));
-    add_rect_button_->setIcon(rect_tool_icon(this));
+    add_rect_button_->setIcon(compose::rect_tool_icon(this));
     add_rect_button_->setToolTip(
         tr("Add rectangle: a box, filled and/or stroked with a solid "
            "color or a gradient -- see the floating panel that appears "
@@ -1068,31 +962,7 @@ void TransmitPanel::on_mode_changed() {
 // --- templates (docs/overlay-templates.md) -----------------------------------
 
 std::filesystem::path TransmitPanel::builtin_templates_dir() {
-    // Copied at build time (`sstvae_copy_builtin_templates` in
-    // native/CMakeLists.txt) from `sstvae/overlay/templates/`, the one
-    // place the three ship from. Where an *installed* app keeps its
-    // data is a platform convention, tried first; beside the executable
-    // is the build tree, the tests, sstvae-gui-shot and the Windows
-    // package, and is the fallback everywhere.
-    //
-    // macOS: a bundle's Contents/Resources -- "beside the executable" is
-    // Contents/MacOS there, and codesign refuses data in it (see the
-    // CMake function). Linux: <prefix>/share/sstvae/templates, resolved
-    // from the executable's own prefix, so one rule covers a distro
-    // package at /usr, a hand install at /usr/local or /opt, and the
-    // AppDir -- a packager expects /usr/share/sstvae, not a data
-    // directory under /usr/bin.
-    const QString beside = QCoreApplication::applicationDirPath();
-#if defined(Q_OS_MACOS)
-    const QString installed = QDir::cleanPath(beside + QStringLiteral("/../Resources/templates"));
-#elif defined(Q_OS_UNIX)
-    const QString installed =
-        QDir::cleanPath(beside + QStringLiteral("/../share/sstvae/templates"));
-#else
-    const QString installed;
-#endif
-    if (!installed.isEmpty() && QDir(installed).exists()) return installed.toStdString();
-    return (beside + QStringLiteral("/templates")).toStdString();
+    return compose::builtin_templates_dir();
 }
 
 void TransmitPanel::refresh_templates() {
@@ -1354,7 +1224,7 @@ void TransmitPanel::choose_image() {
     const QString path = QFileDialog::getOpenFileName(
         this, tr("Choose an image"),
         QString::fromStdString(app_->config().folders.transmit_dir),
-        QString::fromLatin1(IMAGE_FILTER));
+        QString::fromLatin1(compose::IMAGE_FILTER));
     if (!path.isEmpty()) load_image(path);
 }
 
@@ -1524,6 +1394,7 @@ void TransmitPanel::set_last_reception_info(const QString& callsign, double snr_
 
 void TransmitPanel::set_last_rx_image(const images::Picture& image) {
     editor_->set_last_rx(image);
+    last_rx_ = image;
     // Only now is there anything for the button to insert. Before the
     // first reception it added an item that rendered as nothing, which
     // reads as a broken button rather than as "not yet".
@@ -1868,8 +1739,21 @@ QrssScheduler::Start TransmitPanel::start_scheduled(const qrss_schedule::Entry& 
 
 void TransmitPanel::show_schedule() {
     if (schedule_window_ == nullptr) {
+        if (sends_ == nullptr) {
+            sends_ = new QrssSends(settings::config_dir() / "qrss_sends", this);
+        }
+        QrssEditor::Context context;
+        context.fields = [this] { return editor_->fields(); };
+        context.last_rx = [this] { return last_rx_; };
+        context.default_text = app_->config().callsign;
+        context.template_dir = app_->config().folders.template_dir;
+        context.picture_dir = app_->config().folders.transmit_dir;
         schedule_window_ = new QrssScheduleWindow(
-            scheduler_, [this] { return editor_->composed_image(); },
+            scheduler_, sends_,
+            [this]() -> std::optional<QrssScheduleWindow::Composition> {
+                if (!editor_->has_base()) return std::nullopt;
+                return QrssScheduleWindow::Composition{editor_->base_image(), editor_->doc()};
+            },
             [this] {
                 QrssScheduleWindow::Defaults d;
                 const std::string mode = qrss_mode();
@@ -1877,7 +1761,7 @@ void TransmitPanel::show_schedule() {
                 d.freq_hz = qrss_slider_->value();
                 return d;
             },
-            this);
+            std::move(context), this);
     }
     schedule_window_->show();
     schedule_window_->raise();
