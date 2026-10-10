@@ -4,6 +4,7 @@
 // How a tile looks is a judgement call and is not asserted.
 
 #include <QApplication>
+#include <QColor>
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
@@ -128,6 +129,49 @@ void test_tiles_follow_the_state_file() {
     check::equal(w.tile_count(), 1, "qrss/tiles: a torn state file changes nothing");
 }
 
+void test_the_confidence_band() {
+    QTemporaryDir dir;
+    gui::QrssWindow w;
+    w.set_state_dir(dir.path());
+    QJsonObject t = tile_json(QStringLiteral("c"), 1500.0, QStringLiteral("N0CALL"), 0.7,
+                              QString(), 0);
+    // The preamble (nothing measured), noise, 0 dB, strong, and a
+    // stretch still to come.
+    t[QStringLiteral("confidence")] = QJsonArray{QJsonValue(), -20.0, 0.0, 12.0, QJsonValue()};
+    QJsonArray tiles;
+    tiles.append(t);
+    write_state(dir.path(), tiles, 5'000'000);
+    w.reload();
+    gui::QrssTile* tile = w.tile(QStringLiteral("c"));
+    check::is_true(tile != nullptr && tile->band() != nullptr, "qrss/band: every tile has one");
+    if (tile == nullptr || tile->band() == nullptr) return;
+    gui::ConfidenceBand* band = tile->band();
+    check::equal(band->bins().size(), std::size_t{5}, "qrss/band: one stretch per listed bin");
+    check::equal(band->height(), 2, "qrss/band: two pixels tall");
+    check::equal(band->width(), tile->width() - 12, "qrss/band: as wide as the picture");
+    const QImage img = band->grab().toImage();
+    const int step = band->width() / 5;
+    auto at = [&](int bin) { return img.pixelColor(bin * step + step / 2, 1); };
+    check::is_true(at(0) == gui::ConfidenceBand::unmeasured(),
+                   "qrss/band: the preamble, reached but unmeasured, is grey");
+    check::is_true(at(1) == QColor(0, 0, 0), "qrss/band: no better than noise is black");
+    check::is_true(at(2) == gui::ConfidenceBand::color(0.0) && at(2).red() > 200 &&
+                       at(2).green() < 30,
+                   "qrss/band: 0 dB per latent is red");
+    check::is_true(at(3) == QColor(255, 255, 255), "qrss/band: strong is white");
+    check::is_true(at(4) != gui::ConfidenceBand::unmeasured() && at(4) != QColor(0, 0, 0) &&
+                       at(4) != QColor(255, 255, 255),
+                   "qrss/band: what is still to come is not drawn");
+    const QColor blue = gui::ConfidenceBand::color(-5.0);
+    const QColor yellow = gui::ConfidenceBand::color(5.0);
+    check::is_true(blue.blue() > 200 && blue.red() < 30 && yellow.red() > 200 &&
+                       yellow.green() > 200 && yellow.blue() < 30,
+                   "qrss/band: blue low, yellow high, between red and white");
+    check::is_true(gui::ConfidenceBand::color(-40.0) == QColor(0, 0, 0) &&
+                       gui::ConfidenceBand::color(30.0) == QColor(255, 255, 255),
+                   "qrss/band: clamped at both ends");
+}
+
 std::vector<double> ramp(double from, int n) {
     std::vector<double> v(static_cast<std::size_t>(n));
     for (int i = 0; i < n; ++i) v[static_cast<std::size_t>(i)] = (from + i) * 1e-4;
@@ -206,6 +250,7 @@ int main(int argc, char** argv) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
     const QApplication app(argc, argv);
     test_tiles_follow_the_state_file();
+    test_the_confidence_band();
     test_audio_reaches_the_listener_once();
     return check::report("qrss window");
 }

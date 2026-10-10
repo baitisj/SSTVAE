@@ -244,6 +244,12 @@ exactly what the receiver wants to add up.
   any confidence at all.
 - **Mean weight**: how confident those numbers are on average. Higher
   (closer to 0 dB or above) is better.
+- **The coloured band** under a picture: the same confidence, moment by
+  moment through the pass, left to right. Black means that stretch was
+  no better than noise; blue is weak, then red, yellow, and white for a
+  strong, clear signal. Grey means there was nothing to measure there
+  (the knock at the start, or audio the listener didn't hear). A black
+  stretch in the middle is usually a fade or a burst of interference.
 - **Mode A / B / C** and **passes**: how many passes the picture is sent
   in, and how many of them are in the picture shown.
 

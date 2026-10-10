@@ -13,6 +13,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPainter>
 #include <QPixmap>
 #include <QPlainTextEdit>
 #include <QProcessEnvironment>
@@ -25,6 +26,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -69,6 +72,78 @@ QString hhmm(const QString& iso) {
 
 }  // namespace
 
+// --- confidence band ---------------------------------------------------------------------
+
+namespace {
+
+constexpr int BAND_H = 2;
+
+struct Stop {
+    double db;
+    int r, g, b;
+};
+constexpr Stop BAND_STOPS[] = {
+    {-10.0, 0, 0, 0},       // no better than noise
+    {-5.0, 0, 40, 255},     // low
+    {0.0, 230, 0, 0},
+    {5.0, 255, 220, 0},
+    {10.0, 255, 255, 255},  // high
+};
+
+}  // namespace
+
+ConfidenceBand::ConfidenceBand(QWidget* parent) : QWidget(parent) {
+    setFixedSize(PICTURE_W, BAND_H);
+    setToolTip(tr("Confidence through the pass, left to right: the SNR of each stretch's "
+                  "picture numbers. Black is no better than noise (-10 dB or less), then "
+                  "blue, red, yellow, and white at +10 dB or more. Grey: nothing to measure "
+                  "there (the preamble, or audio not heard)."));
+}
+
+void ConfidenceBand::set(std::vector<std::optional<double>> bins, double progress) {
+    bins_ = std::move(bins);
+    progress_ = progress;
+    update();
+}
+
+QColor ConfidenceBand::color(double snr_db) {
+    const auto& lo = BAND_STOPS[0];
+    const auto& hi = BAND_STOPS[std::size(BAND_STOPS) - 1];
+    if (!(snr_db > lo.db)) return QColor(lo.r, lo.g, lo.b);
+    if (snr_db >= hi.db) return QColor(hi.r, hi.g, hi.b);
+    for (std::size_t i = 1; i < std::size(BAND_STOPS); ++i) {
+        const Stop& a = BAND_STOPS[i - 1];
+        const Stop& b = BAND_STOPS[i];
+        if (snr_db <= b.db) {
+            const double f = (snr_db - a.db) / (b.db - a.db);
+            auto mix = [f](int x, int y) {
+                return static_cast<int>(std::lround(x + (y - x) * f));
+            };
+            return QColor(mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b));
+        }
+    }
+    return QColor(hi.r, hi.g, hi.b);
+}
+
+QColor ConfidenceBand::unmeasured() { return QColor(128, 128, 128); }
+
+void ConfidenceBand::paintEvent(QPaintEvent*) {
+    const int n = static_cast<int>(bins_.size());
+    if (n == 0) return;
+    QPainter painter(this);
+    for (int i = 0; i < n; ++i) {
+        const int x0 = static_cast<int>(std::lround(static_cast<double>(i) * width() / n));
+        const int x1 = static_cast<int>(std::lround(static_cast<double>(i + 1) * width() / n));
+        if (x1 <= x0) continue;
+        const std::optional<double>& v = bins_[static_cast<std::size_t>(i)];
+        if (v) {
+            painter.fillRect(x0, 0, x1 - x0, height(), color(*v));
+        } else if (static_cast<double>(i) / n < progress_) {
+            painter.fillRect(x0, 0, x1 - x0, height(), unmeasured());
+        }
+    }
+}
+
 // --- tile -------------------------------------------------------------------------------
 
 QrssTile::QrssTile(QWidget* parent) : QWidget(parent) {
@@ -81,6 +156,7 @@ QrssTile::QrssTile(QWidget* parent) : QWidget(parent) {
     picture_->setFrameShape(QFrame::Box);
     picture_->setText(tr("Waiting for the header"));
     picture_->setWordWrap(true);
+    band_ = new ConfidenceBand(this);
     title_ = new QLabel(this);
     QFont bold = title_->font();
     bold.setBold(true);
@@ -97,7 +173,12 @@ QrssTile::QrssTile(QWidget* parent) : QWidget(parent) {
     progress_->setTextVisible(false);
     progress_->setFixedHeight(8);
     progress_text_ = new QLabel(this);
-    box->addWidget(picture_);
+    // The band sits right under the picture it describes.
+    auto* picture_and_band = new QVBoxLayout;
+    picture_and_band->setSpacing(1);
+    picture_and_band->addWidget(picture_);
+    picture_and_band->addWidget(band_);
+    box->addLayout(picture_and_band);
     box->addWidget(title_);
     box->addWidget(progress_text_);
     box->addWidget(progress_);
@@ -120,6 +201,11 @@ void QrssTile::update_from(const QJsonObject& t, const QString& dir) {
     const double progress = t.value(QStringLiteral("progress")).toDouble();
     progress_->setValue(static_cast<int>(std::lround(100.0 * std::clamp(progress, 0.0, 1.0))));
     progress_text_->setText(tr("%1% of the pass").arg(progress_->value()));
+    std::vector<std::optional<double>> bins;
+    for (const QJsonValue& v : t.value(QStringLiteral("confidence")).toArray()) {
+        bins.push_back(v.isDouble() ? std::optional<double>(v.toDouble()) : std::nullopt);
+    }
+    band_->set(std::move(bins), std::clamp(progress, 0.0, 1.0));
 
     QStringList lines;
     lines << tr("Slot %1 · %2 Hz · SNR %3")

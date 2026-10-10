@@ -145,6 +145,18 @@ fills in through the pass. When the frame ends, the whole slot is
 received again, stored and associated, and the tile shows the picture
 accumulated over every pass of it.
 
+Under each tile's picture a 2-pixel band shows that pass's confidence
+over time, from the start of the pass at the left to its end at the
+right: the per-latent SNR of the picture numbers sent in each ~15 s
+stretch (and, for the header's first 80 s, of the header symbols).
+Black is no better than noise (-10 dB or less), then blue (-5 dB), red
+(0 dB), yellow (+5 dB) and white (+10 dB or more); a single pass needs
+around +2 dB on average for a good picture. Grey marks a stretch with
+nothing to measure (the preamble, or audio the listener did not hear),
+and the band grows as the pass arrives. The values are the tile's
+`confidence` in `state.json`, 120 bins in dB, null where there is
+nothing to say.
+
 From the desktop app: **View > QRSS signals**, then **Start listener**,
 and press **Listen** in the receive pane so there is audio to hear. The
 window pipes the receive pane's audio into the listener and shows its

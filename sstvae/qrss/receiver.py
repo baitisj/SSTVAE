@@ -58,6 +58,7 @@ import numpy as np
 from . import acquire, cwid, demod, frontend, header, track
 from .constants import CH_FS, FE_FS, LEAD_IN_MAX_S, SPAN, T_SYM, WAVEFORM_CE, Z_ACCEPT
 from .frame import FULL, FrameSpec
+from .frame import layout as frame_layout
 from .morse import check_callsign, keying_units
 from .types import CwIdResult, Detection, EmPrior, FreqPath, PassResult, Timing, pass_uid
 
@@ -358,6 +359,65 @@ def mean_w_db(p: PassResult) -> float:
     return float(10 * math.log10(max(float(np.mean(w)), 1e-30)))
 
 
+CONF_BINS = 120             # one per ~15 s of a FULL pass
+CONF_FLOOR_DB = -30.0       # "no information": W of 0 (erased, or nothing there)
+
+
+def confidence_db(p: PassResult, spec: FrameSpec, elapsed_s: float | None = None,
+                  n: int = CONF_BINS) -> list[float | None]:
+    """A pass's confidence over time: per-latent SNR in dB, `n` bins from t0 to the frame's end.
+
+    Data latents give their W (the per-latent SNR, demod's w = 1/v) at
+    the time of their block. Header symbols give theirs from the LLRs,
+    which are 2 y / s2 with E[y | x] = x = +-1, so E[llr^2] / 4 =
+    (1 + s2) / s2^2, solved for 1/s2 over the bin. A bin's value is the
+    mean over both, floored at CONF_FLOOR_DB. None where there is
+    nothing to say: not yet arrived (past `elapsed_s` seconds after t0),
+    not heard (psi 0 throughout), or no data or header symbols in it
+    (the preamble).
+    """
+    lay = frame_layout(spec)
+    end = float(spec.keyed_end_pos * T_SYM)
+    edges = np.linspace(0.0, end, n + 1)
+    psi = getattr(p, "psi", None)
+    psi = np.asarray(psi) if psi is not None and len(psi) == spec.n_pos else None
+
+    def place(idx):
+        pos = lay.pos[idx]
+        t = pos * T_SYM
+        ok = np.ones(len(idx), dtype=bool) if psi is None else psi[pos] > 0
+        if elapsed_s is not None:
+            ok &= t <= elapsed_s
+        return np.clip(np.searchsorted(edges, t, side="right") - 1, 0, n - 1), ok
+
+    w = np.asarray(p.w, dtype=np.float64)
+    total = np.zeros(n)
+    count = np.zeros(n)
+    if len(w) == len(lay.data):
+        b, ok = place(lay.data)
+        total += np.bincount(b[ok], w[ok], minlength=n)
+        count += np.bincount(b[ok], minlength=n)
+    llr = getattr(p, "hdr_llr", None)
+    if llr is not None and spec.n_hdr and len(llr) == len(lay.hdr_bits):
+        b, ok = place(lay.hdr_bits)
+        k = np.bincount(b[ok], minlength=n)
+        m = np.bincount(b[ok], np.asarray(llr, dtype=np.float64)[ok] ** 2, minlength=n) / 4.0
+        with np.errstate(invalid="ignore", divide="ignore"):
+            m = np.where(k > 0, m / np.maximum(k, 1), 0.0)
+            snr = np.where(m > 0, 2.0 * m / (1.0 + np.sqrt(1.0 + 4.0 * m)), 0.0)
+        total += snr * k
+        count += k
+    out: list[float | None] = []
+    for tot, c in zip(total, count):
+        if c == 0:
+            out.append(None)
+        else:
+            mean = tot / c
+            db = 10.0 * math.log10(mean) if mean > 0 else CONF_FLOOR_DB
+            out.append(round(max(db, CONF_FLOOR_DB), 1))
+    return out
+
+
 __all__ = ["Prepared", "prepare", "channel_for", "receive_pass", "receive_slot",
            "receive_wav", "capture_from_wav", "detect", "detection_from_pass",
-           "capture_from_pass", "mean_w_db", "Timing"]
+           "capture_from_pass", "mean_w_db", "confidence_db", "Timing"]

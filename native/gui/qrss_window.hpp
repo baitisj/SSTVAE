@@ -35,6 +35,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <vector>
 
 class QCloseEvent;
 class QJsonObject;
@@ -130,6 +132,32 @@ private:
     QString state_summary_;
 };
 
+// A pass's confidence over time, a 2-pixel strip under a tile's picture:
+// the listener's `confidence`, the per-latent SNR in dB of each stretch
+// of the pass (receiver.confidence_db), from t0 at the left to the end
+// of the frame at the right. A stretch with nothing measured (the
+// preamble, audio not heard) is grey once the pass has reached it, and
+// a stretch still to come is not drawn.
+class ConfidenceBand : public QWidget {
+public:
+    explicit ConfidenceBand(QWidget* parent = nullptr);
+    void set(std::vector<std::optional<double>> bins, double progress);
+    const std::vector<std::optional<double>>& bins() const { return bins_; }
+
+    // Black at -10 dB per latent or less (no better than noise), then
+    // blue at -5, red at 0, yellow at +5 and white at +10 dB or more,
+    // so the colour brightens as confidence rises.
+    static QColor color(double snr_db);
+    static QColor unmeasured();
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    std::vector<std::optional<double>> bins_;
+    double progress_ = 0.0;
+};
+
 // One signal: picture, what it is, how far through its pass.
 class QrssTile : public QWidget {
     Q_OBJECT
@@ -143,9 +171,11 @@ public:
     bool has_picture() const;
     int progress_percent() const;
     QString progress_text() const;
+    ConfidenceBand* band() const { return band_; }
 
 private:
     QLabel* picture_ = nullptr;
+    ConfidenceBand* band_ = nullptr;
     QLabel* title_ = nullptr;
     QLabel* details_ = nullptr;
     QProgressBar* progress_ = nullptr;

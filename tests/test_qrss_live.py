@@ -158,11 +158,45 @@ def test_slot_bookkeeping_with_a_stub_receiver(tmp_path, monkeypatch):
     st = json.loads((tmp_path / "state.json").read_text())
     assert [t["id"] for t in st["tiles"]] == [t.id for t in L.tiles()]
     assert st["frame"] == "tiny" and st["listening"]
+    # complete: every bin of the band has a value (W = 1 is 0 dB)
+    conf = st["tiles"][0]["confidence"]
+    assert len(conf) == RX.CONF_BINS and conf[-1] == 0.0
     # a restart keeps the finished tiles; they expire after keep_done_s
     L2 = live.LiveListener(tmp_path, cfg, log=lambda m: None)
     assert len(L2.tiles()) == 2
     L2.step(L2.tiles()[0].updated + cfg.keep_done_s + 1)
     assert L2.tiles() == []
+
+
+def test_confidence_over_the_pass():
+    """The band under a tile: per-latent SNR over time, from W and the header LLRs."""
+    from types import SimpleNamespace
+
+    spec = frame.FULL
+    lay = frame.layout(spec)
+    t_data = lay.pos[lay.data] * T_SYM
+    w = np.where(t_data < 900.0, 10 ** 0.4, 0.0).astype(np.float32)   # 4 dB, then nothing
+    s2 = 0.5                                                          # header at 3 dB
+    rng = np.random.default_rng(3)
+    x = rng.choice([-1.0, 1.0], len(lay.hdr_bits))
+    llr = (2 * (x + rng.normal(0.0, s2 ** 0.5, len(x))) / s2).astype(np.float32)
+    psi = np.ones(spec.n_pos, dtype=np.float32)
+    psi[int(1200 / T_SYM):int(1300 / T_SYM)] = 0.0                    # not heard
+    p = SimpleNamespace(w=w, hdr_llr=llr, psi=psi)
+    c = RX.confidence_db(p, spec)
+    bin_s = spec.keyed_end_pos * T_SYM / RX.CONF_BINS
+
+    def at(t):
+        return c[int(t / bin_s)]
+
+    assert len(c) == RX.CONF_BINS
+    assert c[0] is None                                   # the preamble: nothing to measure
+    assert abs(at(50.0) - 3.0) < 0.6                      # header, from its LLRs
+    assert at(500.0) == 4.0                               # data, from W
+    assert at(1000.0) == RX.CONF_FLOOR_DB                 # heard, no information
+    assert at(1250.0) is None                             # not heard
+    live_c = RX.confidence_db(p, spec, elapsed_s=600.0)   # 600 s into the pass
+    assert at(500.0) == live_c[int(500.0 / bin_s)] and live_c[int(700.0 / bin_s)] is None
 
 
 def test_implausible_and_neighbour_passes_get_no_tile(tmp_path):

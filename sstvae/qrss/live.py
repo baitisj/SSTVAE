@@ -243,6 +243,9 @@ class Tile:
     heard: float = 0.0              # share of the frame's audio heard
     received: float = 0.0           # share of the data latents with W > 0
     mean_w_db: float | None = None
+    # This pass's per-latent SNR (dB) over time, receiver.CONF_BINS bins
+    # from t0 to the frame's end; None where there is nothing to say.
+    confidence: list = field(default_factory=list)
     passes: int = 1                 # passes of this picture in the picture shown
     image: str | None = None        # path relative to the state directory
     image_rev: int = 0              # bumped every time the picture changes
@@ -741,6 +744,8 @@ class LiveListener:
         w = np.asarray(p.w, dtype=np.float64)
         t.received = float(np.mean(w > 0)) if len(w) else 0.0
         t.mean_w_db = receiver.mean_w_db(p) if t.received > 0 else None
+        t.confidence = receiver.confidence_db(
+            p, self.cfg.spec, t.progress * frame_seconds(self.cfg.spec))
         h = p.header
         if h is not None:
             self._headers[t.id] = h
