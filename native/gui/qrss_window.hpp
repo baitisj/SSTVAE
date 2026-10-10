@@ -65,14 +65,14 @@ class QrssWindow : public QWidget {
 
 public:
     // A window of its own by default; the main window embeds it in its
-    // QRSSTVAE tab with `Qt::Widget`.
+    // QRSSTVAE mode with `Qt::Widget`.
     explicit QrssWindow(QWidget* parent = nullptr, Qt::WindowFlags flags = Qt::Window);
     ~QrssWindow() override;
 
     // The receive pane's capture ring, or null when it is not listening.
     // Called by ReceivePanel wherever it hands the waterfall its ring.
     void set_ring(std::shared_ptr<rx::RingBuffer> ring);
-    // The QRSSTVAE tab's spectrogram: handed the same ring, and the
+    // The QRSSTVAE mode's spectrogram: handed the same ring, and the
     // tiles' frequencies and passes to draw in red.
     void set_spectrogram(QrssSpectrogram* spectrogram);
     // The two tile columns, for tests.
@@ -95,7 +95,7 @@ public:
     void set_command(const QString& command);
 
     // The listener's command row and its output log. Shown in a window
-    // of its own; the QRSSTVAE tab hides them behind a toggle.
+    // of its own; the QRSSTVAE mode hides them behind a toggle.
     void set_details_visible(bool on);
     bool details_visible() const;
 

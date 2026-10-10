@@ -307,7 +307,7 @@ QrssWindow::QrssWindow(QWidget* parent, Qt::WindowFlags flags) : QWidget(parent,
     auto* box = new QVBoxLayout(this);
 
     // The listener's own controls: its command and a Start/Stop for the
-    // process alone. On the QRSSTVAE tab one Start runs both the audio and
+    // process alone. On the QRSSTVAE mode one Start runs both the audio and
     // the listener, so these and the log are details the page hides.
     listener_row_ = new QWidget(this);
     listener_row_->setObjectName(QStringLiteral("qrss_listener_row"));
@@ -724,7 +724,7 @@ void QrssWindow::update_header() {
 
 void QrssWindow::closeEvent(QCloseEvent* event) {
     // Closing the window only hides it; the listener keeps running and
-    // View > QRSS signals brings it back.
+    // View > QRSSTVAE brings it back.
     hide();
     event->ignore();
 }

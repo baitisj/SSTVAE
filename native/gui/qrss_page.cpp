@@ -21,7 +21,7 @@ QrssPage::QrssPage(QrssWindow* signals_view, QWidget* parent)
     listen_->setObjectName(QStringLiteral("qrss_listen"));
     listen_->setToolTip(tr("Starts and stops the radio's audio and the QRSS listener "
                            "together. The audio also feeds the SSTVAE decoder, the same "
-                           "as Start receiving on the SSTVAE tab."));
+                           "as Start receiving in SSTVAE mode."));
     connect(listen_, &QPushButton::clicked, this, [this] { emit listenRequested(!listening_); });
     row->addWidget(listen_);
     listen_state_ = new QLabel(this);

@@ -121,6 +121,7 @@ NON_DEFAULT = {
         # starts open.
         "layout": "tabs",
         "log_visible": False,
+        "mode": "qrsstvae",
         "waterfall_height": 140,
     },
     "version": 2,

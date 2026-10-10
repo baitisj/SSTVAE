@@ -1,11 +1,11 @@
-// The main window's QRSSTVAE tab: the QRSS spectrogram
+// The main window's QRSSTVAE mode: the QRSS spectrogram
 // (gui/qrss_spectrogram.hpp) and, beside it across a divider, the
 // received pane of tiles (gui/qrss_window.hpp), with a row above them
 // for receiving audio at all and for the transmit schedule.
 //
 // Receiving is the receive pane's: one sound-card stream feeds both the
 // SSTVAE decoder and the QRSS listener, so Start here and Start on the
-// SSTVAE tab are one switch, shown the same in both places. The page only
+// SSTVAE mode are one switch, shown the same in both places. The page only
 // asks for it (`listenRequested`) and shows what it is told
 // (`set_listening`), so it holds no audio of its own and a test can drive
 // it without a sound card.

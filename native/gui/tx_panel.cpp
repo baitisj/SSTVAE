@@ -762,7 +762,7 @@ QWidget* TransmitPanel::build_send_bar() {
             tr("Mode %1 - %2 s").arg(name).arg(spec.duration_s, 0, 'f', 0), name);
     }
     // QRSSTVAE modes are not here: QRSS sends are scheduled, from the
-    // main window's QRSSTVAE tab (Schedule...).
+    // main window's QRSSTVAE mode (Schedule...).
     const settings::TransmitConfig& tcfg = app_->config().transmit;
     const int mode_index = mode_combo_->findData(QString::fromStdString(tcfg.mode));
     mode_combo_->setCurrentIndex(std::max(0, mode_index));

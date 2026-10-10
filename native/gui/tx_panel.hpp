@@ -96,7 +96,7 @@ public:
     // hold it to the same height as the receive pane's strip.
     QWidget* control_strip() const;
     // Scheduled QRSS sends (gui/qrss_schedule.hpp), and the window the
-    // QRSSTVAE tab's "Schedule..." button opens. The window is made on
+    // QRSSTVAE mode's "Schedule..." button opens. The window is made on
     // first use.
     QrssScheduler* scheduler() const { return scheduler_; }
     QrssScheduleWindow* schedule_window() const { return schedule_window_; }
@@ -142,7 +142,7 @@ public slots:
 
 signals:
     // The next scheduled QRSS send, in a line, whenever the schedule
-    // changes (shown on the main window's QRSSTVAE tab).
+    // changes (shown on the main window's QRSSTVAE mode).
     void scheduleChanged(const QString& summary);
     void transmitStarted();
     void transmitFinished();

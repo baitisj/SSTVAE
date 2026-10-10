@@ -176,7 +176,7 @@ void test_the_level_controls_are_one_flow_item() {
 }
 
 // QRSS modes are not in the transmit pane any more: QRSS sends are
-// scheduled from the main window's QRSSTVAE tab. A config saved with one
+// scheduled from the main window's QRSSTVAE mode. A config saved with one
 // chosen (an older build) falls back to its SSTVAE mode.
 void test_no_qrss_modes_in_the_pane() {
     AppState state;

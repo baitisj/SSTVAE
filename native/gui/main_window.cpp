@@ -17,7 +17,7 @@
 #include <QMessageBox>
 #include <QScreen>
 #include <QStatusBar>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -119,7 +119,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     rx_panel_ = new ReceivePanel(state_);
     tx_panel_ = new TransmitPanel(state_);
     rx_panel_->attach_waterfall(waterfall_);
-    // The QRSS signals are the QRSSTVAE tab, made now so the receive pane
+    // The QRSS signals are the QRSSTVAE mode, made now so the receive pane
     // can hand them the capture ring from its first Listen.
     qrss_ = new QrssWindow(nullptr, Qt::Widget);
     rx_panel_->attach_qrss(qrss_);
@@ -172,17 +172,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // was removed to lock the panes equal -- that one decided which
     // pane won, and this one only decides how much spectrum history is
     // on screen.
-    // **Two tabs, one per protocol** (Jeff, 2026-10-10): SSTVAE is the
-    // two panes as they were; QRSSTVAE is the QRSS signals, with
-    // receiving and the transmit schedule above them. QRSS modes left the
-    // transmit pane's mode list with this: a QRSS send is scheduled. The
-    // waterfall stays above both, since both are tuned by it.
+    // **Two UI modes, one per protocol** (Jeff, 2026-10-10), picked
+    // under View rather than tabs: SSTVAE is the two panes as they were;
+    // QRSSTVAE is the QRSS signals, with receiving and the transmit
+    // schedule above them. QRSS modes left the transmit pane's mode list
+    // with this: a QRSS send is scheduled. The waterfall stays above
+    // both, since both are tuned by it.
     qrss_page_ = new QrssPage(qrss_);
-    main_tabs_ = new QTabWidget(this);
-    main_tabs_->setObjectName(QStringLiteral("main_tabs"));
-    main_tabs_->setDocumentMode(true);
-    main_tabs_->addTab(panes_, tr("SSTVAE"));
-    main_tabs_->addTab(qrss_page_, tr("QRSSTVAE"));
+    modes_ = new QStackedWidget(this);
+    modes_->setObjectName(QStringLiteral("main_modes"));
+    modes_->addWidget(panes_);
+    modes_->addWidget(qrss_page_);
     connect(qrss_page_, &QrssPage::listenRequested, this, [this](bool on) {
         if (on) {
             // Start on this tab means "hear QRSS": the listener too.
@@ -201,7 +201,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     stack_ = new GripSplitter(Qt::Vertical, this);
     stack_->addWidget(waterfall_);
-    stack_->addWidget(main_tabs_);
+    stack_->addWidget(modes_);
     stack_->setStretchFactor(0, 0);
     stack_->setStretchFactor(1, 1);
     // Neither half may be dragged out of existence: a waterfall of zero
@@ -214,6 +214,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             [this](int, int) { remember_waterfall_height(); });
 
     build_menu();
+    set_ui_mode(state_->config().ui.mode == "qrsstvae" ? UiMode::Qrsstvae : UiMode::Sstvae);
     build_status_bar();
     build_log_dock();
 
@@ -304,6 +305,7 @@ void MainWindow::build_layout_menu() {
     // choose "whatever you think" over an answer they can see. Picking
     // either entry writes a concrete value and ends the guessing.
     QMenu* layout = view_menu_->addMenu(tr("&Layout"));
+    layout_menu_ = layout;
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
 
@@ -439,10 +441,23 @@ void MainWindow::build_menu() {
     // The action is added in build_log_dock(), which runs after this;
     // the menu pointer is kept on the window via findChild-free means.
     view_menu_ = menuBar()->addMenu(tr("&View"));
+    auto* modes = new QActionGroup(this);
+    modes->setExclusive(true);
+    sstvae_action_ = view_menu_->addAction(tr("&SSTVAE"));
+    sstvae_action_->setObjectName(QStringLiteral("mode_sstvae"));
+    sstvae_action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+    qrsstvae_action_ = view_menu_->addAction(tr("&QRSSTVAE"));
+    qrsstvae_action_->setObjectName(QStringLiteral("mode_qrsstvae"));
+    qrsstvae_action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_2));
+    for (QAction* a : {sstvae_action_, qrsstvae_action_}) {
+        a->setCheckable(true);
+        a->setActionGroup(modes);
+    }
+    connect(sstvae_action_, &QAction::triggered, this, [this] { set_ui_mode(UiMode::Sstvae); });
+    connect(qrsstvae_action_, &QAction::triggered, this,
+            [this] { set_ui_mode(UiMode::Qrsstvae); });
+    view_menu_->addSeparator();
     build_layout_menu();
-    QAction* qrss = view_menu_->addAction(tr("&QRSS signals"));
-    connect(qrss, &QAction::triggered, this,
-            [this] { main_tabs_->setCurrentWidget(qrss_page_); });
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     QAction* about = help->addAction(tr("&About SSTVAE"));
@@ -466,6 +481,25 @@ void MainWindow::restore_waterfall_height() {
     // constructor.
     const int rest = std::max(1, total - height);
     stack_->setSizes({height, rest});
+}
+
+MainWindow::UiMode MainWindow::ui_mode() const {
+    return modes_->currentWidget() == qrss_page_ ? UiMode::Qrsstvae : UiMode::Sstvae;
+}
+
+void MainWindow::set_ui_mode(UiMode mode) {
+    const bool qrss = mode == UiMode::Qrsstvae;
+    modes_->setCurrentWidget(qrss ? static_cast<QWidget*>(qrss_page_) : panes_);
+    sstvae_action_->setChecked(!qrss);
+    qrsstvae_action_->setChecked(qrss);
+    // Side by side or tabbed is about the SSTVAE panes only.
+    if (layout_menu_ != nullptr) layout_menu_->setEnabled(!qrss);
+    const QString app = QString::fromLatin1(APP_NAME);
+    setWindowTitle(qrss ? app + tr(" - QRSSTVAE") : app);
+    const std::string value = qrss ? "qrsstvae" : "sstvae";
+    if (state_->config().ui.mode == value) return;
+    state_->config().ui.mode = value;
+    state_->save_config();
 }
 
 void MainWindow::remember_waterfall_height() {

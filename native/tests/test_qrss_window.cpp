@@ -256,7 +256,7 @@ void test_audio_reaches_the_listener_once() {
 
 }  // namespace
 
-// The main window's QRSSTVAE tab: the signals embedded rather than a
+// The main window's QRSSTVAE mode: the signals embedded rather than a
 // window of their own, one Start/Stop that asks the receive pane, and the
 // schedule's next send with the button that opens it.
 void test_the_qrss_tab() {

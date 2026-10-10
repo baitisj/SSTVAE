@@ -40,7 +40,8 @@
 
 class QAction;
 class QSplitter;
-class QTabWidget;
+class QActionGroup;
+class QStackedWidget;
 class QDockWidget;
 class QLabel;
 class QMenu;
@@ -63,8 +64,15 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    // The two UI modes, picked under View (Jeff, 2026-10-10): SSTVAE,
+    // the receive and transmit panes; QRSSTVAE, QRSS reception and its
+    // schedule. Remembered in `ui.mode`.
+    enum class UiMode { Sstvae, Qrsstvae };
+    UiMode ui_mode() const;
+
 public slots:
     void open_settings();
+    void set_ui_mode(UiMode mode);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -110,9 +118,12 @@ private:
     ReceivePanel* rx_panel_ = nullptr;
     QrssWindow* qrss_ = nullptr;
     QrssPage* qrss_page_ = nullptr;
-    // SSTVAE (the two panes) and QRSSTVAE (the QRSS signals), under the
-    // waterfall, which both use.
-    QTabWidget* main_tabs_ = nullptr;
+    // SSTVAE (the two panes) or QRSSTVAE (the QRSS signals), one at a
+    // time, under the waterfall, which both use.
+    QStackedWidget* modes_ = nullptr;
+    QAction* sstvae_action_ = nullptr;
+    QAction* qrsstvae_action_ = nullptr;
+    QMenu* layout_menu_ = nullptr;
     TransmitPanel* tx_panel_ = nullptr;
     QLabel* ptt_label_ = nullptr;
     QLabel* station_label_ = nullptr;

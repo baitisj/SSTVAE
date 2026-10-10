@@ -1,4 +1,4 @@
-// The QRSSTVAE tab's spectrogram, after Argo, with a "Time Lens" after
+// The QRSSTVAE mode's spectrogram, after Argo, with a "Time Lens" after
 // Glissando: frequency up the screen, time across it, the newest audio
 // entering at the left edge and unfurling to the right as it ages.
 //

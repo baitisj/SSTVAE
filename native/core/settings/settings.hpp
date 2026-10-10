@@ -264,6 +264,11 @@ struct UiConfig {
     // stops the window shrinking to the width that would trigger the
     // switch, so the downward transition is unreachable by definition.
     std::string layout = "auto";
+
+    // "sstvae" | "qrsstvae": which of the two UI modes (View menu) the
+    // window shows -- the SSTVAE panes, or QRSS reception and its
+    // schedule. Remembered so the app opens the way it was left.
+    std::string mode = "sstvae";
 };
 
 struct Config {

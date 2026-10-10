@@ -86,7 +86,7 @@ void usage() {
                  "  --transmit   also shoot the transmit panel\n"
                  "  --receive    also shoot the receive panel\n"
                  "  --crop       also shoot the framing dialog\n"
-                 "  --qrss-tab   also shoot the QRSSTVAE tab on two hours of made-up\n"
+                 "  --qrss-tab   also shoot the QRSSTVAE mode on two hours of made-up\n"
                  "               signals\n"
                  "  --window     also shoot the whole main window\n"
                  "  --log        also shoot the log pane and error banner\n"
@@ -564,15 +564,18 @@ int main(int argc, char** argv) {
                             a == b ? "  (equal)" : "  <-- NOT EQUAL");
             }
         }
-        // The QRSSTVAE tab.
-        if (auto* tabs = win.findChild<QTabWidget*>(QStringLiteral("main_tabs"))) {
-            tabs->setCurrentIndex(1);
+        // The QRSSTVAE mode.
+        {
+            using Mode = sstvae::gui::MainWindow::UiMode;
+            const Mode was = win.ui_mode();
+            win.set_ui_mode(Mode::Qrsstvae);
             for (int i = 0; i < 10; ++i) app.processEvents();
             const QString qpath = QStringLiteral("%1/window-qrss.png").arg(out);
             win.grab().save(qpath);
             std::printf("%s\n", qpath.toLocal8Bit().constData());
-            tabs->setCurrentIndex(0);
+            win.set_ui_mode(Mode::Sstvae);
             for (int i = 0; i < 10; ++i) app.processEvents();
+            win.set_ui_mode(was);
         }
         auto* panes = win.findChild<sstvae::gui::PaneContainer*>();
         if (panes != nullptr) {
@@ -594,7 +597,7 @@ int main(int argc, char** argv) {
     // The framing dialog, on a 16:9 source -- the case it exists for,
     // where a quarter of the width is being given up and the dimmed
     // region is what the operator is deciding about.
-    // The QRSSTVAE tab, on made-up signals: two hours of noise with a
+    // The QRSSTVAE mode, on made-up signals: two hours of noise with a
     // CE-like signal (a carrier wandering over 50 Hz) on two passes at
     // 1500 Hz, a weaker one at 1100 Hz, and a drifting plain carrier;
     // and tiles for the 1500 Hz passes (one with a header, one without).
