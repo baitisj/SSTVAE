@@ -147,8 +147,8 @@ TransmitPanel::TransmitPanel(AppState* state, QWidget* parent)
         }
         app_->log_event("tx", level, m);
     });
-    connect(scheduler_, &QrssScheduler::changed, this, &TransmitPanel::update_schedule_button);
-    update_schedule_button();
+    connect(scheduler_, &QrssScheduler::changed, this, &TransmitPanel::update_schedule_summary);
+    update_schedule_summary();
 }
 
 TransmitPanel::~TransmitPanel() {
@@ -761,26 +761,14 @@ QWidget* TransmitPanel::build_send_bar() {
         mode_combo_->addItem(
             tr("Mode %1 - %2 s").arg(name).arg(spec.duration_s, 0, 'f', 0), name);
     }
-    // QRSSTVAE CE: one half-hour pass per 50,600-latent group, so mode
-    // A takes 30 min, B 60 and C 90 (docs/qrss/README.md). The data is
-    // "QRSS-A" etc., never a bare letter, so nothing confuses the two.
-    for (const char* name : {"A", "B", "C"}) {
-        mode_combo_->addItem(tr("QRSS CE Mode %1 - %2 min")
-                                 .arg(QLatin1String(name))
-                                 .arg(qrss_tx::minutes_for(name)),
-                             QStringLiteral("QRSS-%1").arg(QLatin1String(name)));
-    }
+    // QRSSTVAE modes are not here: QRSS sends are scheduled, from the
+    // main window's QRSSTVAE tab (Schedule...).
     const settings::TransmitConfig& tcfg = app_->config().transmit;
-    const int mode_index = mode_combo_->findData(
-        tcfg.qrss_mode.empty() ? QString::fromStdString(tcfg.mode)
-                               : QStringLiteral("QRSS-") + QString::fromStdString(tcfg.qrss_mode));
+    const int mode_index = mode_combo_->findData(QString::fromStdString(tcfg.mode));
     mode_combo_->setCurrentIndex(std::max(0, mode_index));
     mode_combo_->setToolTip(
         tr("How long the transmission takes, and how much detail it carries. "
-           "Longer modes send more latents, so they survive a poorer path.\n\n"
-           "QRSS CE modes send the picture as one very narrow carrier, one "
-           "half-hour pass per group of latents, each starting on the next "
-           "quarter hour, with your callsign in Morse every 7.5 minutes."));
+           "Longer modes send more latents, so they survive a poorer path."));
     connect(mode_combo_, &QComboBox::currentIndexChanged, this,
             &TransmitPanel::on_mode_changed);
 
@@ -828,36 +816,11 @@ QWidget* TransmitPanel::build_send_bar() {
             [this] { app_->save_config(); });
     update_level_label();
 
-    // Where in the passband a QRSS signal goes. Enabled only with a QRSS
-    // mode selected; present always, like everything in this row, so
-    // switching modes never reflows it.
-    qrss_slider_ = new QSlider(Qt::Horizontal, bar);
-    qrss_slider_->setObjectName(QStringLiteral("qrss_freq_slider"));
-    qrss_slider_->setRange(static_cast<int>(qrss_tx::FREQ_MIN_HZ),
-                           static_cast<int>(qrss_tx::FREQ_MAX_HZ));
-    qrss_slider_->setSingleStep(1);
-    qrss_slider_->setPageStep(50);   // one CE channel
-    qrss_slider_->setMinimumWidth(80);
-    qrss_slider_->setMaximumWidth(160);
-    qrss_slider_->setToolTip(
-        tr("QRSS carrier: the audio frequency the signal is sent on, 300-2700 Hz. "
-           "CE signals are about 50 Hz wide; Page Up/Down moves one channel."));
-    qrss_slider_->setValue(static_cast<int>(std::lround(app_->config().transmit.qrss_freq_hz)));
-    connect(qrss_slider_, &QSlider::valueChanged, this, &TransmitPanel::on_qrss_freq_changed);
-    qrss_label_ = new QLabel(bar);
-    qrss_label_->setObjectName(QStringLiteral("qrss_freq_label"));
-    qrss_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    qrss_label_->setMinimumWidth(
-        qrss_label_->fontMetrics().horizontalAdvance(QStringLiteral("2700 Hz")));
-
     send_button_ = new QPushButton(tr("&Send"), bar);
     connect(send_button_, &QPushButton::clicked, this, &TransmitPanel::send);
     send_button_->setToolTip(
         tr("Encode the composition, key the radio and send it. Any refinement "
            "still running is finished first."));
-    schedule_button_ = new QPushButton(tr("Sched&ule..."), bar);
-    schedule_button_->setObjectName(QStringLiteral("qrss_schedule_button"));
-    connect(schedule_button_, &QPushButton::clicked, this, &TransmitPanel::show_schedule);
     cancel_button_ = new QPushButton(tr("&Cancel"), bar);
     cancel_button_->setToolTip(
         tr("Stop the transmission and unkey the radio."));
@@ -894,41 +857,14 @@ QWidget* TransmitPanel::build_send_bar() {
     // Grouped, they wrap as a unit or not at all.
     layout->addWidget(style::row(
         bar, {new QLabel(tr("Level:"), bar), level_slider_, level_label_}));
-    layout->addWidget(style::row(
-        bar, {new QLabel(tr("QRSS carrier:"), bar), qrss_slider_, qrss_label_}));
     layout->addWidget(send_button_);
-    layout->addWidget(schedule_button_);
     layout->addWidget(cancel_button_);
     layout->addWidget(status_);
-    update_qrss_controls();
     return bar;
 }
 
 std::string TransmitPanel::sstvae_mode() const {
-    const QString data = mode_combo_->currentData().toString();
-    if (data.startsWith(QStringLiteral("QRSS-"))) {
-        const std::string saved = app_->config().transmit.mode;
-        return saved.empty() ? std::string("A") : saved;
-    }
-    return data.toStdString();
-}
-
-std::string TransmitPanel::qrss_mode() const {
-    const QString data = mode_combo_->currentData().toString();
-    return data.startsWith(QStringLiteral("QRSS-")) ? data.mid(5).toStdString() : std::string();
-}
-
-void TransmitPanel::update_qrss_controls() {
-    const bool qrss = !qrss_mode().empty();
-    qrss_slider_->setEnabled(qrss && !transmitting());
-    qrss_label_->setEnabled(qrss);
-    qrss_label_->setText(tr("%1 Hz").arg(qrss_slider_->value()));
-}
-
-void TransmitPanel::on_qrss_freq_changed(int hz) {
-    app_->config().transmit.qrss_freq_hz = hz;
-    update_qrss_controls();
-    save_level_timer_->start();   // the same debounced save the level uses
+    return mode_combo_->currentData().toString().toStdString();
 }
 
 void TransmitPanel::on_level_changed(int steps) {
@@ -947,9 +883,8 @@ void TransmitPanel::on_mode_changed() {
     // hand is for the wrong transmission.
     schedule_optimization();
     settings::TransmitConfig& tcfg = app_->config().transmit;
-    tcfg.qrss_mode = qrss_mode();
-    if (tcfg.qrss_mode.empty()) tcfg.mode = mode_combo_->currentData().toString().toStdString();
-    update_qrss_controls();
+    tcfg.mode = mode_combo_->currentData().toString().toStdString();
+    tcfg.qrss_mode.clear();
     app_->save_config();
     // `{mode}` may be in the composition. `schedule_optimization` above
     // already rebuilds the composite, but from `editor_->composed_image()`
@@ -1092,7 +1027,7 @@ void TransmitPanel::refresh_fields() {
     const QDateTime now = QDateTime::currentDateTimeUtc();
     fields.builtin["utc"] = now.toString(QStringLiteral("HH:mm")).toStdString();
     fields.builtin["date"] = now.toString(QStringLiteral("yyyy-MM-dd")).toStdString();
-    fields.builtin["mode"] = qrss_mode().empty() ? sstvae_mode() : "QRSS " + qrss_mode();
+    fields.builtin["mode"] = sstvae_mode();
     for (const std::string& label : used.custom) {
         const auto it = custom_field_values_.find(label);
         if (it != custom_field_values_.end()) fields.custom[label] = it->second;
@@ -1479,34 +1414,6 @@ void TransmitPanel::send() {
                                  tr("Choose an image to transmit first."));
         return;
     }
-    if (!qrss_mode().empty()) {
-        // A send by hand that would still be on the air when a scheduled
-        // one needs the transmitter costs that one its slot: say so first.
-        const std::string mode = qrss_mode();
-        const double now = scheduler_->now();
-        const std::vector<double> quarter_hours =
-            qrss_tx::plan(now + 60.0, qrss_tx::passes_for(mode));
-        if (!quarter_hours.empty()) {
-            if (const auto c = qrss_schedule::clash_with(scheduler_->entries(), now,
-                                                         qrss_tx::audio_end(quarter_hours.back()), now)) {
-                const qrss_schedule::Entry& e = scheduler_->entries()[c->entry];
-                const auto answer = QMessageBox::question(
-                    this, tr("Scheduled send in the way"),
-                    tr("This send would be on the air until about %1, over the %2 scheduled "
-                       "send of \"%3\", which would then be skipped. Send anyway?")
-                        .arg(QString::fromStdString(
-                                 qrss_schedule::when(qrss_tx::audio_end(quarter_hours.back()), now)),
-                             QString::fromStdString(qrss_schedule::when(c->slot, now)),
-                             QString::fromStdString(e.label)),
-                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-                if (answer != QMessageBox::Yes) return;
-            }
-        }
-        if (thread_.joinable()) thread_.join();
-        banner_->clear();
-        begin_qrss(*image, mode, qrss_slider_->value(), {}, true);
-        return;
-    }
     codec::OnnxCodec* model = app_->model();
     if (model == nullptr) {
         QMessageBox::warning(
@@ -1693,7 +1600,6 @@ std::string TransmitPanel::begin_qrss(const images::Picture& picture, const std:
     cancel_button_->setEnabled(true);
     level_slider_->setEnabled(false);
     mode_combo_->setEnabled(false);
-    qrss_slider_->setEnabled(false);
     last_logged_phase_ = -1;
     running_.store(true);
     emit transmitStarted();
@@ -1756,9 +1662,10 @@ void TransmitPanel::show_schedule() {
             },
             [this] {
                 QrssScheduleWindow::Defaults d;
-                const std::string mode = qrss_mode();
-                if (!mode.empty()) d.mode = mode;
-                d.freq_hz = qrss_slider_->value();
+                // The carrier last scheduled, else the saved one.
+                d.freq_hz = scheduler_->entries().empty()
+                                ? app_->config().transmit.qrss_freq_hz
+                                : scheduler_->entries().back().freq_hz;
                 return d;
             },
             std::move(context), this);
@@ -1772,21 +1679,19 @@ void TransmitPanel::hide_windows() {
     if (schedule_window_ != nullptr) schedule_window_->hide();
 }
 
-void TransmitPanel::update_schedule_button() {
-    // The tooltip only: new text would resize the button, and this row
-    // must not reflow under the receive pane's matched strip.
-    if (schedule_button_ == nullptr || scheduler_ == nullptr) return;
+QString TransmitPanel::schedule_summary() const {
+    if (scheduler_ == nullptr) return {};
     const double now = scheduler_->now();
     const auto next = qrss_schedule::upcoming(scheduler_->entries(), now, 30 * 86400.0, 1);
-    QString tip = tr("Schedule QRSS sends for later: a picture sent several times back to "
-                     "back, every other hour, and so on.");
-    if (!next.empty()) {
-        const qrss_schedule::Entry& e = scheduler_->entries()[next.front().entry];
-        tip += tr(" Next: \"%1\", mode %2 at %3.")
-                   .arg(QString::fromStdString(e.label), QString::fromStdString(e.mode),
-                        QString::fromStdString(qrss_schedule::when(next.front().slot, now)));
-    }
-    schedule_button_->setToolTip(tip);
+    if (next.empty()) return tr("Nothing scheduled.");
+    const qrss_schedule::Entry& e = scheduler_->entries()[next.front().entry];
+    return tr("Next send: \"%1\", mode %2 at %3.")
+        .arg(QString::fromStdString(e.label), QString::fromStdString(e.mode),
+             QString::fromStdString(qrss_schedule::when(next.front().slot, now)));
+}
+
+void TransmitPanel::update_schedule_summary() {
+    emit scheduleChanged(schedule_summary());
 }
 
 void TransmitPanel::cancel() {
@@ -1875,7 +1780,6 @@ void TransmitPanel::on_finished(bool ok) {
     cancel_button_->setEnabled(false);
     level_slider_->setEnabled(true);
     mode_combo_->setEnabled(true);
-    update_qrss_controls();
     progress_->setRange(0, 100);
     progress_->setValue(ok ? 100 : 0);
     if (ok) {

@@ -17,6 +17,7 @@
 #include <QMessageBox>
 #include <QScreen>
 #include <QStatusBar>
+#include <QTabWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -26,6 +27,7 @@
 #include "app_state.hpp"
 #include "log_pane.hpp"
 #include "pane_container.hpp"
+#include "qrss_page.hpp"
 #include "qrss_window.hpp"
 #include "waterfall.hpp"
 #include "rig/hamlib.hpp"
@@ -117,9 +119,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     rx_panel_ = new ReceivePanel(state_);
     tx_panel_ = new TransmitPanel(state_);
     rx_panel_->attach_waterfall(waterfall_);
-    // The QRSS window is created hidden, now, so the receive pane can hand
-    // it the capture ring from its first Listen (View > QRSS signals).
-    qrss_ = new QrssWindow(this);
+    // The QRSS signals are the QRSSTVAE tab, made now so the receive pane
+    // can hand them the capture ring from its first Listen.
+    qrss_ = new QrssWindow(nullptr, Qt::Widget);
     rx_panel_->attach_qrss(qrss_);
 
     // **Each pane is named.** The tabs this replaced carried the only
@@ -170,9 +172,34 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // was removed to lock the panes equal -- that one decided which
     // pane won, and this one only decides how much spectrum history is
     // on screen.
+    // **Two tabs, one per protocol** (Jeff, 2026-10-10): SSTVAE is the
+    // two panes as they were; QRSSTVAE is the QRSS signals, with
+    // receiving and the transmit schedule above them. QRSS modes left the
+    // transmit pane's mode list with this: a QRSS send is scheduled. The
+    // waterfall stays above both, since both are tuned by it.
+    qrss_page_ = new QrssPage(qrss_);
+    main_tabs_ = new QTabWidget(this);
+    main_tabs_->setObjectName(QStringLiteral("main_tabs"));
+    main_tabs_->setDocumentMode(true);
+    main_tabs_->addTab(panes_, tr("SSTVAE"));
+    main_tabs_->addTab(qrss_page_, tr("QRSSTVAE"));
+    connect(qrss_page_, &QrssPage::listenRequested, this, [this](bool on) {
+        if (on) {
+            // Start on this tab means "hear QRSS": the listener too.
+            if (rx_panel_->start() && !qrss_->listener_running()) qrss_->start_listener();
+        } else {
+            rx_panel_->stop();
+        }
+    });
+    connect(rx_panel_, &ReceivePanel::listeningChanged, qrss_page_, &QrssPage::set_listening);
+    connect(qrss_page_, &QrssPage::scheduleRequested, tx_panel_, &TransmitPanel::show_schedule);
+    connect(tx_panel_, &TransmitPanel::scheduleChanged, qrss_page_,
+            &QrssPage::set_schedule_summary);
+    qrss_page_->set_schedule_summary(tx_panel_->schedule_summary());
+
     stack_ = new GripSplitter(Qt::Vertical, this);
     stack_->addWidget(waterfall_);
-    stack_->addWidget(panes_);
+    stack_->addWidget(main_tabs_);
     stack_->setStretchFactor(0, 0);
     stack_->setStretchFactor(1, 1);
     // Neither half may be dragged out of existence: a waterfall of zero
@@ -412,12 +439,8 @@ void MainWindow::build_menu() {
     view_menu_ = menuBar()->addMenu(tr("&View"));
     build_layout_menu();
     QAction* qrss = view_menu_->addAction(tr("&QRSS signals"));
-    connect(qrss, &QAction::triggered, this, [this] {
-        if (!qrss_) return;
-        qrss_->show();
-        qrss_->raise();
-        qrss_->activateWindow();
-    });
+    connect(qrss, &QAction::triggered, this,
+            [this] { main_tabs_->setCurrentWidget(qrss_page_); });
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     QAction* about = help->addAction(tr("&About SSTVAE"));
@@ -762,9 +785,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         tx_panel_->cancel();
     }
     rx_panel_->stop();
-    // A visible QRSS window would otherwise keep the app running as its
-    // last window; its listener stops when the window is destroyed.
-    if (qrss_) qrss_->hide();
     tx_panel_->hide_windows();
     state_->disconnect_rig();
     state_->save_config();

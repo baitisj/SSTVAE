@@ -61,7 +61,9 @@ class QrssWindow : public QWidget {
     Q_OBJECT
 
 public:
-    explicit QrssWindow(QWidget* parent = nullptr);
+    // A window of its own by default; the main window embeds it in its
+    // QRSSTVAE tab with `Qt::Widget`.
+    explicit QrssWindow(QWidget* parent = nullptr, Qt::WindowFlags flags = Qt::Window);
     ~QrssWindow() override;
 
     // The receive pane's capture ring, or null when it is not listening.

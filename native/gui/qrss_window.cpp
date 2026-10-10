@@ -273,7 +273,7 @@ QString QrssTile::progress_text() const { return progress_text_->text(); }
 
 // --- window ----------------------------------------------------------------------------
 
-QrssWindow::QrssWindow(QWidget* parent) : QWidget(parent, Qt::Window) {
+QrssWindow::QrssWindow(QWidget* parent, Qt::WindowFlags flags) : QWidget(parent, flags) {
     setWindowTitle(tr("QRSS signals"));
     state_dir_ = default_state_dir();
 

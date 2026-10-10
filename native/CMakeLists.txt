@@ -504,6 +504,7 @@ if(_want_gui)
     gui/qrss_sends.cpp
     gui/qrss_editor.cpp
     gui/qrss_timeline.cpp
+    gui/qrss_page.cpp
     gui/tx_panel.cpp
     gui/banner.cpp
     gui/crop_dialog.cpp

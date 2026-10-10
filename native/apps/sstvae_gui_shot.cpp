@@ -547,6 +547,16 @@ int main(int argc, char** argv) {
                             a == b ? "  (equal)" : "  <-- NOT EQUAL");
             }
         }
+        // The QRSSTVAE tab.
+        if (auto* tabs = win.findChild<QTabWidget*>(QStringLiteral("main_tabs"))) {
+            tabs->setCurrentIndex(1);
+            for (int i = 0; i < 10; ++i) app.processEvents();
+            const QString qpath = QStringLiteral("%1/window-qrss.png").arg(out);
+            win.grab().save(qpath);
+            std::printf("%s\n", qpath.toLocal8Bit().constData());
+            tabs->setCurrentIndex(0);
+            for (int i = 0; i < 10; ++i) app.processEvents();
+        }
         auto* panes = win.findChild<sstvae::gui::PaneContainer*>();
         if (panes != nullptr) {
             const QSize before = win.size();

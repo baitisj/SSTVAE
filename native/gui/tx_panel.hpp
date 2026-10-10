@@ -96,9 +96,11 @@ public:
     // hold it to the same height as the receive pane's strip.
     QWidget* control_strip() const;
     // Scheduled QRSS sends (gui/qrss_schedule.hpp), and the window the
-    // "Schedule..." button opens. The window is made on first use.
+    // QRSSTVAE tab's "Schedule..." button opens. The window is made on
+    // first use.
     QrssScheduler* scheduler() const { return scheduler_; }
     QrssScheduleWindow* schedule_window() const { return schedule_window_; }
+    QString schedule_summary() const;
     QrssSends* sends() const { return sends_; }
     // Hide the schedule window, so it does not keep the app running as
     // its last window.
@@ -139,6 +141,9 @@ public slots:
     void set_last_reception_info(const QString& callsign, double snr_db);
 
 signals:
+    // The next scheduled QRSS send, in a line, whenever the schedule
+    // changes (shown on the main window's QRSSTVAE tab).
+    void scheduleChanged(const QString& summary);
     void transmitStarted();
     void transmitFinished();
 
@@ -168,7 +173,6 @@ private slots:
     void on_selection(overlay::Item* item);
     void on_mode_changed();
     void on_level_changed(int steps);
-    void on_qrss_freq_changed(int hz);
     // A different template replaces the composition on the canvas --
     // see `template_combo_`'s tooltip -- and the fields row is rebuilt
     // for whichever placeholders it uses.
@@ -202,14 +206,12 @@ private:
     QrssScheduler::Start start_scheduled(const qrss_schedule::Entry& entry,
                                          const std::vector<qrss_tx::Pass>& passes,
                                          std::string* why);
-    void update_schedule_button();
+    void update_schedule_summary();
     // The selected SSTVAE mode ("A"/"B"/"C"); with a QRSS mode selected,
     // the SSTVAE mode last saved, so the optimizer and `{mode}` always
     // see a real SSTVAE mode.
     std::string sstvae_mode() const;
     // The selected QRSS mode ("A"/"B"/"C"), or empty.
-    std::string qrss_mode() const;
-    void update_qrss_controls();
     void rebuild_optimizer();
     QWidget* build_tool_row();
     // Text and its alignment only, now -- everything else a selection
@@ -337,10 +339,7 @@ private:
     QSlider* level_slider_ = nullptr;
     QLabel* level_label_ = nullptr;
     QTimer* save_level_timer_ = nullptr;
-    QSlider* qrss_slider_ = nullptr;   // the QRSS carrier, Hz; enabled for QRSS modes
-    QLabel* qrss_label_ = nullptr;
     QPushButton* send_button_ = nullptr;
-    QPushButton* schedule_button_ = nullptr;
     QPushButton* cancel_button_ = nullptr;
     QProgressBar* progress_ = nullptr;
     QLabel* status_ = nullptr;

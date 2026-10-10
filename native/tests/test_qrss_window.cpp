@@ -13,6 +13,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLabel>
+#include <QPushButton>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -23,6 +25,7 @@
 #include <vector>
 
 #include "check.hpp"
+#include "qrss_page.hpp"
 #include "qrss_window.hpp"
 #include "rx/ringbuffer.hpp"
 
@@ -247,6 +250,42 @@ void test_audio_reaches_the_listener_once() {
 
 }  // namespace
 
+// The main window's QRSSTVAE tab: the signals embedded rather than a
+// window of their own, one Start/Stop that asks the receive pane, and the
+// schedule's next send with the button that opens it.
+void test_the_qrss_tab() {
+    QWidget host;
+    auto* signals_view = new gui::QrssWindow(nullptr, Qt::Widget);
+    auto* page = new gui::QrssPage(signals_view, &host);
+    host.resize(900, 600);
+    host.show();
+    QApplication::processEvents();
+    check::is_true(!signals_view->isWindow() && signals_view->isVisible() &&
+                       signals_view->parentWidget() == page,
+                   "tab: the QRSS signals are inside the tab, not a window");
+    auto* listen = page->findChild<QPushButton*>(QStringLiteral("qrss_listen"));
+    auto* schedule = page->findChild<QPushButton*>(QStringLiteral("qrss_schedule_button"));
+    auto* summary = page->findChild<QLabel*>(QStringLiteral("qrss_schedule_summary"));
+    check::is_true(listen && schedule && summary, "tab: Start receiving, the schedule, Schedule...");
+    if (!(listen && schedule && summary)) return;
+    std::vector<bool> asked;
+    QObject::connect(page, &gui::QrssPage::listenRequested, [&asked](bool on) { asked.push_back(on); });
+    int opened = 0;
+    QObject::connect(page, &gui::QrssPage::scheduleRequested, [&opened] { ++opened; });
+    listen->click();
+    check::is_true(asked.size() == 1 && asked[0], "tab: Start asks to start receiving");
+    check::is_true(listen->text().contains(QStringLiteral("Start")),
+                   "tab: but shows receiving only once it is");
+    page->set_listening(true);
+    listen->click();
+    check::is_true(asked.size() == 2 && !asked[1] && listen->text().contains(QStringLiteral("Stop")),
+                   "tab: then Stop stops it");
+    schedule->click();
+    check::equal(opened, 1, "tab: Schedule... asks for the schedule");
+    page->set_schedule_summary(QStringLiteral("Next send: x"));
+    check::is_true(summary->text() == QStringLiteral("Next send: x"), "tab: and shows the next send");
+}
+
 int main(int argc, char** argv) {
     check::report_crashes_instead_of_prompting();
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -254,5 +293,6 @@ int main(int argc, char** argv) {
     test_tiles_follow_the_state_file();
     test_the_confidence_band();
     test_audio_reaches_the_listener_once();
+    test_the_qrss_tab();
     return check::report("qrss window");
 }

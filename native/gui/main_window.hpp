@@ -40,6 +40,7 @@
 
 class QAction;
 class QSplitter;
+class QTabWidget;
 class QDockWidget;
 class QLabel;
 class QMenu;
@@ -50,6 +51,7 @@ namespace sstvae::gui {
 class AppState;
 class LogPane;
 class QrssWindow;
+class QrssPage;
 class ReceivePanel;
 class Waterfall;
 class TransmitPanel;
@@ -107,6 +109,10 @@ private:
     Waterfall* waterfall_ = nullptr;
     ReceivePanel* rx_panel_ = nullptr;
     QrssWindow* qrss_ = nullptr;
+    QrssPage* qrss_page_ = nullptr;
+    // SSTVAE (the two panes) and QRSSTVAE (the QRSS signals), under the
+    // waterfall, which both use.
+    QTabWidget* main_tabs_ = nullptr;
     TransmitPanel* tx_panel_ = nullptr;
     QLabel* ptt_label_ = nullptr;
     QLabel* station_label_ = nullptr;
