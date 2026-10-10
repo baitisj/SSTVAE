@@ -27,7 +27,8 @@ specified but not built.
 | Transmitter | SSB rig and sound card | SSB rig and sound card, or an Si5351 board with a microcontroller |
 | Status | Used on the air | Simulation only |
 
-The full design is in [docs/qrss/design.md](design.md). It implements
+[HOW_IT_HEARS.md](HOW_IT_HEARS.md) explains how the receiver works in plain
+language. The full design is in [docs/qrss/design.md](design.md). It implements
 the draft spec **"QRSSTVAE: ultra-slow narrowband SSTVAE for HF", rev 9**
 (`qrsstvae-options.md`, kept outside this repository). Where the design
 had to decide something the spec left open, the design's section 14
