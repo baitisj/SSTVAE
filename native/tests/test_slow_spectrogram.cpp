@@ -114,27 +114,37 @@ void test_older_than_the_fine_store() {
 }
 
 void test_the_time_scale() {
-    const dsp::TimeScale scale(1.0, 15.0, 240, 60);
-    check::is_true(scale.age_at(0) == 0.0 && std::abs(scale.age_at(240) - 240.0) < 1e-9,
-                   "scale: the lens is one second a pixel");
-    check::is_true(scale.spp_at(100) == 1.0 && scale.spp_at(1000) == 15.0,
-                   "scale: then fifteen for the history");
+    const dsp::TimeScale scale(1.0, 15.0, 360);
+    check::is_true(scale.age_at(0) == 0.0 && std::abs(scale.age_at(1) - 1.0) < 0.01,
+                   "scale: the newest second a pixel");
+    check::is_true(scale.spp_at(0) == 1.0 && scale.spp_at(360) == 15.0 &&
+                       scale.spp_at(1000) == 15.0,
+                   "scale: fifteen for the history");
     bool monotonic = true;
     bool inverse = true;
+    bool smooth = true;
     double prev = -1;
-    for (int x = 0; x <= 1200; x += 7) {
+    double prev_step = 0;
+    for (int x = 0; x <= 1200; ++x) {
         const double a = scale.age_at(x);
         if (a <= prev) monotonic = false;
+        if (x > 1) {
+            const double step = a - prev;
+            // The scale never changes by more than a few percent from
+            // one pixel to the next: no edge.
+            if (step / prev_step > 1.05 || step / prev_step < 0.999) smooth = false;
+            prev_step = step;
+        } else if (x == 1) {
+            prev_step = a - prev;
+        }
         prev = a;
         if (std::abs(scale.x_of(a) - x) > 1e-6) inverse = false;
     }
     check::is_true(monotonic, "scale: older to the right, everywhere");
+    check::is_true(smooth, "scale: the lens eases into the history with no edge");
     check::is_true(inverse, "scale: x_of undoes age_at");
-    const double step = scale.age_at(301) - scale.age_at(300);
-    check::is_true(std::abs(step - 15.0) < 0.01, "scale: the ramp ends at the history's scale");
-    const double before = scale.age_at(240) - scale.age_at(239);
-    const double after = scale.age_at(241) - scale.age_at(240);
-    check::is_true(after / before < 1.1, "scale: no jump where the lens ends");
+    check::is_true(std::abs((scale.age_at(801) - scale.age_at(800)) - 15.0) < 1e-9,
+                   "scale: then linear");
     dsp::TimeScale z;
     z.set_history_spp(1000);
     check::is_true(z.history_spp() == dsp::TimeScale::MAX_SPP, "scale: clamped");

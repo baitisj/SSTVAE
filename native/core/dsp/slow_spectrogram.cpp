@@ -145,58 +145,56 @@ std::vector<float> SlowSpectrogram::mean_between(double t0, double t1, int* coun
 
 // --- time scale -------------------------------------------------------------
 
-TimeScale::TimeScale(double lens_spp, double history_spp, int lens_px, int ramp_px)
+TimeScale::TimeScale(double lens_spp, double history_spp, int lens_px)
     : lens_spp_(std::clamp(lens_spp, MIN_SPP, MAX_SPP)),
       history_spp_(std::clamp(history_spp, MIN_SPP, MAX_SPP)),
-      lens_px_(std::max(0, lens_px)),
-      ramp_px_(std::max(1, ramp_px)) {}
+      lens_px_(std::max(1, lens_px)) {
+    rebuild();
+}
 
-void TimeScale::set_lens_spp(double spp) { lens_spp_ = std::clamp(spp, MIN_SPP, MAX_SPP); }
-void TimeScale::set_history_spp(double spp) { history_spp_ = std::clamp(spp, MIN_SPP, MAX_SPP); }
+void TimeScale::set_lens_spp(double spp) {
+    lens_spp_ = std::clamp(spp, MIN_SPP, MAX_SPP);
+    rebuild();
+}
+
+void TimeScale::set_history_spp(double spp) {
+    history_spp_ = std::clamp(spp, MIN_SPP, MAX_SPP);
+    rebuild();
+}
 
 double TimeScale::spp_at(double x) const {
-    if (x < lens_px_) return lens_spp_;
-    if (x < lens_px_ + ramp_px_) {
-        return lens_spp_ * std::pow(history_spp_ / lens_spp_, (x - lens_px_) / ramp_px_);
+    if (x <= 0) return lens_spp_;
+    if (x >= lens_px_) return history_spp_;
+    const double u = x / lens_px_;
+    const double s = u * u * (3.0 - 2.0 * u);
+    return std::exp(std::log(lens_spp_) + (std::log(history_spp_) - std::log(lens_spp_)) * s);
+}
+
+void TimeScale::rebuild() {
+    // The integral of spp, by the midpoint rule at a quarter pixel.
+    age_.assign(static_cast<std::size_t>(lens_px_) + 1, 0.0);
+    double a = 0.0;
+    for (int x = 0; x < lens_px_; ++x) {
+        for (int q = 0; q < 4; ++q) a += 0.25 * spp_at(x + (q + 0.5) * 0.25);
+        age_[static_cast<std::size_t>(x) + 1] = a;
     }
-    return history_spp_;
 }
-
-namespace {
-
-// The integral of s0 * r^(u/R) for u in [0, d].
-double ramp_age(double s0, double s1, double R, double d) {
-    const double ln_r = std::log(s1 / s0);
-    if (std::abs(ln_r) < 1e-12) return s0 * d;
-    return s0 * R * (std::exp(ln_r * d / R) - 1.0) / ln_r;
-}
-
-}  // namespace
 
 double TimeScale::age_at(double x) const {
     if (x <= 0) return 0.0;
-    const double L = lens_px_;
-    const double R = ramp_px_;
-    if (x <= L) return lens_spp_ * x;
-    const double lens_age = lens_spp_ * L;
-    if (x <= L + R) return lens_age + ramp_age(lens_spp_, history_spp_, R, x - L);
-    return lens_age + ramp_age(lens_spp_, history_spp_, R, R) + history_spp_ * (x - L - R);
+    if (x >= lens_px_) return age_.back() + history_spp_ * (x - lens_px_);
+    const int i = static_cast<int>(x);
+    const double f = x - i;
+    return age_[static_cast<std::size_t>(i)] +
+           f * (age_[static_cast<std::size_t>(i) + 1] - age_[static_cast<std::size_t>(i)]);
 }
 
 double TimeScale::x_of(double age) const {
     if (age <= 0) return 0.0;
-    const double L = lens_px_;
-    const double R = ramp_px_;
-    const double lens_age = lens_spp_ * L;
-    if (age <= lens_age) return age / lens_spp_;
-    const double ramp_total = ramp_age(lens_spp_, history_spp_, R, R);
-    if (age <= lens_age + ramp_total) {
-        const double a = age - lens_age;
-        const double ln_r = std::log(history_spp_ / lens_spp_);
-        if (std::abs(ln_r) < 1e-12) return L + a / lens_spp_;
-        return L + R * std::log(1.0 + a * ln_r / (lens_spp_ * R)) / ln_r;
-    }
-    return L + R + (age - lens_age - ramp_total) / history_spp_;
+    if (age >= age_.back()) return lens_px_ + (age - age_.back()) / history_spp_;
+    const auto it = std::upper_bound(age_.begin(), age_.end(), age);
+    const std::size_t i = static_cast<std::size_t>(it - age_.begin()) - 1;
+    return static_cast<double>(i) + (age - age_[i]) / (age_[i + 1] - age_[i]);
 }
 
 float median_of(std::vector<float> values) {

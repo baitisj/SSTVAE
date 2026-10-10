@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QLinearGradient>
 #include <QPainterPath>
 #include <QTimeZone>
 #include <QTimer>
@@ -53,8 +54,9 @@ QrssSpectrogram::QrssSpectrogram(QWidget* parent) : QWidget(parent) {
     timer_->setInterval(1000);
     connect(timer_, &QTimer::timeout, this, &QrssSpectrogram::pump);
     timer_->start();
-    setToolTip(tr("QRSS spectrogram: newest at the left. The Time Lens there is about one "
-                  "second per pixel, easing to fifteen seconds per pixel for the history.\n"
+    setToolTip(tr("QRSS spectrogram: newest at the left. The Time Lens there magnifies the "
+                  "newest audio to about a second per pixel and eases smoothly out to "
+                  "fifteen seconds per pixel for the history.\n"
                   "Mouse wheel over the time axis: change the scale under the pointer.\n"
                   "Mouse wheel over the frequency axis: zoom; double-click it to see the "
                   "whole range.\nThe sun/moon flips the colours. Red: a signal the QRSS "
@@ -246,29 +248,29 @@ void QrssSpectrogram::paintEvent(QPaintEvent*) {
     const QColor ink = inverted_ ? QColor(40, 40, 40) : QColor(220, 220, 220);
     const QColor accent = pal.color(QPalette::Highlight);
 
-    // The Time Lens: framed and named, so the change of scale at its
-    // edge is never mistaken for the signal changing.
-    const int lens_end = p.left() + scale_.lens_px();
-    if (lens_end < p.right()) {
-        QColor tint = accent;
-        tint.setAlpha(38);
-        painter.fillRect(QRect(p.left(), p.top(), scale_.lens_px(), 14), tint);
-        QPen edge(accent, 2);
-        painter.setPen(edge);
-        painter.drawLine(lens_end, p.top(), lens_end, p.bottom());
-        QPen ramp(accent, 1, Qt::DashLine);
-        painter.setPen(ramp);
-        const int ramp_end = lens_end + scale_.ramp_px();
-        if (ramp_end < p.right()) painter.drawLine(ramp_end, p.top(), ramp_end, p.bottom());
+    // The Time Lens: no edge to draw, since it has none, so a wash
+    // across the top fading out with the magnification says where it is.
+    {
+        const int lens_w = std::min(scale_.lens_px(), p.width());
+        QLinearGradient wash(p.left(), 0, p.left() + lens_w, 0);
+        QColor strong = accent;
+        strong.setAlpha(90);
+        QColor none = accent;
+        none.setAlpha(0);
+        wash.setColorAt(0.0, strong);
+        wash.setColorAt(1.0, none);
+        painter.fillRect(QRect(p.left(), p.top(), lens_w, 14), wash);
         QFont small = font();
         small.setPointSizeF(std::max(6.5, small.pointSizeF() * 0.8));
         painter.setFont(small);
         painter.setPen(ink);
-        painter.drawText(QRect(p.left() + 4, p.top(), scale_.lens_px() - 8, 14),
-                         Qt::AlignLeft | Qt::AlignVCenter,
+        painter.drawText(QRect(p.left() + 4, p.top(), lens_w, 14), Qt::AlignLeft | Qt::AlignVCenter,
                          tr("Time Lens  %1 s/px").arg(scale_.lens_spp(), 0, 'g', 3));
-        painter.drawText(QRect(lens_end + 4, p.top(), 160, 14), Qt::AlignLeft | Qt::AlignVCenter,
-                         tr("history %1 s/px").arg(scale_.history_spp(), 0, 'g', 3));
+        if (lens_w < p.width()) {
+            painter.drawText(QRect(p.left() + lens_w, p.top(), 160, 14),
+                             Qt::AlignLeft | Qt::AlignVCenter,
+                             tr("%1 s/px").arg(scale_.history_spp(), 0, 'g', 3));
+        }
     }
     // Now.
     painter.setPen(QPen(accent, 2));
@@ -369,7 +371,7 @@ void QrssSpectrogram::wheelEvent(QWheelEvent* event) {
     const double factor = std::pow(WHEEL_STEP, -steps);   // wheel up: finer
     if (time_axis_rect().contains(pos)) {
         const int x = pos.x() - plot_rect().left();
-        if (x < scale_.lens_px() + scale_.ramp_px() / 2) {
+        if (x < scale_.lens_px() / 2) {
             scale_.set_lens_spp(scale_.lens_spp() * factor);
         } else {
             scale_.set_history_spp(scale_.history_spp() * factor);

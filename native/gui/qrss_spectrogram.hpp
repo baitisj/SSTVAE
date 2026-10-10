@@ -2,9 +2,9 @@
 // Glissando: frequency up the screen, time across it, the newest audio
 // entering at the left edge and unfurling to the right as it ages.
 //
-// The time axis is not linear (dsp::TimeScale). The left-hand stretch,
-// the lens, draws about one second per pixel, so what is arriving now
-// is seen in detail; to its right the scale eases out to fifteen
+// The time axis is not linear (dsp::TimeScale). It is a bubble lens: the
+// newest audio, at the left, is magnified to about a second per pixel,
+// and the magnification falls away smoothly, with no edge, to fifteen
 // seconds per pixel for hours of history, where a carrier too weak to
 // see second by second shows up in the average. The mouse wheel over the
 // time axis changes the scale under the pointer (the lens's or the

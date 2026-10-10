@@ -75,17 +75,19 @@ private:
 };
 
 // The time axis: x = 0 is now, x grows into the past.
+//
+// A bubble lens, as Glissando's Time Lens is: the newest audio is
+// magnified (`lens_spp` seconds per pixel at x = 0) and the
+// magnification falls away smoothly across the first `lens_px` pixels to
+// the history's `history_spp`, with no edge anywhere -- the seconds per
+// pixel follow a smoothstep in log scale, so both ends join flat.
 class TimeScale {
 public:
-    // Seconds per pixel for the first `lens_px` pixels, then easing over
-    // `ramp_px` pixels to `history_spp` for the rest.
-    TimeScale(double lens_spp = 1.0, double history_spp = 15.0, int lens_px = 240,
-              int ramp_px = 60);
+    TimeScale(double lens_spp = 1.0, double history_spp = 15.0, int lens_px = 360);
 
     double lens_spp() const { return lens_spp_; }
     double history_spp() const { return history_spp_; }
     int lens_px() const { return lens_px_; }
-    int ramp_px() const { return ramp_px_; }
     void set_lens_spp(double spp);
     void set_history_spp(double spp);
 
@@ -100,10 +102,12 @@ public:
     static constexpr double MAX_SPP = 120.0;
 
 private:
+    void rebuild();
+
     double lens_spp_;
     double history_spp_;
     int lens_px_;
-    int ramp_px_;
+    std::vector<double> age_;   // age at each whole pixel across the lens
 };
 
 // The median of `values` (a copy is partially sorted). 0 when empty.
