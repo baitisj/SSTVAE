@@ -6,10 +6,11 @@
  *   qrss_ce_test selftest                      SHA-256 against FIPS 180-4
  *   qrss_ce_test sha256 HEX                    digest of the bytes HEX
  *   qrss_ce_test seq WHICH Q START N           sequence bits as '0'/'1'
- *                                              (WHICH: pre | ref | scr)
+ *                                              (WHICH: pre | ref | scr | spr)
  *   qrss_ce_test show FILE Q [FRAME]           a readable summary: frame,
  *                                              first phases and steps at 990 Hz
- *   qrss_ce_test sym FILE Q FRAME              int32 (value, class) per stream symbol
+ *   qrss_ce_test sym FILE Q FRAME              int32 (value, class, spread) per
+ *                                              stream symbol
  *   qrss_ce_test phase FILE Q FRAME FNUM FDEN U0 N STEP
  *                                              uint32 phase at u = U0 + i*STEP
  *   qrss_ce_test keyed FILE Q FRAME FNUM FDEN U0 N STEP
@@ -19,7 +20,8 @@
  *
  * Binary outputs are little-endian-native arrays on stdout. FRAME is a
  * preset name (full, medium, short, tiny) or an explicit
- * N_HDR,N_DATA[,CW_AFTER...] list.
+ * N_HDR,N_DATA[,CW_AFTER...] list, which carries the spread copy when it
+ * has a header block (as frame.FrameSpec does by default).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -116,6 +118,7 @@ static int parse_frame(const char *spec, qrss_frame_t *fr)
     fr->n_hdr = vals[0];
     fr->n_data = vals[1];
     fr->n_win = n - 2;
+    fr->spread = fr->n_hdr != 0;
     memcpy(fr->cw_after, vals + 2, (n - 2) * sizeof vals[0]);
     return 0;
 }
@@ -178,9 +181,12 @@ int main(int argc, char **argv)
         return 0;
     }
     if (!strcmp(cmd, "seq") && argc == 6) {
-        int which = !strcmp(argv[2], "pre") ? 0 : !strcmp(argv[2], "ref") ? 1 : 2;
+        int which = !strcmp(argv[2], "pre") ? 0 : !strcmp(argv[2], "ref") ? 1
+                  : !strcmp(argv[2], "scr") ? 2 : !strcmp(argv[2], "spr") ? 3 : -1;
         uint32_t start = arg_u32(argv[4]), n = arg_u32(argv[5]);
         uint8_t b[256];
+        if (which < 0)
+            return 2;
         for (i = 0; i < n; i += 256) {
             uint32_t m = n - i < 256 ? n - i : 256, j;
             qrss_seq_bits(which, strtoull(argv[3], NULL, 10), start + i, m, b);
@@ -194,9 +200,10 @@ int main(int argc, char **argv)
         int64_t reached;
         if (load(argv[2], argv[3], argc == 5 ? argv[4] : NULL))
             return 1;
-        printf("latents %u, frame: n_hdr %u n_data %u n_sym %u n_pos %u windows %u (%s)\n",
+        printf("latents %u, frame: n_hdr %u n_data %u n_sym %u n_pos %u windows %u (%s)"
+               " spread %u\n",
                ce.n_lat, ce.n_hdr, ce.n_data, ce.n_sym, ce.n_pos, ce.n_win,
-               (ce.flags & 1u) ? "on-off keyed" : "FSK");
+               (ce.flags & 1u) ? "on-off keyed" : "FSK", ce.spread);
         printf("duration %.9f s from t0 - T/2\n", ce.n_pos * (double)QRSS_T_NUM / QRSS_T_DEN);
         reached = qrss_si5351_start(&ce, 990, 1);
         printf("   u   phase(deg)   step(0.4 Hz)\n");
@@ -211,9 +218,10 @@ int main(int argc, char **argv)
         if (load(argv[2], argv[3], argv[4]))
             return 1;
         for (i = 0; i < ce.n_sym; i++) {
-            int32_t vc[2];
+            int32_t vc[3];
             vc[0] = qrss_ce_symbol(&ce, i);
             vc[1] = qrss_ce_symbol_class(&ce, i);
+            vc[2] = qrss_ce_spread(&ce, i);
             fwrite(vc, sizeof vc, 1, stdout);
         }
         return 0;

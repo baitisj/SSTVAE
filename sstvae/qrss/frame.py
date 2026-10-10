@@ -22,17 +22,21 @@ j % 16 == 0 (decision D3). Header non-reference symbol i carries coded
 bit i for i < 2474; the 2475th is the spare and sends a known +1
 (decision D4). Data non-reference symbol i carries precoded value x_i.
 
-**Spread header (prototype, `docs/qrss/spread-header.md`).** A frame
-with `hdr_rho` > 0 also adds sqrt(hdr_rho) * h_i to data symbol i, where
-h_i = w_i * (1 - 2 * coded_bit[i mod 2474]) and w is
+**Spread header (spec 5.1, format version 2; `docs/qrss/spread-header.md`).**
+A frame with `hdr_rho` > 0 also adds sqrt(hdr_rho) * h_i to data symbol
+i, where h_i = w_i * (1 - 2 * coded_bit[i mod 2474]) and w is
 `sequences.spread_whitener`: the same polar codeword, repeated over the
 whole data section, as extra phase on top of the latents (which keep
 their unit variance). Once the header is known the receiver removes
-that phase exactly, so it costs the data nothing. It is independent of
-the explicit header block: `n_hdr` = 0 with `hdr_rho` > 0 is a frame
-whose only header is the spread one.
+that phase exactly, so it costs the data nothing. **Every frame with a
+header block carries it** (`hdr_rho` defaults to `SPREAD_RHO` when
+`n_hdr` > 0, so FULL, MEDIUM and SHORT do); `LEGACY` keeps the same
+shapes without it, for format version 1 recordings. It is independent of
+the block: `n_hdr` = 0 with `hdr_rho` > 0 is a frame whose only header
+is the spread one (`PROTOTYPES`, not on the air).
 """
 
+import dataclasses
 import functools
 from dataclasses import dataclass, field
 
@@ -46,6 +50,7 @@ from .constants import (
     N_PRE,
     REF_PERIOD,
     SPAN,
+    SPREAD_RHO,
     T_SYM,
 )
 from .sequences import preamble_ce, references_ce, spread_whitener
@@ -75,11 +80,14 @@ class FrameSpec:
     n_hdr: int = N_HDR                       # 0 (no header) or 2640
     n_data: int = 50600                      # data latents (a prefix of air order)
     cw_after: tuple[int, ...] = CW_AFTER_FULL
-    hdr_rho: float = 0.0                     # spread-header power, latent units (prototype)
+    # Spread-header power, latent units. None: SPREAD_RHO with a header
+    # block, 0 without (format version 2: every block has its spread copy).
+    hdr_rho: float | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "cw_after", tuple(int(c) for c in self.cw_after))
-        object.__setattr__(self, "hdr_rho", float(self.hdr_rho))
+        rho = (SPREAD_RHO if self.n_hdr else 0.0) if self.hdr_rho is None else self.hdr_rho
+        object.__setattr__(self, "hdr_rho", float(rho))
         if not 0.0 <= self.hdr_rho < 1.0:
             raise ValueError(f"hdr_rho must be in [0, 1), not {self.hdr_rho}")
         if self.n_pre != N_PRE:
@@ -181,29 +189,42 @@ SHORT = FrameSpec("short", n_data=4096, cw_after=(5000, 7670))
 TINY = FrameSpec("tiny", n_hdr=0, n_data=1024, cw_after=())
 PRESETS = {s.name: s for s in (FULL, MEDIUM, SHORT, TINY)}
 
-# Spread-header prototypes (docs/qrss/spread-header.md). "-spread" keeps
-# the header block and adds the spread copy; "-spreadonly" drops the
-# block (80 s shorter).
-SPREAD_RHO = 0.054                           # matches the block's single-pass threshold on FULL
-FULL_SPREAD = FrameSpec("full-spread", hdr_rho=SPREAD_RHO)
+# Format version 1: the same frames without the spread copy. Only ever
+# sent in tests; kept so a recording of one can be received
+# (`receiver.receive_pass` switches to these when a header says version 1)
+# and as the plain frame to measure the spread copy against.
+FULL_V1 = dataclasses.replace(FULL, name="full-v1", hdr_rho=0.0)
+MEDIUM_V1 = dataclasses.replace(MEDIUM, name="medium-v1", hdr_rho=0.0)
+SHORT_V1 = dataclasses.replace(SHORT, name="short-v1", hdr_rho=0.0)
+LEGACY = {s.name: s for s in (FULL_V1, MEDIUM_V1, SHORT_V1)}
+
+# Not on the air (docs/qrss/spread-header.md): the spread copy with no
+# header block, 80 s shorter. Measured 1.5 dB worse than the block.
 FULL_SPREADONLY = FrameSpec("full-spreadonly", n_hdr=0, hdr_rho=SPREAD_RHO,
                             cw_after=tuple(c - N_HDR for c in CW_AFTER_FULL))
-SHORT_SPREAD = FrameSpec("short-spread", n_data=4096, cw_after=(5000, 7670),
-                         hdr_rho=SPREAD_RHO)
-# Kept apart from PRESETS, which is the on-air format the C reference and
-# the CLIs mirror; `get` finds these too, so a stored pass can be re-read.
-PROTOTYPES = {s.name: s for s in (FULL_SPREAD, FULL_SPREADONLY, SHORT_SPREAD)}
+PROTOTYPES = {s.name: s for s in (FULL_SPREADONLY,)}
 
 
 def get(name_or_spec) -> FrameSpec:
-    """A preset by name, or a FrameSpec passed through."""
+    """A preset by name (or a format version 1 frame, or a prototype), or a
+    FrameSpec passed through; `get` finds them all, so a stored pass can be
+    re-read."""
     if isinstance(name_or_spec, FrameSpec):
         return name_or_spec
-    try:
-        return PRESETS[name_or_spec] if name_or_spec in PRESETS else PROTOTYPES[name_or_spec]
-    except KeyError:
-        raise ValueError(
-            f"unknown frame {name_or_spec!r}; one of {', '.join(PRESETS)}") from None
+    for table in (PRESETS, LEGACY, PROTOTYPES):
+        if name_or_spec in table:
+            return table[name_or_spec]
+    raise ValueError(f"unknown frame {name_or_spec!r}; one of {', '.join(PRESETS)}")
+
+
+def plain(spec: FrameSpec) -> FrameSpec:
+    """`spec` without the spread copy: the format version 1 frame of its shape."""
+    if spec.hdr_rho == 0:
+        return spec
+    for v1 in LEGACY.values():
+        if dataclasses.replace(v1, name=spec.name, hdr_rho=spec.hdr_rho) == spec:
+            return v1
+    return dataclasses.replace(spec, name=f"{spec.name}-v1", hdr_rho=0.0)
 
 
 def _ro(a) -> np.ndarray:

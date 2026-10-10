@@ -1,10 +1,25 @@
 # Spread header: the header on every data symbol, as extra phase
 
-**Status: prototype (2026-10-10).** Implemented behind `FrameSpec.hdr_rho`,
-measured in simulation, not part of the on-air format: the prototype
-frames live in `frame.PROTOTYPES`, not `frame.PRESETS`, so the C
-reference, the beacon file and the CLIs' `--frame` choices are untouched.
-Nothing here changes a frame with `hdr_rho = 0`.
+**Status: on the air as format version 2 (2026-10-10).** Andrew proposed
+this as a prototype; Jeff adopted it, and spec rev 11 section 5.1 defines
+it. Every preset with a header block (FULL, MEDIUM, SHORT) now carries
+the spread copy at ρ = 0.054, in the Python transmitter, the beacon file's
+C reference and the receiver. What changed when it went on the air:
+
+- The frames this document calls `full-spread` and `short-spread` are
+  now `full` and `short`. The old frames without the spread copy are
+  `full-v1`, `medium-v1` and `short-v1` (`frame.LEGACY`), and the frame
+  this document calls `short` is now `short-v1`. `full-spreadonly` is
+  still a prototype (`frame.PROTOTYPES`).
+- The header's version field is 2. Version 1 was sent only in tests.
+  A receiver decodes a version 1 header from its block alone and then
+  treats the pass as having no spread copy (`receiver.decode_header`).
+- The C reference (`qrss_beacon_c/`) adds β·√ρ·h_i to each data symbol
+  in its integer phase sum. Its whitener is a fourth SHA-256 sequence,
+  and its parity tests (C1-C3) cover it.
+- The checks this document left open have been run: acquisition with the
+  copy on, header combining across passes, and fading paths. See
+  "Checks before air" at the end.
 
 ## The problem
 
@@ -366,19 +381,21 @@ already uses for the references.
    gets ~20 repeats here, which preserves the relative pattern, so it is
    reused as-is. The folded per-bit SNR is no longer the design point,
    so a GA construction at the new operating point may gain a little.
-6. **Fading paths.** Not measured. This is where the scheme's time
-   diversity should matter most, since the block's 80 s can sit in a
-   single fade. `--preset` sweeps are the next run for the faster
-   machine.
+6. **Fading paths.** This is where the scheme's time diversity should
+   matter most, since the block's 80 s can sit in a single fade.
+   Measured since, on the quiet and moderate presets: see "Checks before
+   air".
 
 ## Commands
 
 The raw results are in `docs/qrss/spread-header-data/` (one JSON row per
 trial). These are what produced the tables above (each FULL trial is about
-2.5 minutes of one core; `--jobs` defaults to every core):
+2.5 minutes of one core; `--jobs` defaults to every core). They are
+written with today's frame names: `full` was `full-spread` when the
+data were recorded, and the `data` run compares `short-v1` with `short`.
 
 ```sh
-python scripts/qrss_spread_header.py header --frames full-spread \
+python scripts/qrss_spread_header.py header --frames full \
     --snr -25 -26.5 -28 -29.5 -31 --seeds 40 --out header.json
 python scripts/qrss_spread_header.py header --frames full-spreadonly \
     --snr -25 -26.5 -28 --seeds 40 --out spreadonly.json
@@ -389,25 +406,83 @@ python scripts/qrss_spread_header.py genie --rho 0.054 0.08 0.1
 
 ## Before this could go on the air
 
-- A `FORMAT_VERSION` bump and a flag (or a frame identity) saying whether
-  a pass carries the spread copy. A receiver applying the wrong round-A
-  model loses either the header or 0.2–0.8 dB.
+These were the steps before air, and all but the last are done
+(2026-10-10):
+
+- A `FORMAT_VERSION` bump and a frame identity saying whether a pass
+  carries the spread copy: version 2 means it does, on every frame with
+  a header block. A receiver applying the wrong round-A model loses
+  either the header or 0.2–0.8 dB.
 - The beacon file and the Si5351 C reference (`qrss_beacon_c/`): the
   phase generator adds β·√ρ·h_i·p to each data symbol. The beacon file
-  already stores the coded header bits.
-- `PRESETS`, the CLIs' `--frame`, and the live listener.
-- Design M5 re-measured with the new deviation.
+  is unchanged; it already stores the coded header bits.
+- `PRESETS`, the CLIs' `--frame` and the live listener: the presets carry
+  the copy, so every CLI and the listener send and receive it.
+- Design M5 re-measured with the new deviation: not yet.
+
+## Checks before air (2026-10-10, build thread)
+
+These are the three checks that spec rev 11 section 5.1 listed as open.
+All are simulated, in round A, with FULL frames. "Both" means the block
+and the spread copy summed.
+
+**Acquisition.** Blind `receiver.detect` over the whole slot, 8 paired
+seeds per SNR, `full-v1` against `full`:
+
+| SNR₂₅₀₀ | Found, v1 / v2 | z_ref median, v1 / v2 | Header decoded, v1 / v2 |
+|---|---|---|---|
+| −28 dB | 8/8 / 8/8 | 19.73 / 19.95 | 6/8 / 8/8 |
+| −30 dB | 8/8 / 8/8 | 15.18 / 15.12 | 1/8 / 5/8 |
+| −32 dB | 8/8 / 8/8 | 9.89 / 9.65 | 0/8 / 0/8 |
+
+Detection is unaffected and reaches 2 dB below the header's threshold
+with both copies.
+
+**Combining across two passes.** 12 passes per SNR, each starting at
+the true carrier. Their round-A LLRs were summed over every pair:
+
+| SNR₂₅₀₀ | One pass, both | Two passes, block | Two passes, both |
+|---|---|---|---|
+| −32.0 dB | 0/12 | 2/66 | 40/66 |
+| −33.5 dB | 0/11 | 0/55 | 21/55 |
+
+That puts the two-pass 50% point near −32.7 dB, about 2.4 dB beyond
+one pass's −30.3 dB. The ideal is 3 dB, and the pairs are not
+independent.
+
+**Fading paths.** Watterson presets, 16 seeds, each pass starting at
+the true carrier. 50% thresholds:
+
+| Path | Block alone | Spread alone | Both |
+|---|---|---|---|
+| quiet (0.1 Hz, 0.5 ms) | −27.0 dB | −26.7 dB | −29.0 dB |
+| moderate (0.5 Hz, 1 ms) | −25.2 dB | −24.5 dB | −26.9 dB |
+
+- Both copies together beat the block alone by 2.0 dB on the quiet path
+  and 1.7 dB on the moderate one.
+- On the moderate path at −28 dB and below, gate V cannot fit the timing
+  (14/16 and 16/16 passes not verified), so the tracker is the limit
+  there, not the header.
+- In none of the 200 trials across the three checks did the block alone
+  decode where both copies together failed.
 
 ## Files
 
-- `sstvae/qrss/frame.py`: `FrameSpec.hdr_rho`, `has_header`,
-  `spread_signs`, `spread_symbols`, `assemble`, `SPREAD_RHO`, `PROTOTYPES`.
+- `sstvae/qrss/frame.py`: `FrameSpec.hdr_rho` (default `SPREAD_RHO` with
+  a header block), `has_header`, `spread_signs`, `spread_symbols`,
+  `assemble`, `LEGACY`, `plain`, `PROTOTYPES`.
+- `sstvae/qrss/constants.py`: `FORMAT_VERSION` = 2, `FORMAT_VERSIONS`,
+  `SPREAD_RHO`; `header.py`: `decode(..., versions=)`.
 - `sstvae/qrss/sequences.py`: `spread_whitener`.
 - `sstvae/qrss/track.py`: `Classes.spread` / `spread_rho`, `make_classes`,
   `remove_spread`, and its calls in `track` and `genie_track`.
 - `sstvae/qrss/demod.py`: `data_estimates`, `spread_llr`, `calibrate`,
   `extract`.
-- `sstvae/qrss/receiver.py`, `em.py`, `tx.py`, `channel.py`: `has_header`.
+- `sstvae/qrss/receiver.py`: `decode_header` (both copies, then each
+  alone, then version 1); `em.py`, `tx.py`, `channel.py`: `has_header`.
+- `qrss_beacon_c/`: `qrss_ce_spread`, the spread term in
+  `qrss_ce_phase_q22`, `QRSS_SPREAD_Q32` and the presets' `spread` flag
+  (`tools/gen_qrss_tables.py`); `tests/test_qrss_c_ref.py` covers it.
 - `tests/test_qrss_spread.py`: the format, the LLR fold, exact removal,
   the round-A classes; slow: a block-free frame decodes its header end to
   end and then matches the plain frame's latents to 0.1 dB (measured

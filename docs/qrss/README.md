@@ -29,15 +29,17 @@ specified but not built.
 
 [HOW_IT_HEARS.md](HOW_IT_HEARS.md) explains how the receiver works in plain
 language. The full design is in [docs/qrss/design.md](design.md). It implements
-the draft spec **"QRSSTVAE: ultra-slow narrowband SSTVAE for HF", rev 9**
-(`qrsstvae-options.md`, kept outside this repository). Where the design
+the draft spec **"QRSSTVAE: ultra-slow narrowband SSTVAE for HF", rev 9**,
+plus rev 11's spread header (section 5.1) (`qrsstvae-options.md`, kept
+outside this repository). Where the design
 had to decide something the spec left open, the design's section 14
 lists the decision.
 
-A prototype that also spreads the header over every data symbol, so it
-survives a lost header block, is described with its measurements in
-[docs/qrss/spread-header.md](spread-header.md); it is not part of the
-on-air format.
+Since 2026-10-10 every CE pass with a header block also carries a spread
+copy of the header on its data symbols (format version 2, spec rev 11
+section 5.1). The header then survives a lost header block, and on an
+intact pass it decodes 1.6 dB deeper. The design and its measurements
+are in [docs/qrss/spread-header.md](spread-header.md).
 
 ## Status
 
@@ -600,7 +602,9 @@ from the test files:
 
 - **Header.** The polar-coded header decodes in at least half of the
   passes at −23.5 dB in one pass (R17), and four passes' soft header
-  information summed decodes at −29 dB.
+  information summed decodes at −29 dB. Those are the test bounds. On a
+  steady path the block alone decodes at −28.7 dB, and with the spread
+  copy at −30.3 dB ([spread-header.md](spread-header.md)).
 - **Detection.** The preamble detector finds about 97% of SHORT
   preambles at −28 dB on a steady path (78/80), and 21/40 at −31 dB. The
   whole-slot search finds FULL passes at −34 dB on a steady path in 5 of

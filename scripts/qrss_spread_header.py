@@ -1,15 +1,17 @@
-"""Measure the spread-header prototype (docs/qrss/spread-header.md).
+"""Measure the spread header (docs/qrss/spread-header.md; spec 5.1, on the
+air as format version 2 since 2026-10-10).
 
 Two experiments, each through the real channel simulator and receiver:
 
-header  FULL frames with the spread header (`full-spread`, which also
-        keeps the header block, and/or `full-spreadonly`). Each pass is
+header  FULL frames with the spread header (`full`, which also keeps the
+        header block, and/or the prototype `full-spreadonly`). Each pass is
         received once (round A, no round B), and its header is decoded
         three ways from the same pass: from the block's LLRs alone, from
         the spread copy's alone, and from both summed. `--fade S` takes
         the signal down 40 dB for the first S seconds after t0 (the
         preamble and header block lost). P(decode) per SNR.
-data    SHORT frames, `short` against `short-spread` on the same seeds:
+data    SHORT frames, `short-v1` (no spread copy) against `short` on the
+        same seeds:
         the delivered per-latent SNR and mean weight W after round B
         (header known, so the spread phase has been removed), and after
         round A alone (header not yet known).
@@ -140,7 +142,7 @@ def header_trial(args):
 def data_trial(args):
     snr, seed = args
     out = []
-    for name in ("short", "short-spread"):
+    for name in ("short-v1", "short"):
         spec = frame.get(name)
         a, sim, fe = simulate(spec, snr, seed)
         for rb in (False, True):
@@ -239,8 +241,8 @@ def main():
     ap.add_argument("--rho", type=float, nargs="+", default=[0.054, 0.10])
     ap.add_argument("--seeds", type=int, default=8)
     ap.add_argument("--seed0", type=int, default=1)
-    ap.add_argument("--frames", nargs="+", default=["full-spread"],
-                    help="header experiment: frames to run (default full-spread)")
+    ap.add_argument("--frames", nargs="+", default=["full"],
+                    help="header experiment: frames to run (default full)")
     ap.add_argument("--fade", type=float, default=0.0)
     ap.add_argument("--jobs", type=int, default=os.cpu_count())
     ap.add_argument("--out", default=None)
@@ -279,9 +281,9 @@ def main():
                 d_lat, d_w = [], []
                 for k in seeds:
                     base = [r for r in rows if r["snr"] == s and r["seed"] == k
-                            and r["round"] == rnd and r["frame"] == "short"]
+                            and r["round"] == rnd and r["frame"] == "short-v1"]
                     spr = [r for r in rows if r["snr"] == s and r["seed"] == k
-                           and r["round"] == rnd and r["frame"] == "short-spread"]
+                           and r["round"] == rnd and r["frame"] == "short"]
                     if base and spr and base[0]["found"] and spr[0]["found"]:
                         d_lat.append(spr[0]["lat_db"] - base[0]["lat_db"])
                         d_w.append(spr[0]["w_db"] - base[0]["w_db"])

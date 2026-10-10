@@ -117,7 +117,9 @@ CARRIER_FRAC = math.exp(-0.64)               # 0.5272924240430485
 USEFUL_FRAC = 0.64 * CARRIER_FRAC            # 0.3374671513875510
 N_PRE, N_HDR, REF_PERIOD = 660, 2640, 16
 N_HDR_BITS, N_INFO_BITS, POLAR_N = 2474, 142, 2048
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2                           # 1 had no spread header (tests only); 2.6.1
+FORMAT_VERSIONS = (1, 2)                     # what a header may say
+SPREAD_RHO = 0.054                           # spread-header power, latent units (2.6.1)
 WAVEFORM_CE, WAVEFORM_L = 0, 1               # L reserved
 LEAD_IN_MAX_S = 10
 CW_WINDOW = 384                              # CE symbols per callsign window (11.64 s)
@@ -143,6 +145,7 @@ class FrameSpec:
     n_hdr: int = 2640                       # 0 (no header) or 2640
     n_data: int = 50600                     # data latents (a prefix of the group's air order)
     cw_after: tuple[int, ...] = CW_AFTER_FULL   # stream symbols before each window
+    hdr_rho: float | None = None            # spread header (2.6.1): None = SPREAD_RHO with a block, else 0
     # derived properties:
     #   n_data_sym = smallest L with L - ceil(L/16) == n_data   (53,974 for 50,600)
     #   n_sym  = n_pre + n_hdr + n_data_sym                      (57,274)
@@ -153,7 +156,12 @@ MEDIUM = FrameSpec("medium", n_data=16384, cw_after=(10000, 20777))   # 20,777 s
 SHORT  = FrameSpec("short",  n_data=4096,  cw_after=(5000, 7670))     #  7,670 sym,  8,438 pos, 255.8 s
 TINY   = FrameSpec("tiny", n_hdr=0, n_data=1024, cw_after=())         #  1,753 sym,  1,753 pos,  53.1 s
 PRESETS = {s.name: s for s in (FULL, MEDIUM, SHORT, TINY)}
+FULL_V1, MEDIUM_V1, SHORT_V1 = ...       # the same with hdr_rho = 0: format version 1, in LEGACY
+def get(name) -> FrameSpec               # PRESETS, then LEGACY, then PROTOTYPES
+def plain(spec) -> FrameSpec             # spec without the spread copy (its version 1 frame)
 ```
+
+FULL, MEDIUM and SHORT carry the spread copy of the header; TINY has no header at all. The `-v1` frames are for receiving recordings made before format version 2 and for measuring the spread copy against.
 
 `FrameSpec.__post_init__` validates the window list. Its entries must be strictly increasing, each must lie in (n_pre + n_hdr, n_sym], and the last may equal n_sym, in which case that window ends the frame.
 
@@ -297,7 +305,7 @@ def save_qrsp(path, sp) ; def load_qrsp(path) -> StoredPicture   # .npz: mode, c
 | 95–96 | mode | A = 0, B = 1, C = 2 |
 | 97–98 | segment | 0 to 2, the latent group |
 | 99–114 | codec ID | 16 bits |
-| 115–118 | version | 1 |
+| 115–118 | version | 2 (1: format version 1, without the spread copy of 2.6.1; sent only in tests) |
 | 119–125 | reserved | 0 |
 | 126–141 | CRC | `beacon._crc16(bits[0:126])`, wrapped as `header.crc16` |
 
@@ -331,14 +339,14 @@ sha256(np.array(INFO_SET, ">u2").tobytes()) = 4e064eee9b1df68ee4d044970b51f05a16
 - **Decoding.**
   1. Fold the coded LLRs to mother LLRs: L_i = Σ_{e ≡ i mod 2048} L_e.
   2. Run SCL with L = 8, f = min-sum, exact g and the LLR path metric, vectorized over the list. Target: under 0.5 s per decode in numpy.
-  3. Accept the most likely path that passes the CRC **and** has version = 1, reserved = 0, mode ≤ 2, segment ≤ mode, and a callsign made only of `[A-Z0-9/ ]`.
+  3. Accept the most likely path that passes the CRC **and** has version = 2, reserved = 0, mode ≤ 2, segment ≤ mode, and a callsign made only of `[A-Z0-9/ ]`. Version 1 is accepted only by the block-alone fallback of 2.6.1 and on a `-v1` frame.
   4. Otherwise return None and keep the LLRs.
 - **LLRs.** llr = log P(b=0)/P(b=1), so a positive value means symbol +1. Coded bit e rides header non-reference symbol e as +1 for 0 and −1 for 1. For waveform L later, bit e goes to L symbol ⌊e/2⌋, on I for even e and Q for odd, so LLR indices are shared across waveforms.
 
 ```python
 @dataclass(frozen=True)
 class HeaderFields: callsign: str; grid: str | None; picture_id: int; mode: int; segment: int
-                    codec_id: int; version: int = 1; reserved: int = 0
+                    codec_id: int; version: int = 2; reserved: int = 0
 def pack(h) -> uint8[142] ; def unpack(bits) -> HeaderFields | None      # None if CRC or field checks fail
 def crc16(bits) -> uint8[16] ; def grid_encode(g) -> int ; def grid_decode(v) -> str | None
 INFO_SET: tuple[int, ...]
@@ -357,6 +365,14 @@ def encode(h) -> uint8[2474] ; def decode(llr, list_size=8) -> HeaderFields | No
 | (1024) Bhattacharyya as written in design A | 1.0 | 1.0 |
 
 CA-SCL with L = 8 only improves on these.
+
+### 2.6.1 Spread copy of the header (format version 2, spec rev 11 §5.1)
+
+Every CE frame with a header block also carries the header on its data symbols, as a small extra phase. Data symbol i (stream order, after the precoder) is sent as x_i + √ρ·h_i, with h_i = w_i·(1 − 2c[i mod 2474]), c the 2,474 coded header bits above, w = `pm1(sha_bits(b"QRSSTVAE CE spread header", n_data))` (`sequences.spread_whitener`, not keyed by q) and ρ = `SPREAD_RHO` = 0.054. `frame.assemble` adds it; `frame.spread_symbols` is the term on its own.
+
+- **Round A** decodes the header from the block's LLRs plus the spread copy's (`demod.spread_llr`, folded over the repeats), then from the spread copy alone, then from the block alone accepting either version. A version 1 header switches the pass to `frame.plain(spec)` (`receiver.decode_header`).
+- **Round B** removes the known phase exactly (`track.remove_spread`), so the latents lose nothing once the header is known.
+- Design, costs and Andrew's measurements: [spread-header.md](spread-header.md). Waveform L has no spread copy until it is built.
 
 ### 2.7 Callsign windows (`morse.py`, `ce.py`)
 
@@ -416,7 +432,7 @@ This implements spec §2.8.
 
 - A full segment is **50,970 bytes**, which fits a 24LC512 (65,536 bytes).
 - The keying mask is stored so that a microcontroller needs no Morse table. `read` checks that the mask equals `keying_units(callsign)`, and that the CRC-32 matches.
-- The beacon itself computes the preamble, references, scrambler, precoder, phase and window phase.
+- The beacon itself computes the preamble, references, scrambler, precoder, the spread copy of the header (2.6.1, from the stored header bits), phase and window phase.
 
 ```python
 @dataclass class BeaconFile: waveform: int; mode: int; segment: int; picture_id: int; codec_id: int
@@ -910,17 +926,19 @@ typedef struct { const uint8_t *bf; uint32_t n_lat; uint64_t q; uint8_t flags; u
                  int16_t blk[64]; uint32_t blk_idx; /* block cache, window state ... */ } qrss_ce_t;
 int      qrss_ce_init(qrss_ce_t *s, const uint8_t *file, uint32_t len, uint64_t q); /* 0 ok; <0 bad magic/CRC */
 int32_t  qrss_ce_symbol(qrss_ce_t *s, uint32_t k);       /* stream symbol k, in units of 1/(20*sqrt(M)) or +-1 class-scaled */
+int32_t  qrss_ce_spread(qrss_ce_t *s, uint32_t k);       /* its spread-header part h (2.6.1): +-1 on a data symbol, else 0 */
 uint32_t qrss_ce_phase(qrss_ce_t *s, uint32_t u, uint32_t fu_num, uint32_t fu_den);
          /* total phase (phi + 2 pi theta_cw) in 2^-32 turn at t = t0 - 8T + u*fu_den/fu_num */
 int32_t  qrss_si5351_next(qrss_ce_t *s, uint32_t u, uint32_t fu_num, uint32_t fu_den, uint32_t step_mhz,
                           int64_t *reached);             /* error-feedback step for the next interval */
 ```
 
-- `sha256.[ch]` is a minimal public-domain-style implementation, checked against the FIPS 180-4 vectors. The preamble (3 hashes), references (14) and scrambler (198 per slot) are all hashed on the device.
+- `sha256.[ch]` is a minimal public-domain-style implementation, checked against the FIPS 180-4 vectors. The preamble (3 hashes), references (14), scrambler (198 per slot) and spread-header whitener (198, the same every slot) are all hashed on the device.
 - `qrss_tables.h` is generated by `tools/gen_qrss_tables.py`, which has a `--check` mode. It holds:
   - the pulse half-table, 513 entries at T/64 in **Q14** (Q15 would overflow, since p(0) = 1.041), used with linear interpolation;
   - the Hann-integral R(y), 65 entries in Q30;
-  - per-block-size scale constants β/(2π·20·√M) in Q-format.
+  - per-block-size scale constants β/(2π·20·√M) in Q-format, and β·√ρ/(2π) for the spread header;
+  - each preset's `spread` flag (1 for every preset with a header block).
 - Measured for this design: T/64 linear interpolation with Q14 or Q15 gives 8e-5 rad rms and 5e-4 rad max phase error, against −13.2 dB of the signal's own distortion. That is negligible.
 - `test_main.c` reads a beacon file and prints phases and steps.
 - `tests/test_qrss_c_ref.py` builds with `cc` if present and skips otherwise.
@@ -1129,7 +1147,7 @@ Every package must leave `.venv/bin/python -m pytest` green, including the exist
 | D6 | **Precoder tail.** The 32 and 8 blocks are orthonormal Sylvester WHTs of their own size. Shorter test frames use a binary decomposition of n mod 64 | not named in the spec |
 | D7 | **Picture ID bytes.** `uint16_be(codec ID) ‖ uint8(mode) ‖` the mode's groups as fp16 LE, canonical 52,800 each, never-sent values zeroed, each scaled to unit RMS over its 50,600 sent values in float64 and then rounded. The fp16 values are what is sent | spec gives the idea, not the bytes |
 | D8 | **CRC.** `beacon._crc16` bit for bit, check value 0xA69D. **This is not CRC-16/CCITT-FALSE (0x29B1).** The spec should say "SSTVAE beacon CRC" or switch to true CCITT-FALSE; either is one line. SSTVAE's docstring is also wrong | spec's two phrases contradict each other |
-| D9 | **Header FEC.** Polar N = 2048, K = 142 including the CRC, natural-order F^{⊗11}, circular repetition to 2,474, `INFO_SET` committed as literal data (GA design at −23.5 dB), CA-SCL L = 8. Acceptance also requires version = 1, reserved = 0, mode ≤ 2, segment ≤ mode and a valid callsign, which cuts false accepts from about 1.2e-4 (8 list paths x 2^-16) to below 1e-8 per attempt | spec allows polar or LDPC without specifying either; best of the constructions checked |
+| D9 | **Header FEC.** Polar N = 2048, K = 142 including the CRC, natural-order F^{⊗11}, circular repetition to 2,474, `INFO_SET` committed as literal data (GA design at −23.5 dB), CA-SCL L = 8. Acceptance also requires version = 2 (1 only in the fallbacks of 2.6.1), reserved = 0, mode ≤ 2, segment ≤ mode and a valid callsign, which cuts false accepts from about 1.2e-4 (8 list paths x 2^-16) to below 1e-8 per attempt | spec allows polar or LDPC without specifying either; best of the constructions checked |
 | D10 | **Header fields.** Table order, MSB first. Grid = ((F1·18 + F2)·10 + D1)·10 + D2, with 32767 for none. Version 1. CRC over bits 0–125. Callsigns limited to `[A-Z0-9/]`, 1 to 8 characters, rejected otherwise instead of silently mapped to space | unspecified, and the Morse ID needs a Morse code for every character |
 | D11 | **Codec ID.** The first 2 bytes of `sstvae.source_sha256` (v5: 0xD1D8). The encoder refuses a model without it unless `--codec-id` is given | third-party exports may lack the metadata |
 | D12 | **Beacon file.** Format of §2.9: 50,970 bytes for mode A; int8 at a scale of 20, clipped symmetrically to ±127 (±6.35, not −6.4); stores the callsign keying mask and the keying flag | spec gives only the contents |

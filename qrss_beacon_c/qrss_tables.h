@@ -38,6 +38,7 @@
 #define QRSS_PREAMBLE_DOMAIN  "QRSSTVAE CE preamble"
 #define QRSS_REFERENCE_DOMAIN "QRSSTVAE CE reference"
 #define QRSS_SCRAMBLE_DOMAIN  "QRSSTVAE scramble"
+#define QRSS_SPREAD_DOMAIN    "QRSSTVAE CE spread header"
 
 /* p(k/64) in Q14, k = 0..512. */
 #define QRSS_PULSE_STEPS 64
@@ -110,21 +111,28 @@ static const int32_t QRSS_SCALE_Q32[8] = {
        9667073,    6835653,    4833536,    3417826
 };
 
-/* Frame presets (frame.PRESETS): name, n_hdr, n_data, n_win, cw_after. */
+/* Turns per unit of the spread header on a data symbol, Q32:
+ * beta sqrt(rho)/(2 pi), rho = 0.054 (spec 5.1). */
+#define QRSS_SPREAD_Q32 127076973
+
+/* Frame presets (frame.PRESETS): name, n_hdr, n_data, n_win, cw_after,
+ * spread (1: the data carry the spread copy of the header, format
+ * version 2; every preset with a header block does). */
 typedef struct {
     const char *name;
     uint32_t n_hdr;
     uint32_t n_data;
     uint32_t n_win;
     uint32_t cw_after[QRSS_MAX_WINDOWS];
+    uint32_t spread;
 } qrss_frame_t;
 
 #define QRSS_N_PRESETS 4
 static const qrss_frame_t QRSS_PRESETS[QRSS_N_PRESETS] = {
-    {"full", 2640u, 50600u, 4u, {13888u, 28350u, 42812u, 57274u}},
-    {"medium", 2640u, 16384u, 2u, {10000u, 20777u, 0u, 0u}},
-    {"short", 2640u, 4096u, 2u, {5000u, 7670u, 0u, 0u}},
-    {"tiny", 0u, 1024u, 0u, {0u, 0u, 0u, 0u}}
+    {"full", 2640u, 50600u, 4u, {13888u, 28350u, 42812u, 57274u}, 1u},
+    {"medium", 2640u, 16384u, 2u, {10000u, 20777u, 0u, 0u}, 1u},
+    {"short", 2640u, 4096u, 2u, {5000u, 7670u, 0u, 0u}, 1u},
+    {"tiny", 0u, 1024u, 0u, {0u, 0u, 0u, 0u}, 0u}
 };
 
 #endif /* QRSS_TABLES_H */

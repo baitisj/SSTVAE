@@ -5,9 +5,10 @@ The C is built once per session with whatever C compiler is on the PATH
 through its `qrss_ce_test` command-line driver. Without a compiler every
 test here except the table check skips.
 
-- C1: SHA-256 against FIPS 180-4 and hashlib; the preamble, references and
-  scrambler (three slots) bit for bit; the stream symbols of a beacon file
-  equal `tx.slot_symbols` on the same file.
+- C1: SHA-256 against FIPS 180-4 and hashlib; the preamble, references,
+  scrambler (three slots) and spread-header whitener bit for bit; the
+  stream symbols of a beacon file, the spread copy of the header (spec
+  5.1) included, equal `tx.slot_symbols` on the same file.
 - C2: the integer phase is within 2e-4 rad rms and 1e-3 rad max of
   `si5351.target_phase` over [-8T, 600 s] of a SHORT beacon file, for FSK
   and on-off keyed callsign windows, at 990, 250 and 8000 Hz updates.
@@ -37,7 +38,7 @@ import pytest
 
 from qrss_helpers import Q_TEST, REPO_ROOT, synthetic_full_latents
 from sstvae.qrss import beaconfile, frame, picture, sequences, si5351, tx
-from sstvae.qrss.constants import CW_UNITS, T_SYM
+from sstvae.qrss.constants import CW_UNITS, N_HDR_BITS, SPREAD_RHO, T_SYM
 from sstvae.qrss.header import HeaderFields
 
 C_DIR = REPO_ROOT / "qrss_beacon_c"
@@ -170,13 +171,27 @@ def test_c1_sequences_bit_for_bit(exe):
     # An offset start lands on the same bits (the beacon reads them piecemeal).
     assert np.array_equal(_seq(exe, "scr", Q_TEST, 1000, 300),
                           (1 - sequences.scrambler(Q_TEST, 1300)[1000:]) // 2)
+    # The spread header's whitener: one stream for every slot (not keyed by q).
+    for q in Q_SLOTS[:2]:
+        w = _seq(exe, "spr", q, 0, 50600)
+        assert np.array_equal(1 - 2 * w.astype(np.int8), sequences.spread_whitener(50600)), q
+
+
+def _c_sym(exe, path, q, frame_arg) -> np.ndarray:
+    """int32[n_sym, 3]: (value, class, spread) per stream symbol."""
+    return np.frombuffer(_run(exe, "sym", path, q, frame_arg), np.int32).reshape(-1, 3)
+
+
+def _values(vc) -> np.ndarray:
+    m = 2.0 ** (vc[:, 1] - 1)
+    return (np.where(vc[:, 1] == 0, 1.0, 1.0 / (20 * np.sqrt(m))) * vc[:, 0]
+            + np.sqrt(SPREAD_RHO) * vc[:, 2])
 
 
 def _c_symbols(exe, path, q, spec) -> np.ndarray:
-    vc = np.frombuffer(_run(exe, "sym", path, q, spec.name), np.int32).reshape(-1, 2)
+    vc = _c_sym(exe, path, q, spec.name)
     assert len(vc) == spec.n_sym
-    m = 2.0 ** (vc[:, 1] - 1)
-    return np.where(vc[:, 1] == 0, 1.0, 1.0 / (20 * np.sqrt(m))) * vc[:, 0]
+    return _values(vc)
 
 
 @pytest.mark.parametrize("name", ["full", "short", "tiny"])
@@ -190,6 +205,30 @@ def test_c1_stream_symbols_equal_python(exe, bin_files, name):
                                    tx.slot_symbols(bf, q, spec), rtol=0, atol=1e-12)
 
 
+@pytest.mark.parametrize("name", ["full", "short", "tiny"])
+def test_c1_spread_copy_of_the_header(exe, bin_files, name):
+    """C1: on every preset with a header block the data symbols carry the
+    spread copy, h_i = w_i (1 - 2 c[i mod 2474]) from the file's own coded
+    header bits, and nothing else does; TINY carries none (format version 2)."""
+    spec = frame.PRESETS[name]
+    path, bf = bin_files[False]
+    h = _c_sym(exe, path, Q_TEST, name)[:, 2]
+    lay = frame.layout(spec)
+    if spec.hdr_rho == 0:
+        assert not h.any()
+        return
+    assert spec.hdr_rho == SPREAD_RHO and spec.n_hdr
+    want = frame.spread_signs(spec, bf.hdr_bits)
+    assert np.array_equal(h[lay.data], want)
+    others = np.ones(spec.n_sym, bool)
+    others[lay.data] = False
+    assert not h[others].any()
+    # The copy repeats the codeword: data symbols 2474 apart agree once whitened.
+    c = h[lay.data] * sequences.spread_whitener(spec.n_data)
+    n = min(N_HDR_BITS, spec.n_data - N_HDR_BITS)
+    assert n > 1000 and np.array_equal(c[:n], c[N_HDR_BITS:N_HDR_BITS + n])
+
+
 def test_c1_tail_blocks_and_custom_frames(exe, bin_files):
     """Every precoder tail size (n_data % 64 = 47 -> 32, 8, 4, 2, 1) and a
     frame with its last window ending it, given to the C as an explicit
@@ -197,11 +236,11 @@ def test_c1_tail_blocks_and_custom_frames(exe, bin_files):
     path, bf = bin_files[False]
     spec = frame.FrameSpec("tail", n_data=4096 + 47, cw_after=())
     arg = f"{spec.n_hdr},{spec.n_data}"
-    vc = np.frombuffer(_run(exe, "sym", path, Q_TEST, arg), np.int32).reshape(-1, 2)
+    vc = _c_sym(exe, path, Q_TEST, arg)
     assert sorted(set(vc[:, 1].tolist())) == [0, 1, 2, 3, 4, 6, 7]
-    m = 2.0 ** (vc[:, 1] - 1)
-    got = np.where(vc[:, 1] == 0, 1.0, 1.0 / (20 * np.sqrt(m))) * vc[:, 0]
-    np.testing.assert_allclose(got, tx.slot_symbols(bf, Q_TEST, spec), rtol=0, atol=1e-12)
+    assert spec.hdr_rho == SPREAD_RHO and np.count_nonzero(vc[:, 2]) == spec.n_data
+    np.testing.assert_allclose(_values(vc), tx.slot_symbols(bf, Q_TEST, spec),
+                               rtol=0, atol=1e-12)
 
     n_sym = frame.FrameSpec("end", n_data=2000, cw_after=()).n_sym
     spec = frame.FrameSpec("end", n_data=2000, cw_after=(4000, n_sym))
@@ -344,7 +383,7 @@ def test_init_refuses_bad_files(exe, bin_files, tmp_path):
     # TINY has no windows, so it needs no callsign; SHORT does.
     p = tmp_path / "nocall.bin"
     p.write_bytes(_recrc(bytes(no_call)))
-    assert len(_run(exe, "sym", p, Q_TEST, "tiny")) == 8 * frame.TINY.n_sym
+    assert len(_run(exe, "sym", p, Q_TEST, "tiny")) == 12 * frame.TINY.n_sym
 
 
 def test_show_prints_phases_and_steps(exe, bin_files):
@@ -486,4 +525,4 @@ def test_init_refuses_callsign_outside_its_room_and_unknown_flags(exe, bin_files
     b[32 + 183 // 8] |= 0x80 >> (183 % 8)
     p = tmp_path / "ok.bin"
     p.write_bytes(_recrc(bytes(b)))
-    assert len(_run(exe, "sym", p, Q_TEST, "short")) == 8 * frame.SHORT.n_sym
+    assert len(_run(exe, "sym", p, Q_TEST, "short")) == 12 * frame.SHORT.n_sym

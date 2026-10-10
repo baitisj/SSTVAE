@@ -144,12 +144,15 @@ def test_assemble_places_every_class():
     assert np.array_equal(sym[lay.ref], sequences.references_ce(f.n_ref))
     assert sym[lay.hdr_spare].tolist() == [1.0]
     assert np.array_equal(sym[lay.hdr_bits], 1.0 - 2.0 * bits)
-    assert np.array_equal(sym[lay.data], x)
+    # the data symbols carry the spread copy of the header on top (spec 5.1)
+    xs = x + frame.spread_symbols(f, bits)[lay.data]
+    assert np.array_equal(sym[lay.data], xs)
+    assert np.array_equal(frame.assemble(frame.SHORT_V1, bits, x)[lay.data], x)
     h, d = frame.disassemble(sym, f)
-    assert np.array_equal(h, 1.0 - 2.0 * bits) and np.array_equal(d, x)
+    assert np.array_equal(h, 1.0 - 2.0 * bits) and np.array_equal(d, xs)
     # batch axes pass through disassemble
     h2, d2 = frame.disassemble(np.stack([sym, -sym]), f)
-    assert d2.shape == (2, f.n_data) and np.array_equal(d2[1], -x)
+    assert d2.shape == (2, f.n_data) and np.array_equal(d2[1], -xs)
 
 
 def test_reference_counter_is_shared_across_frames():

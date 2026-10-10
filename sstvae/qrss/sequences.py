@@ -1,5 +1,6 @@
-"""SHA-256 bit streams: the CE preamble, the reference symbols and the
-per-pass scrambler (design section 2.3).
+"""SHA-256 bit streams: the CE preamble, the reference symbols, the
+per-pass scrambler (design section 2.3) and the spread header's whitener
+(spec 5.1).
 
 A **format module**. Every sequence here is closed form over integers --
 SHA-256 of an ASCII domain string, an optional prefix and a big-endian
@@ -25,7 +26,7 @@ from .constants import N_PRE
 PREAMBLE_DOMAIN = b"QRSSTVAE CE preamble"
 REFERENCE_DOMAIN = b"QRSSTVAE CE reference"
 SCRAMBLE_DOMAIN = b"QRSSTVAE scramble"
-SPREAD_DOMAIN = b"QRSSTVAE CE spread header"   # prototype (docs/qrss/spread-header.md)
+SPREAD_DOMAIN = b"QRSSTVAE CE spread header"   # spec 5.1, format version 2
 L_PREAMBLE_DOMAIN = b"QRSSTVAE L preamble"   # reserved for waveform L
 
 _BITS_PER_BLOCK = 256
@@ -83,7 +84,7 @@ def _spread_whitener(n: int) -> np.ndarray:
 
 
 def spread_whitener(n: int) -> np.ndarray:
-    """Sign flips of the spread header (prototype, docs/qrss/spread-header.md),
+    """Sign flips of the spread header (spec 5.1, docs/qrss/spread-header.md),
     int8 +-1, indexed by data symbol. Not keyed by q: the spread header is
     the same in every pass, so its LLRs add across passes."""
     return _spread_whitener(int(n))

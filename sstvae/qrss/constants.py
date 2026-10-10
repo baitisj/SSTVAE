@@ -37,7 +37,12 @@ USEFUL_FRAC = 0.64 * CARRIER_FRAC            # 0.3374671513875510, linear-part s
 # --- frame building blocks ---------------------------------------------------
 N_PRE, N_HDR, REF_PERIOD = 660, 2640, 16     # preamble, header symbols; 1 in 16 a reference
 N_HDR_BITS, N_INFO_BITS, POLAR_N = 2474, 142, 2048
-FORMAT_VERSION = 1
+# 2 (2026-10-10, spec 5.1): every CE frame with a header block also carries
+# the spread copy of the header on its data symbols. 1 was sent only in
+# tests; its block still decodes, so receivers fall back to it.
+FORMAT_VERSION = 2
+FORMAT_VERSIONS = (1, 2)                     # what a header may say
+SPREAD_RHO = 0.054                           # spread-header power, latent units (spec 5.1)
 WAVEFORM_CE, WAVEFORM_L = 0, 1               # L reserved
 LEAD_IN_MAX_S = 10
 

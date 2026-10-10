@@ -183,14 +183,16 @@ def test_kappa_self_and_d_pass_rederived(name):
     """KAPPA_SELF and D_PASS re-measured with `ce.loopback_stats` (noiseless
     genie loopback, Gaussian latents, two seeds) agree with the pinned
     values: KAPPA_SELF within 0.04 (measured 0.935-0.97), D_PASS within
-    15% per frame and 10% on the mean (measured 0.043-0.052)."""
+    15% per frame and 10% on the mean (measured 0.043-0.052). On the frame
+    without the spread copy: the receiver removes that copy exactly once
+    the header is known, and these constants describe what is left."""
     from sstvae.qrss import ce, header
     from sstvae.qrss.precoder import precode
 
     from qrss_helpers import unit_rms_latents
     from test_qrss_receiver import HDR
 
-    spec = frame.get(name)
+    spec = frame.plain(frame.get(name))
     ks, ds = [], []
     for seed in (1, 2):
         a = unit_rms_latents(spec.n_data, seed)

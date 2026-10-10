@@ -151,7 +151,10 @@ def test_slot_symbols_structure(sp):
     from sstvae.qrss.header import encode
     assert np.array_equal(sym[lay.hdr_bits], 1.0 - 2.0 * encode(h))
     air = picture.air_values(sp.segs[0], 0)[:spec.n_data]
-    assert np.allclose(precoder.unprecode(sym[lay.data], Q_TEST), air, atol=1e-12)
+    # The data carry the spread copy of the header (format version 2) on top.
+    spread = frame.spread_symbols(spec, encode(h))[lay.data]
+    assert np.all(np.abs(spread) == np.sqrt(frame.SPREAD_RHO))
+    assert np.allclose(precoder.unprecode(sym[lay.data] - spread, Q_TEST), air, atol=1e-12)
     # The scrambler follows q.
     other = tx.slot_symbols(sp, Q_TEST + 1, spec, segment=0, header=h)
     assert not np.allclose(other[lay.data], sym[lay.data])

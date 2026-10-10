@@ -1,9 +1,11 @@
-"""The spread-header prototype (docs/qrss/spread-header.md).
+"""The spread header (spec 5.1, format version 2; docs/qrss/spread-header.md).
 
 Fast: the format (a spread frame is the plain frame plus sqrt(rho) h on
-the data, and rho = 0 is the plain frame), the folded LLRs, and the
-property the whole scheme rests on -- removing the known header phase
-from a spread frame's signal leaves exactly the plain frame's signal.
+the data; every frame with a header block carries it, and the version 1
+frames are the same shapes without it), the folded LLRs, the version
+fallback, and the property the whole scheme rests on -- removing the
+known header phase from a spread frame's signal leaves exactly the plain
+frame's signal.
 Slow: a frame whose only header is the spread one, received end to end,
 decodes it, and once it is known delivers the plain frame's latents.
 """
@@ -31,23 +33,36 @@ def _x(spec, seed=0):
 def test_spread_frame_is_plain_frame_plus_header():
     bits = header.encode(HDR)
     x = _x(frame.SHORT)
-    plain = frame.assemble(frame.SHORT, bits, x)
-    spread = frame.assemble(frame.SHORT_SPREAD, bits, x)
+    plain = frame.assemble(frame.SHORT_V1, bits, x)
+    spread = frame.assemble(frame.SHORT, bits, x)
     lay = frame.layout(frame.SHORT)
     d = spread - plain
     np.testing.assert_array_equal(np.delete(d, lay.data), 0.0)
-    h = frame.spread_signs(frame.SHORT_SPREAD, bits)
+    h = frame.spread_signs(frame.SHORT, bits)
     np.testing.assert_allclose(d[lay.data], np.sqrt(frame.SPREAD_RHO) * h, atol=1e-15)
-    np.testing.assert_allclose(frame.spread_symbols(frame.SHORT_SPREAD, bits), d, atol=1e-15)
+    np.testing.assert_allclose(frame.spread_symbols(frame.SHORT, bits), d, atol=1e-15)
     # the same codeword on every repeat, under the whitener
     c = 1.0 - 2.0 * bits
     np.testing.assert_array_equal(h * frame.spread_whitener(frame.SHORT.n_data),
                                   c[np.arange(frame.SHORT.n_data) % 2474])
 
 
+def test_every_header_block_carries_the_spread_copy():
+    """Format version 2: a frame with the header block has the spread copy
+    unless it says otherwise; the version 1 frames are the same shapes
+    without it."""
+    for name, spec in frame.PRESETS.items():
+        assert spec.hdr_rho == (frame.SPREAD_RHO if spec.n_hdr else 0.0), name
+    assert frame.SPREAD_RHO == 0.054 and header.FORMAT_VERSION == 2
+    assert frame.FrameSpec("custom", n_data=2000, cw_after=()).hdr_rho == frame.SPREAD_RHO
+    for v1 in frame.LEGACY.values():
+        spec = frame.get(v1.name.removesuffix("-v1"))
+        assert v1.hdr_rho == 0.0 and frame.plain(spec) is v1 and frame.get(v1.name) is v1
+        assert frame.layout(v1).data.tolist() == frame.layout(spec).data.tolist()
+    assert frame.plain(frame.TINY) is frame.TINY
+
+
 def test_rho_zero_and_header_requirement():
-    import dataclasses
-    assert dataclasses.replace(frame.SHORT, hdr_rho=0.0) == frame.SHORT
     assert not frame.TINY.has_header and SPREAD_ONLY.has_header
     with pytest.raises(ValueError):
         frame.assemble(SPREAD_ONLY, None, _x(SPREAD_ONLY))
@@ -73,14 +88,14 @@ def test_spread_llr_folds_to_the_codeword():
 def test_removing_the_known_phase_leaves_the_plain_frame():
     """CE is a pure phase signal: exp(-j phi_h) applied at the receiver's
     timing turns the spread frame's baseband into the plain frame's."""
-    spec = frame.SHORT_SPREAD
+    spec = frame.SHORT
     bits = header.encode(HDR)
     x = _x(spec)
-    plain = frame.assemble(frame.SHORT, bits, x)
+    plain = frame.assemble(frame.SHORT_V1, bits, x)
     spread = frame.assemble(spec, bits, x)
     n0, n = ce._loopback_span(spec, CH_FS)
     zs = ce.baseband(spread, spec, CH_FS, n0 / CH_FS, n, ramp_s=0.0)
-    zp = ce.baseband(plain, frame.SHORT, CH_FS, n0 / CH_FS, n, ramp_s=0.0)
+    zp = ce.baseband(plain, frame.SHORT_V1, CH_FS, n0 / CH_FS, n, ramp_s=0.0)
 
     class Chan:                               # sample i is at t0 + (n0 + i)/fs
         t0_index = -n0
@@ -91,7 +106,7 @@ def test_removing_the_known_phase_leaves_the_plain_frame():
 
 
 def test_round_a_classes_carry_the_unknown_header_variance():
-    spec = frame.SHORT_SPREAD
+    spec = frame.SHORT
     lay = frame.layout(spec)
     a = T.make_classes(spec)
     assert a.spread is None and a.spread_rho == spec.hdr_rho
@@ -99,8 +114,55 @@ def test_round_a_classes_carry_the_unknown_header_variance():
     b = T.make_classes(spec, header.encode(HDR))
     assert b.spread is not None and b.spread_rho == 0.0
     np.testing.assert_allclose(b.nu[lay.data], 1.0)
-    plain = T.make_classes(frame.SHORT)
+    plain = T.make_classes(frame.SHORT_V1)
     assert plain.spread is None and plain.spread_rho == 0.0
+
+
+def _llr(bits, gain, rng):
+    """LLRs of a coded header at `gain` (0: pure noise)."""
+    c = 1.0 - 2.0 * np.asarray(bits, float)
+    return 4.0 * gain * c + 2.0 * np.sqrt(2.0 * gain + 1.0) * rng.standard_normal(len(c))
+
+
+def test_header_versions():
+    """Version 2 is what a header says and what a decode accepts; version 1
+    decodes only when asked for (the block-alone fallback)."""
+    v1 = header.HeaderFields(**{**HDR.__dict__, "version": 1})
+    assert HDR.version == 2
+    llr = 8.0 * (1.0 - 2.0 * header.encode(v1))
+    assert header.decode(llr) is None
+    assert header.decode(llr, versions=(1, 2)) == v1
+
+
+def test_a_version_1_pass_falls_back_to_its_block():
+    """Round A on a version 1 recording: the spread LLRs are noise, so the
+    sum may fail; the block alone decodes it, says version 1, and the pass
+    goes on as the frame without the spread copy (round B removes
+    nothing). A version 2 pass whose block faded decodes from the spread
+    copy alone."""
+    from sstvae.qrss.receiver import decode_header
+    rng = np.random.default_rng(7)
+    v1 = header.HeaderFields(**{**HDR.__dict__, "version": 1})
+    block = _llr(header.encode(v1), 0.6, rng)
+    spread = 30.0 * rng.standard_normal(2474)          # loud noise: the sum fails
+    diag = dict(llr_block=block, llr_spread=spread)
+    assert header.decode(block + spread) is None
+    hdr, llr, spec = decode_header(block + spread, diag, frame.FULL)
+    assert hdr == v1 and spec is frame.FULL_V1
+    np.testing.assert_array_equal(llr, block)
+    # version 2, block faded: noise there, the spread copy decodes
+    spread = _llr(header.encode(HDR), 0.6, rng)
+    block = 30.0 * rng.standard_normal(2474)
+    hdr, llr, spec = decode_header(block + spread, dict(llr_block=block, llr_spread=spread),
+                                    frame.FULL)
+    assert hdr == HDR and spec is frame.FULL
+    # a frame named as version 1 (an old recording) takes either version
+    hdr, _, spec = decode_header(_llr(header.encode(v1), 0.6, rng), {}, frame.FULL_V1)
+    assert hdr == v1 and spec is frame.FULL_V1
+    hdr, _, _ = decode_header(_llr(header.encode(HDR), 0.6, rng), {}, frame.FULL_V1)
+    assert hdr == HDR
+    # and a frame without a header has nothing to decode
+    assert decode_header(np.zeros(2474), {}, frame.TINY)[0] is None
 
 
 @pytest.mark.slow
@@ -135,3 +197,17 @@ def test_spread_only_header_received():
     lat_plain = latent_snr_db(out["test-plain"][0].z, a)
     print(f"spread-only round B {lat_spread:.2f} dB, plain {lat_plain:.2f} dB")
     assert abs(lat_spread - lat_plain) < 0.1
+
+
+def test_a_stored_version_1_pass_is_re_received_without_the_copy():
+    """A pass stored before format version 2 says frame "full", which now
+    names the frame with the spread copy; its header's version says which
+    frame it was sent in, so EM re-receives it without the copy."""
+    from types import SimpleNamespace
+
+    from sstvae.qrss import em
+    v1 = header.HeaderFields(**{**HDR.__dict__, "version": 1})
+    assert em.pass_spec(SimpleNamespace(frame="full", header=v1)) is frame.FULL_V1
+    assert em.pass_spec(SimpleNamespace(frame="full-v1", header=v1)) is frame.FULL_V1
+    assert em.pass_spec(SimpleNamespace(frame="full", header=HDR)) is frame.FULL
+    assert em.pass_spec(SimpleNamespace(frame="short", header=None)) is frame.SHORT

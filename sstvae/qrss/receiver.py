@@ -56,8 +56,9 @@ from fractions import Fraction
 import numpy as np
 
 from . import acquire, cwid, demod, frontend, header, track
-from .constants import CH_FS, FE_FS, LEAD_IN_MAX_S, SPAN, T_SYM, WAVEFORM_CE, Z_ACCEPT
-from .frame import FULL, FrameSpec
+from .constants import (CH_FS, FE_FS, FORMAT_VERSIONS, LEAD_IN_MAX_S, SPAN, T_SYM,
+                        WAVEFORM_CE, Z_ACCEPT)
+from .frame import FULL, FrameSpec, plain
 from .frame import layout as frame_layout
 from .morse import check_callsign, keying_units
 from .types import CwIdResult, Detection, EmPrior, FreqPath, PassResult, Timing, pass_uid
@@ -193,7 +194,7 @@ def receive_pass(cap, spec: FrameSpec, det: Detection, prior: EmPrior | None = N
     tr.z_ref = det.z_ref
     _erase(tr, erase_s)
     z, w, llr, diag = demod.extract(None, tr, spec, q, estimator)
-    hdr = header.decode(llr.astype(np.float64)) if spec.has_header else None
+    hdr, llr, spec = decode_header(llr, diag, spec)
     cw, cw_known = _cw_result(tr, spec, hdr)
     tracks = [tr]
     # round B
@@ -213,6 +214,37 @@ def receive_pass(cap, spec: FrameSpec, det: Detection, prior: EmPrior | None = N
         ch=chan.ch.astype(np.complex64), ch_fs=CH_FS, ch_t0_index=float(chan.t0_index),
         f_mix_hz=Fraction(chan.f_mix), psi=_psi_frame(tr), estimator=estimator)
     return (pr, tracks) if return_tracks else pr
+
+
+def decode_header(llr, diag, spec: FrameSpec):
+    """(header or None, the LLRs to keep, the frame to go on with) after round A.
+
+    Both copies together first (spec 5.1). Failing that, each alone: the
+    spread copy, for a block lost to a fade whose mis-scaled LLRs spoiled
+    the sum; and the block, which decodes either format version -- a
+    version 1 recording carries no spread copy, so its spread LLRs are
+    only noise. A version 1 header switches the pass to the frame without
+    the spread copy (`frame.plain`), so round B removes nothing. A frame
+    named as version 1 (`frame.LEGACY`, for an old recording) has only its
+    block and accepts either version.
+    """
+    if not spec.has_header:
+        return None, llr, spec
+    if spec.hdr_rho == 0:
+        return header.decode(np.asarray(llr, np.float64), versions=FORMAT_VERSIONS), llr, spec
+    hdr = header.decode(np.asarray(llr, np.float64))
+    if hdr is not None or not spec.n_hdr:
+        return hdr, llr, spec
+    spread, block = diag.get("llr_spread"), diag.get("llr_block")
+    if spread is not None:
+        hdr = header.decode(np.asarray(spread, np.float64))
+        if hdr is not None:
+            return hdr, llr, spec
+    if block is not None:
+        hdr = header.decode(np.asarray(block, np.float64), versions=FORMAT_VERSIONS)
+        if hdr is not None and hdr.version == 1:
+            return hdr, np.asarray(block, llr.dtype), plain(spec)
+    return hdr, llr, spec
 
 
 def detection_from_pass(p: PassResult, lead_in_s: float = 0.0) -> Detection:

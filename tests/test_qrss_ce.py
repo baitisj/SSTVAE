@@ -143,8 +143,12 @@ def test_m2_power_split():
     linear part is what the receiver regresses: the matched-filter gain on
     the data symbols, squared (its power is gain^2 E x^2 with a unit-energy
     pulse).
+
+    These are the plain waveform's numbers (format version 1). The spread
+    copy of the header (format version 2) adds rho to the data's phase
+    variance, so its carrier is exp(-beta^2 (1 + rho)): 0.15 dB weaker.
     """
-    spec = frame.FULL
+    spec = frame.FULL_V1
     sym, _ = _frame(spec)
     lay = frame.layout(spec)
     fs = 250
@@ -161,6 +165,9 @@ def test_m2_power_split():
     x = sym[lay.data]
     linear = st["gain"] ** 2 * np.mean(x ** 2)
     assert linear == pytest.approx(USEFUL_FRAC, abs=0.005)
+    spread = ce.loopback_stats(_frame(frame.FULL)[0], frame.FULL)["carrier"]
+    assert spread == pytest.approx(np.exp(-0.64 * (1 + frame.SPREAD_RHO)), abs=0.005)
+    assert 10 * np.log10(st["carrier"] / spread) == pytest.approx(0.15, abs=0.03)
 
 
 # --- M3: genie loopback ------------------------------------------------------------------
@@ -172,8 +179,10 @@ PINNED_DIST_DB = 13.16
 
 
 def test_m3_genie_loopback_gaussian():
-    """M3: gain 0.581 +- 0.003; per-pass distortion 13.2 +- 0.4 dB (pinned 13.16)."""
-    spec = frame.FULL
+    """M3: gain 0.581 +- 0.003; per-pass distortion 13.2 +- 0.4 dB (pinned 13.16),
+    for the plain waveform (the spread copy is removed before extraction
+    once the header is known, which leaves exactly this)."""
+    spec = frame.FULL_V1
     sym, _ = _frame(spec)
     st = ce.loopback_stats(sym, spec)
     assert st["gain"] == pytest.approx(K_LIN, abs=0.003)
@@ -191,7 +200,7 @@ def test_m3_genie_loopback_gaussian():
 
 def test_m3_latent_domain_distortion_matches_symbol_domain():
     """The precoder is orthonormal: unprecoding Im(m)/gain gives the same SNR."""
-    spec = frame.SHORT
+    spec = frame.SHORT_V1
     sym, a = _frame(spec)
     lay = frame.layout(spec)
     m = ce.loopback_mf(sym, spec)
@@ -213,7 +222,7 @@ def test_m3_genie_loopback_v5_latents():
         pytest.skip("wonder_wheel.jpg not in the repo")
     sp = picture.StoredPicture.from_latents(codec.encode(load_image(img)), 0xD1D8, 0)
     a = picture.air_values(sp.segs[0], 0)
-    spec = frame.FULL
+    spec = frame.FULL_V1
     sym = frame.assemble(spec, _header_bits(), precoder.precode(a, Q_TEST))
     st = ce.loopback_stats(sym, spec)
     assert st["gain"] == pytest.approx(K_LIN, abs=0.003)

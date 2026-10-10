@@ -3,7 +3,8 @@
  * The phase at tau symbols after t0 is
  *     phi = beta * sum_s x_s p(tau - pos(s))       (17 positions at most)
  * plus, inside an FSK callsign window, 2 pi theta_cw. Each x_s is an
- * integer times a per-class scale (QRSS_SCALE_Q32, turns per unit), p is
+ * integer times a per-class scale (QRSS_SCALE_Q32, turns per unit), plus
+ * on a data symbol of a spread frame +-1 times QRSS_SPREAD_Q32; p is
  * the Q14 half-table at T/64 interpolated linearly to Q22, and the sum is
  * an int64 in 2^-54 turn. All of it mirrors sstvae/qrss/ce.py; where they
  * differ, Python is the definition.
@@ -56,14 +57,16 @@ uint32_t qrss_crc32(const uint8_t *p, uint32_t n)
     return c ^ 0xFFFFFFFFu;
 }
 
-/* --- SHA-256 sequences (design 2.3) ---------------------------------------
+/* --- SHA-256 sequences (design 2.3, spec 5.1) ----------------------------
  * Block b of a stream is SHA256(domain || prefix || uint32_be(b)); bit i
- * is bit 7 - i%8 of byte (i%256)/8 of block i/256; bit 0 sends +1. */
+ * is bit 7 - i%8 of byte (i%256)/8 of block i/256; bit 0 sends +1. Only
+ * the scrambler (which = 2) has a prefix, uint64_be(q). */
 
 static void hash_block(int which, uint64_t q, uint32_t b, uint8_t out[32])
 {
-    static const char *const dom[3] = {
+    static const char *const dom[4] = {
         QRSS_PREAMBLE_DOMAIN, QRSS_REFERENCE_DOMAIN, QRSS_SCRAMBLE_DOMAIN,
+        QRSS_SPREAD_DOMAIN,
     };
     uint8_t tail[12];
     uint32_t n = 0;
@@ -101,8 +104,10 @@ void qrss_seq_bits(int which, uint64_t q, uint32_t start, uint32_t n, uint8_t *o
 
 static int cached_bit(qrss_ce_t *s, int which, uint32_t i)
 {
-    qrss_hash_slot_t *slot = which == 0 ? s->pre : which == 1 ? s->ref : s->scr;
-    uint8_t *next = which == 0 ? &s->pre_next : which == 1 ? &s->ref_next : &s->scr_next;
+    qrss_hash_slot_t *slot = which == 0 ? s->pre : which == 1 ? s->ref
+                           : which == 2 ? s->scr : s->spr;
+    uint8_t *next = which == 0 ? &s->pre_next : which == 1 ? &s->ref_next
+                  : which == 2 ? &s->scr_next : &s->spr_next;
     uint32_t b = i >> 8;
     int k;
     for (k = 0; k < 2; k++)
@@ -188,6 +193,7 @@ int qrss_ce_init_frame(qrss_ce_t *s, const uint8_t *file, uint32_t len, uint64_t
         return QRSS_E_FRAME;
     s->n_hdr = frame->n_hdr;
     s->n_data = frame->n_data;
+    s->spread = frame->spread ? 1u : 0u;
     s->n_data_sym = data_symbols(frame->n_data);
     s->n_sym = QRSS_N_PRE + s->n_hdr + s->n_data_sym;
     s->n_win = frame->n_win;
@@ -216,7 +222,7 @@ int qrss_ce_init_frame(qrss_ce_t *s, const uint8_t *file, uint32_t len, uint64_t
         return QRSS_E_CALLSIGN;
 
     for (w = 0; w < 2; w++) {
-        s->pre[w].blk = s->ref[w].blk = s->scr[w].blk = 0xFFFFFFFFu;
+        s->pre[w].blk = s->ref[w].blk = s->scr[w].blk = s->spr[w].blk = 0xFFFFFFFFu;
         s->blk[w].start = -1;
     }
     return QRSS_OK;
@@ -292,11 +298,13 @@ static const qrss_blk_t *get_block(qrss_ce_t *s, uint32_t start, uint32_t m)
     return b;
 }
 
-/* Value and scale class of stream symbol k (see qrss_ce_symbol). */
-static int32_t symbol(qrss_ce_t *s, uint32_t k, int *cls)
+/* Value and scale class of stream symbol k (see qrss_ce_symbol), and its
+ * spread-header part h (see qrss_ce_spread). */
+static int32_t symbol(qrss_ce_t *s, uint32_t k, int *cls, int32_t *h)
 {
     uint32_t j, i;
     *cls = 0;
+    *h = 0;
     if (k < QRSS_N_PRE)
         return cached_bit(s, 0, k) ? -1 : 1;
     j = k - QRSS_N_PRE;
@@ -316,6 +324,11 @@ static int32_t symbol(qrss_ce_t *s, uint32_t k, int *cls)
         find_block(s, i, &start, &m);
         b = get_block(s, start, m);
         *cls = 1 + log2u(m);
+        if (s->spread) {
+            uint32_t c = i % QRSS_N_HDR_BITS;           /* coded header bit c[i mod 2474] */
+            int flip = cached_bit(s, 3, i) ^ (int)((s->hdr[c >> 3] >> (7u - (c & 7u))) & 1u);
+            *h = flip ? -1 : 1;
+        }
         return b->v[i - start];
     }
 }
@@ -323,14 +336,24 @@ static int32_t symbol(qrss_ce_t *s, uint32_t k, int *cls)
 int32_t qrss_ce_symbol(qrss_ce_t *s, uint32_t k)
 {
     int cls;
-    return symbol(s, k, &cls);
+    int32_t h;
+    return symbol(s, k, &cls, &h);
 }
 
 int qrss_ce_symbol_class(qrss_ce_t *s, uint32_t k)
 {
     int cls;
-    symbol(s, k, &cls);
+    int32_t h;
+    symbol(s, k, &cls, &h);
     return cls;
+}
+
+int32_t qrss_ce_spread(qrss_ce_t *s, uint32_t k)
+{
+    int cls;
+    int32_t h;
+    symbol(s, k, &cls, &h);
+    return h;
 }
 
 /* --- phase (design 2.4, 2.7) ---------------------------------------------- */
@@ -405,13 +428,16 @@ uint32_t qrss_ce_phase_q22(qrss_ce_t *s, int64_t tau_q22)
     int64_t p, acc = 0, ph;
     int w;
     for (p = p_lo; p <= p_hi; p++) {
-        int64_t k = stream_at(s, p);
+        int64_t k = stream_at(s, p), pu;
         int cls;
-        int32_t v;
+        int32_t v, h;
         if (k < 0)
             continue;
-        v = symbol(s, (uint32_t)k, &cls);
-        acc += (int64_t)v * QRSS_SCALE_Q32[cls] * pulse_q22(tau_q22 - p * Q22);
+        v = symbol(s, (uint32_t)k, &cls, &h);
+        pu = pulse_q22(tau_q22 - p * Q22);
+        acc += (int64_t)v * QRSS_SCALE_Q32[cls] * pu;
+        if (h)
+            acc += (int64_t)h * QRSS_SPREAD_Q32 * pu;
     }
     ph = sar(acc + ((int64_t)1 << 21), 22);             /* 2^-32 turn */
     w = window_at(s, tau_q22);

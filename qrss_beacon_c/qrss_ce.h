@@ -6,7 +6,10 @@
  * bytes for a full segment) and computes everything else itself, every
  * pass: the preamble, references and scrambler by SHA-256, the precoder
  * (sign flips, then a 64-point Walsh-Hadamard transform per block), the
- * phase pulse sum and the callsign-window phase. This file is the parity
+ * spread copy of the header on the data symbols (spec 5.1, format
+ * version 2: sqrt(rho) h_i on data symbol i, from the file's header bits
+ * and a fourth SHA-256 sequence), the phase pulse sum and the
+ * callsign-window phase. This file is the parity
  * oracle for any port (tests/test_qrss_c_ref.py, C1-C3).
  *
  * Units and time.
@@ -18,8 +21,8 @@
  *    where t0 = QH + 1 s is the centre of the first preamble symbol and
  *    T = 485/16000 s: update u is at t0 - 8T + u * fu_den / fu_num s.
  *    Internally time is tau = (t - t0)/T symbols in Q22.
- *  - The frame (header length, data latents, callsign windows) is a
- *    qrss_frame_t, so the slot timing stays a table edit: QRSS_PRESETS in
+ *  - The frame (header length, data latents, callsign windows, the
+ *    spread copy) is a qrss_frame_t, so the slot timing stays a table edit: QRSS_PRESETS in
  *    qrss_tables.h is generated from frame.PRESETS.
  *
  * The callsign windows are always sent (spec 2.7, a legal requirement):
@@ -68,13 +71,14 @@ typedef struct {
     const int8_t *lat;         /* int8 latents, air order */
     /* the frame */
     uint32_t n_hdr, n_data, n_data_sym, n_sym, n_pos, n_win;
+    uint32_t spread;           /* 1: data symbols carry the spread header */
     uint32_t cw_after[QRSS_MAX_WINDOWS];
     uint32_t win_pos[QRSS_MAX_WINDOWS];   /* P_w, first position of window w */
     int64_t keyed_end_q22;     /* end of keying, tau in Q22 */
     /* caches: two hash blocks per sequence and two precoder blocks, so
      * the 17-symbol pulse span never thrashes across a block boundary */
-    qrss_hash_slot_t pre[2], ref[2], scr[2];
-    uint8_t pre_next, ref_next, scr_next;
+    qrss_hash_slot_t pre[2], ref[2], scr[2], spr[2];
+    uint8_t pre_next, ref_next, scr_next, spr_next;
     qrss_blk_t blk[2];
     uint8_t blk_next;
 } qrss_ce_t;
@@ -97,6 +101,12 @@ const qrss_frame_t *qrss_frame_preset(const char *name);
  * the unnormalised WHT of the sign-flipped int8 latents. */
 int32_t  qrss_ce_symbol(qrss_ce_t *s, uint32_t k);
 int      qrss_ce_symbol_class(qrss_ce_t *s, uint32_t k);
+
+/* The spread header's part of stream symbol k, in units of sqrt(rho)
+ * (QRSS_SPREAD_Q32 turns): h_i = w_i (1 - 2 c[i mod 2474]) = +-1 on data
+ * symbol i of a spread frame, else 0. Symbol k is sent as
+ * qrss_ce_symbol (scaled by its class) plus sqrt(rho) times this. */
+int32_t  qrss_ce_spread(qrss_ce_t *s, uint32_t k);
 
 /* Total phase phi + 2 pi theta_cw in 2^-32 turn at t = t0 - 8T + u*fu_den/fu_num.
  * fu_num <= 2^21. */
@@ -122,7 +132,8 @@ int32_t  qrss_si5351_next(qrss_ce_t *s, uint32_t u, uint32_t fu_num, uint32_t fu
                           uint32_t step_mhz, int64_t *reached);
 
 /* Bits [start, start + n) of a sequence, one 0/1 per byte: which = 0
- * preamble, 1 references, 2 scrambler of slot q. For tests and ports. */
+ * preamble, 1 references, 2 scrambler of slot q, 3 the spread header's
+ * whitener (not keyed by q). For tests and ports. */
 void     qrss_seq_bits(int which, uint64_t q, uint32_t start, uint32_t n, uint8_t *out);
 
 /* zlib's CRC-32. */

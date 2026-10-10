@@ -12,7 +12,7 @@ Fields, in table order, each MSB first:
     bits  95-96   mode          A = 0, B = 1, C = 2
     bits  97-98   segment       0..mode, the latent group
     bits  99-114  codec ID      16 bits
-    bits 115-118  version       FORMAT_VERSION (1)
+    bits 115-118  version       FORMAT_VERSION (2; 1 was sent only in tests)
     bits 119-125  reserved      0
     bits 126-141  CRC           `crc16(bits[0:126])`
 
@@ -29,10 +29,14 @@ anything else raises instead of being mapped to a space as SSTVAE's
 beacon does: every character must also have a Morse code for the
 callsign windows (spec 2.7).
 
-A decode is accepted only when the CRC matches **and** version = 1,
-reserved = 0, mode <= 2, segment <= mode, the grid code is valid and the
-callsign is a valid QRSS call. Eight list paths against a 16-bit CRC
-would otherwise accept noise about once in 8,000 attempts (decision D9).
+A decode is accepted only when the CRC matches **and** the version is
+one asked for (format version 2 by default), reserved = 0, mode <= 2,
+segment <= mode, the grid code is valid and the callsign is a valid QRSS
+call. Eight list paths against a 16-bit CRC would otherwise accept noise
+about once in 8,000 attempts (decision D9). Version 1 frames carried no
+spread copy of the header (spec 5.1); a receiver accepts version 1 only
+when it decodes the header block alone, as a fallback for recordings of
+it, so the usual decode keeps the single-version check.
 """
 
 import re
@@ -41,7 +45,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..modem import beacon as _beacon
-from .constants import FORMAT_VERSION, N_INFO_BITS
+from .constants import FORMAT_VERSION, FORMAT_VERSIONS, N_INFO_BITS
 from .polar import INFO_SET, polar_decode, polar_encode  # noqa: F401  (re-exported)
 
 # Field widths in table order; offsets follow.
@@ -129,8 +133,8 @@ def _check_fields(h: HeaderFields) -> None:
         raise ValueError(f"mode must be 0..{MAX_MODE}, got {h.mode}")
     if not 0 <= h.segment <= h.mode:
         raise ValueError(f"segment must be 0..mode ({h.mode}), got {h.segment}")
-    if h.version != FORMAT_VERSION:
-        raise ValueError(f"version must be {FORMAT_VERSION}, got {h.version}")
+    if h.version not in FORMAT_VERSIONS:
+        raise ValueError(f"version must be one of {FORMAT_VERSIONS}, got {h.version}")
     if h.reserved != 0:
         raise ValueError(f"reserved must be 0, got {h.reserved}")
 
@@ -160,8 +164,9 @@ def _field(bits: np.ndarray, name: str) -> int:
     return _bits_to_int(bits[a:b])
 
 
-def unpack(bits: np.ndarray) -> HeaderFields | None:
-    """142 bits -> HeaderFields, or None if the CRC or any field check fails."""
+def unpack(bits: np.ndarray, versions=(FORMAT_VERSION,)) -> HeaderFields | None:
+    """142 bits -> HeaderFields, or None if the CRC or any field check fails
+    (the version must be one of `versions`)."""
     bits = np.asarray(bits)
     if bits.shape != (N_INFO_BITS,) or np.any((bits != 0) & (bits != 1)):
         return None
@@ -170,7 +175,7 @@ def unpack(bits: np.ndarray) -> HeaderFields | None:
         return None
     version, reserved = _field(bits, "version"), _field(bits, "reserved")
     mode, segment = _field(bits, "mode"), _field(bits, "segment")
-    if version != FORMAT_VERSION or reserved != 0 or mode > MAX_MODE or segment > mode:
+    if version not in versions or reserved != 0 or mode > MAX_MODE or segment > mode:
         return None
     a, _ = _OFFSET["callsign"]
     raw = "".join(_ALPHABET[_bits_to_int(bits[a + 6 * i:a + 6 * i + 6])]
@@ -196,11 +201,17 @@ def encode(h: HeaderFields) -> np.ndarray:
     return polar_encode(pack(h))
 
 
-def decode(llr: np.ndarray, list_size: int = 8) -> HeaderFields | None:
+def decode(llr: np.ndarray, list_size: int = 8,
+           versions=(FORMAT_VERSION,)) -> HeaderFields | None:
     """2474 coded-bit LLRs (log P(0)/P(1)) -> HeaderFields, or None.
 
     For soft combining, pass the sum of several passes' LLRs: the header
     is identical in every pass, so the sum is one pass at N times the SNR.
+    `versions` widens the version check (the block-alone fallback for
+    version 1 recordings, `receiver.receive_pass`).
     """
-    bits = polar_decode(llr, list_size)
-    return None if bits is None else unpack(bits)
+    if tuple(versions) == (FORMAT_VERSION,):
+        bits = polar_decode(llr, list_size)
+    else:
+        bits = polar_decode(llr, list_size, accept=lambda b: unpack(b, versions) is not None)
+    return None if bits is None else unpack(bits, versions)

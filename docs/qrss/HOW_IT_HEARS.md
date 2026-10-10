@@ -84,6 +84,12 @@ A pass is like a letter with an envelope:
   which part of the picture this pass carries, and which version of the
   picture-drawing network to use. It is heavily protected with an
   error-correcting code, so it can be read from a very weak signal.
+  A second, much fainter copy of the header also rides on top of the
+  picture numbers for the whole pass. The receiver reads the two copies
+  together, which works on a weaker signal than the 80-second block
+  alone, and the faint copy alone can still be read if the block is
+  lost. Once the header is known, the receiver subtracts the faint copy
+  exactly, so it costs the picture nothing.
 - **Picture numbers (about 28 minutes).** About 50,600 of the
   picture's numbers. They are scrambled and spread out, so a burst of
   interference damages a little of everything rather than wiping out one
@@ -161,7 +167,12 @@ The header might be lost to a burst of static, or the signal might be
 right at the edge of what can be read. The numbers still arrive; the
 receiver just doesn't know for certain where in the picture they belong.
 
-Most of the time a sensible guess works: it assumes this is the first
+The faint copy that rides on the picture numbers makes this rarer. A
+burst of static that wipes out the 80-second block leaves the copy
+spread over the other 28 minutes, and that copy is enough on its own
+when the signal is a little stronger than the weakest readable one.
+
+When neither copy can be read, a sensible guess usually works: it assumes this is the first
 (or only) pass of the picture, which is true for every mode A send. The
 tile then shows a picture marked "no header yet", and redraws it
 properly as soon as a header is read. The guess is only used for
@@ -181,9 +192,11 @@ been transmitting since :00. You missed the knock and the envelope, so:
   tiles are only created from the preamble.
 - **At the end of the slot**, you have heard about two thirds of it,
   which is more than half, so the end-of-slot search runs and finds the
-  signal. The numbers you heard are stored as a *provisional* pass: kept
-  on disk, but not yet attached to any picture, because there was no
-  header to say which one.
+  signal. If the signal is strong enough, the faint copy of the header
+  riding on the numbers you heard names the picture, and the pass is
+  added to it straight away. Otherwise the numbers you heard are stored
+  as a *provisional* pass: kept on disk, but not yet attached to any
+  picture, because there was no header to say which one.
 - **When the same picture is sent again** later and you catch its
   header, the receiver compares the provisional pass's numbers against
   the newly named picture. If they match (they will, if it's the same

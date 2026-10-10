@@ -197,6 +197,17 @@ def _psi_frame(tr) -> np.ndarray:
     return tr.psi[tr.gi(np.arange(tr.spec.n_pos))].astype(np.float32)
 
 
+def pass_spec(p: PassResult) -> FrameSpec:
+    """The frame pass p was sent in: its recorded frame, without the spread
+    copy when its header says format version 1. A pass stored before
+    version 2 went on the air is recorded as "full", which now names the
+    frame with the spread copy."""
+    spec = frame.get(p.frame)
+    if p.header is not None and p.header.version == 1:
+        spec = frame.plain(spec)
+    return spec
+
+
 def pass_path(p: PassResult, chan=None) -> FreqPath:
     """A frequency path for re-receiving pass p, measured on its own capture.
 
@@ -209,7 +220,7 @@ def pass_path(p: PassResult, chan=None) -> FreqPath:
     Z_ref with the pass's own timing (known symbols withheld from the
     tracker, so the choice does not look at the data).
     """
-    spec = frame.get(p.frame)
+    spec = pass_spec(p)
     det = receiver.detection_from_pass(p)
     if chan is None:
         chan = receiver.channel_for(receiver.capture_from_pass(p), spec, det,
@@ -243,7 +254,9 @@ def rereceive(p: PassResult, prior: EmPrior | None, hdr: header.HeaderFields | N
     callsign-window reading, and p's header unless p had none and the
     re-receive decoded one. With return_path, (PassResult, final path).
     """
-    spec = frame.get(p.frame)
+    spec = pass_spec(p)
+    if hdr is not None and p.header is not None and hdr.version != p.header.version:
+        hdr = dataclasses.replace(hdr, version=p.header.version)   # what p carried
     est = estimator or p.estimator
     if p.ch is None or len(p.ch) == 0:
         return (None, None) if return_path else None
@@ -334,7 +347,7 @@ def em_refine(store: Store, key, rounds: int = EM_ROUNDS, tol_db: float = EM_TOL
             p = store.load_pass(uid)
             if p.ch is None or len(p.ch) == 0:
                 continue
-            spec = frame.get(p.frame)
+            spec = pass_spec(p)
             m = acc.member(uid)
             prior = em_prior(acc, uid, store, p.q, spec)
             new, paths[uid] = rereceive(p, prior, hdrs.get(int(m["segment"])), cw_known,
@@ -637,13 +650,14 @@ def receive_template(store: Store, key, cap, spec: FrameSpec, det: Detection | N
                          timing=det.timing)
     tr.z_ref = det.z_ref
     z, w, llr, diag = demod.extract(None, tr, spec, prep.q, estimator)
+    hdr, llr, spec = receiver.decode_header(llr, diag, spec)
     rep = track.report(tr, diag["kappa"], diag["suspect"])
     f_hz = float(tr.freq(0.0))
     from .types import pass_uid
     return PassResult(
         uid=pass_uid(prep.q, f_hz, z), q=int(prep.q), frame=spec.name, waveform=0,
         f_hz=f_hz, timing=tr.timing, report=rep, z=z, w=w, hdr_llr=llr,
-        header=header.decode(llr.astype(np.float64)) if spec.has_header else None, cw=None,
+        header=hdr, cw=None,
         ch=chan.ch.astype(np.complex64), ch_fs=CH_FS, ch_t0_index=float(chan.t0_index),
         f_mix_hz=Fraction(chan.f_mix), psi=_psi_frame(tr), estimator=estimator)
 
