@@ -96,6 +96,7 @@ add_library(sstvae_core STATIC
   core/beacon/beacon.cpp
   core/dsp/dsp.cpp
   core/dsp/spectrum.cpp
+  core/dsp/slow_spectrogram.cpp
   core/dsp/morse.cpp
   core/dsp/leader.cpp
   core/framing/framing.cpp
@@ -505,6 +506,7 @@ if(_want_gui)
     gui/qrss_editor.cpp
     gui/qrss_timeline.cpp
     gui/qrss_page.cpp
+    gui/qrss_spectrogram.cpp
     gui/tx_panel.cpp
     gui/banner.cpp
     gui/crop_dialog.cpp

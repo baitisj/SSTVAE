@@ -1,0 +1,152 @@
+// The QRSSTVAE spectrogram's numbers, without the widget
+// (core/dsp/slow_spectrogram.*): a tone lands at its frequency, one
+// column a second stamped with the time its audio began, 15 s means for
+// the history, a gap stays a gap, and the time axis's lens and history
+// scales join without a jump.
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+#include <random>
+#include <vector>
+
+#include "check.hpp"
+#include "dsp/slow_spectrogram.hpp"
+
+using namespace sstvae;
+using dsp::SlowSpectrogram;
+
+namespace {
+
+constexpr double T0 = 1791594000.0;   // a quarter hour
+
+// `seconds` of a tone at `hz` (amplitude `a`) plus a little noise,
+// pushed in quarter-second chunks, the first sample at `start`.
+void feed(SlowSpectrogram& s, double start, double seconds, double hz, double a,
+          std::mt19937& rng) {
+    std::normal_distribution<double> noise(0.0, 0.01);
+    const int chunk = 2000;
+    const int total = static_cast<int>(seconds * 8000);
+    for (int i0 = 0; i0 < total; i0 += chunk) {
+        std::vector<double> x(chunk);
+        for (int i = 0; i < chunk; ++i) {
+            const double t = (i0 + i) / 8000.0;
+            x[i] = a * std::sin(2.0 * std::numbers::pi * hz * t) + noise(rng);
+        }
+        s.push(x, start + (i0 + chunk) / 8000.0);
+    }
+}
+
+int peak_bin(const std::vector<float>& p) {
+    return static_cast<int>(std::max_element(p.begin(), p.end()) - p.begin());
+}
+
+void test_columns() {
+    std::mt19937 rng(1);
+    SlowSpectrogram s;
+    feed(s, T0, 40.0, 1000.0, 0.5, rng);
+    const auto& fine = s.fine();
+    check::is_true(fine.size() >= 38 && fine.size() <= 40, "slow/fine: one column a second");
+    check::is_true(std::abs(fine.front().t - T0) < 1e-6 && std::abs(fine[1].t - (T0 + 1)) < 1e-6,
+                   "slow/fine: each stamped with the second its audio began");
+    const int bin = peak_bin(fine[5].power);
+    check::is_true(std::abs(bin * SlowSpectrogram::BIN_HZ - 1000.0) < 1.0,
+                   "slow/fine: a 1000 Hz tone peaks within a hertz of 1000");
+    // 0.25 for amplitude 0.5, less the Hann window's scalloping off a
+    // bin centre (at most 1.4 dB).
+    check::is_true(fine[5].power[bin] > 0.17 && fine[5].power[bin] < 0.26,
+                   "slow/fine: in amplitude squared");
+    check::equal(s.coarse().size(), std::size_t{2},
+                 "slow/coarse: the two whole 15 s blocks (the third is still filling)");
+    check::is_true(s.coarse().front().t == T0, "slow/coarse: stamped with its block");
+
+    int n = 0;
+    const std::vector<float> m = s.mean_between(T0 + 10, T0 + 13, &n);
+    check::equal(n, 3, "slow/mean: the columns that overlap the range");
+    double expect = 0.0;
+    for (int k = 10; k <= 12; ++k) expect += fine[static_cast<std::size_t>(k)].power[bin];
+    check::is_true(std::abs(m[static_cast<std::size_t>(bin)] - expect / 3) < 1e-6,
+                   "slow/mean: their mean");
+    check::is_true(s.mean_between(T0 - 100, T0 - 50).empty(), "slow/mean: nothing before");
+}
+
+void test_a_gap_stays_a_gap() {
+    std::mt19937 rng(2);
+    SlowSpectrogram s;
+    feed(s, T0, 10.0, 800.0, 0.5, rng);
+    feed(s, T0 + 30.0, 10.0, 800.0, 0.5, rng);
+    bool spans = false;
+    for (const auto& c : s.fine()) {
+        if (c.t > T0 + 9.0 && c.t < T0 + 30.0) spans = true;
+    }
+    check::is_true(!spans, "slow/gap: no column made of audio either side of a gap");
+    check::is_true(s.mean_between(T0 + 15, T0 + 25).empty(), "slow/gap: and nothing drawn in it");
+    check::is_true(std::abs(s.fine().back().t - (T0 + 38.0)) < 1e-6,
+                   "slow/gap: the audio after it keeps its own times");
+}
+
+void test_history_comes_from_the_coarse_store() {
+    SlowSpectrogram s;
+    std::mt19937 rng(3);
+    feed(s, T0, 60.0, 1200.0, 0.3, rng);
+    const std::size_t fine_n = s.fine().size();
+    check::is_true(s.coarse().size() == 3, "slow/coarse: three whole blocks in a minute");
+    int n = 0;
+    s.mean_between(T0, T0 + 45, &n);
+    check::equal(n, static_cast<int>(std::min<std::size_t>(fine_n, 45)),
+                 "slow/mean: from the fine store while it reaches back");
+}
+
+void test_older_than_the_fine_store() {
+    std::mt19937 rng(5);
+    SlowSpectrogram s;
+    // Past FINE_KEEP_S of audio, so the first minute is only coarse.
+    feed(s, T0, SlowSpectrogram::FINE_KEEP_S + 120.0, 1200.0, 0.3, rng);
+    check::is_true(s.fine().front().t > T0 + 60.0, "slow/old: the fine store has moved on");
+    int n = 0;
+    const std::vector<float> m = s.mean_between(T0, T0 + 30.0, &n);
+    check::equal(n, 30, "slow/old: two coarse blocks, counted as 30 s of audio");
+    const int bin = peak_bin(m);
+    check::is_true(!m.empty() && std::abs(bin * SlowSpectrogram::BIN_HZ - 1200.0) < 1.0 &&
+                       m[static_cast<std::size_t>(bin)] > 0.05 &&
+                       m[static_cast<std::size_t>(bin)] < 0.1,
+                   "slow/old: and their mean, at the tone's power");
+}
+
+void test_the_time_scale() {
+    const dsp::TimeScale scale(1.0, 15.0, 240, 60);
+    check::is_true(scale.age_at(0) == 0.0 && std::abs(scale.age_at(240) - 240.0) < 1e-9,
+                   "scale: the lens is one second a pixel");
+    check::is_true(scale.spp_at(100) == 1.0 && scale.spp_at(1000) == 15.0,
+                   "scale: then fifteen for the history");
+    bool monotonic = true;
+    bool inverse = true;
+    double prev = -1;
+    for (int x = 0; x <= 1200; x += 7) {
+        const double a = scale.age_at(x);
+        if (a <= prev) monotonic = false;
+        prev = a;
+        if (std::abs(scale.x_of(a) - x) > 1e-6) inverse = false;
+    }
+    check::is_true(monotonic, "scale: older to the right, everywhere");
+    check::is_true(inverse, "scale: x_of undoes age_at");
+    const double step = scale.age_at(301) - scale.age_at(300);
+    check::is_true(std::abs(step - 15.0) < 0.01, "scale: the ramp ends at the history's scale");
+    const double before = scale.age_at(240) - scale.age_at(239);
+    const double after = scale.age_at(241) - scale.age_at(240);
+    check::is_true(after / before < 1.1, "scale: no jump where the lens ends");
+    dsp::TimeScale z;
+    z.set_history_spp(1000);
+    check::is_true(z.history_spp() == dsp::TimeScale::MAX_SPP, "scale: clamped");
+}
+
+}  // namespace
+
+int main() {
+    test_columns();
+    test_a_gap_stays_a_gap();
+    test_history_comes_from_the_coarse_store();
+    test_older_than_the_fine_store();
+    test_the_time_scale();
+    return check::report("slow spectrogram");
+}

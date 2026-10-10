@@ -1,6 +1,7 @@
-// The main window's QRSSTVAE tab: the QRSS signals (gui/qrss_window.hpp)
-// with a row above them for the two things that tab is used for besides
-// watching tiles -- receiving audio at all, and the transmit schedule.
+// The main window's QRSSTVAE tab: the QRSS spectrogram
+// (gui/qrss_spectrogram.hpp) and, beside it across a divider, the
+// received pane of tiles (gui/qrss_window.hpp), with a row above them
+// for receiving audio at all and for the transmit schedule.
 //
 // Receiving is the receive pane's: one sound-card stream feeds both the
 // SSTVAE decoder and the QRSS listener, so Start here and Start on the
@@ -17,9 +18,11 @@
 
 class QLabel;
 class QPushButton;
+class QSplitter;
 
 namespace sstvae::gui {
 
+class QrssSpectrogram;
 class QrssWindow;
 
 class QrssPage : public QWidget {
@@ -30,6 +33,8 @@ public:
     explicit QrssPage(QrssWindow* signals_view, QWidget* parent = nullptr);
 
     QrssWindow* signals_view() const { return signals_; }
+    QrssSpectrogram* spectrogram() const { return spectrogram_; }
+    QSplitter* splitter() const { return splitter_; }
 
 public slots:
     void set_listening(bool on);
@@ -42,6 +47,8 @@ signals:
 
 private:
     QrssWindow* signals_ = nullptr;
+    QrssSpectrogram* spectrogram_ = nullptr;
+    QSplitter* splitter_ = nullptr;
     QPushButton* listen_ = nullptr;
     QLabel* listen_state_ = nullptr;
     QLabel* schedule_summary_ = nullptr;

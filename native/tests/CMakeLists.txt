@@ -233,6 +233,12 @@ if(TARGET sstvae_overlay_render)
   set_tests_properties(overlay_render PROPERTIES TIMEOUT 300)
 endif()
 
+add_executable(test_slow_spectrogram test_slow_spectrogram.cpp)
+target_link_libraries(test_slow_spectrogram PRIVATE sstvae_core)
+target_include_directories(test_slow_spectrogram PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME slow_spectrogram COMMAND test_slow_spectrogram)
+set_tests_properties(slow_spectrogram PROPERTIES TIMEOUT 300)
+
 add_executable(test_spectrum test_spectrum.cpp)
 target_link_libraries(test_spectrum PRIVATE sstvae_core)
 target_include_directories(test_spectrum PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

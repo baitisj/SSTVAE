@@ -3,8 +3,10 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QSplitter>
 #include <QVBoxLayout>
 
+#include "qrss_spectrogram.hpp"
 #include "qrss_window.hpp"
 
 namespace sstvae::gui {
@@ -37,11 +39,22 @@ QrssPage::QrssPage(QrssWindow* signals_view, QWidget* parent)
     row->addWidget(schedule);
     box->addLayout(row);
 
+    // The spectrogram and the received pane, side by side, the divider
+    // the operator's to move.
+    splitter_ = new QSplitter(Qt::Horizontal, this);
+    splitter_->setObjectName(QStringLiteral("qrss_splitter"));
+    splitter_->setChildrenCollapsible(false);
+    spectrogram_ = new QrssSpectrogram(splitter_);
+    splitter_->addWidget(spectrogram_);
     if (signals_ != nullptr) {
-        signals_->setParent(this, Qt::Widget);
-        box->addWidget(signals_, 1);
+        signals_->setParent(splitter_, Qt::Widget);
+        splitter_->addWidget(signals_);
+        signals_->set_spectrogram(spectrogram_);
         signals_->show();
     }
+    splitter_->setStretchFactor(0, 3);
+    splitter_->setStretchFactor(1, 2);
+    box->addWidget(splitter_, 1);
     set_listening(false);
 }
 

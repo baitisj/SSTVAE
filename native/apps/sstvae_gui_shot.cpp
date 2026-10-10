@@ -19,6 +19,14 @@
 // screenshot tool.
 
 #include <QApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTimeZone>
 #include <QPixmap>
 #include <QStringList>
 #include <QLayout>
@@ -34,6 +42,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <numbers>
+#include <random>
 #include <optional>
 #include <string>
 #include <vector>
@@ -45,6 +55,8 @@
 #include "item_menu.hpp"
 #include "qrss_schedule.hpp"
 #include "qrss_editor.hpp"
+#include "qrss_page.hpp"
+#include "qrss_spectrogram.hpp"
 #include "qrss_schedule_window.hpp"
 #include "qrss_sends.hpp"
 #include "qrss_timeline.hpp"
@@ -74,6 +86,8 @@ void usage() {
                  "  --transmit   also shoot the transmit panel\n"
                  "  --receive    also shoot the receive panel\n"
                  "  --crop       also shoot the framing dialog\n"
+                 "  --qrss-tab   also shoot the QRSSTVAE tab on two hours of made-up\n"
+                 "               signals\n"
                  "  --window     also shoot the whole main window\n"
                  "  --log        also shoot the log pane and error banner\n"
                  "  --panes      also shoot both pane layouts, and report the\n"
@@ -119,6 +133,7 @@ int main(int argc, char** argv) {
     bool share = false;
     bool receive = false;
     bool crop = false;
+    bool qrss_tab = false;
     bool window = false;
     bool log_widgets = false;
     bool panes = false;
@@ -145,6 +160,8 @@ int main(int argc, char** argv) {
             transmit = true;
         } else if (arg == QLatin1String("--receive")) {
             receive = true;
+        } else if (arg == QLatin1String("--qrss-tab")) {
+            qrss_tab = true;
         } else if (arg == QLatin1String("--crop")) {
             crop = true;
         } else if (arg == QLatin1String("--window")) {
@@ -577,6 +594,123 @@ int main(int argc, char** argv) {
     // The framing dialog, on a 16:9 source -- the case it exists for,
     // where a quarter of the width is being given up and the dimmed
     // region is what the operator is deciding about.
+    // The QRSSTVAE tab, on made-up signals: two hours of noise with a
+    // CE-like signal (a carrier wandering over 50 Hz) on two passes at
+    // 1500 Hz, a weaker one at 1100 Hz, and a drifting plain carrier;
+    // and tiles for the 1500 Hz passes (one with a header, one without).
+    if (qrss_tab) {
+        const double now = std::floor(QDateTime::currentSecsSinceEpoch() / 900.0) * 900.0 + 500.0;
+        const QString state = QStringLiteral("%1/qrss-tab-state").arg(out);
+        QDir().mkpath(state + QStringLiteral("/tiles"));
+        {
+            QImage pic(320, 240, QImage::Format_RGB32);
+            for (int y = 0; y < 240; ++y) {
+                for (int x = 0; x < 320; ++x) pic.setPixel(x, y, qRgb(40 + x / 2, 90 + y / 3, 160));
+            }
+            pic.save(state + QStringLiteral("/tiles/a.png"));
+        }
+        const auto iso = [](double t) {
+            return QDateTime::fromSecsSinceEpoch(static_cast<qint64>(t), QTimeZone::utc())
+                .toString(Qt::ISODate);
+        };
+        QJsonArray tiles;
+        {
+            QJsonObject a;
+            a[QStringLiteral("id")] = QStringLiteral("a");
+            a[QStringLiteral("slot_utc")] = iso(now - 500.0 - 1800.0);
+            a[QStringLiteral("f_hz")] = 1500.0;
+            a[QStringLiteral("status")] = QStringLiteral("complete");
+            a[QStringLiteral("snr_db")] = -18.4;
+            a[QStringLiteral("callsign")] = QStringLiteral("AG7EW");
+            a[QStringLiteral("grid")] = QStringLiteral("CN85");
+            a[QStringLiteral("picture_id")] = QStringLiteral("98f0da1e");
+            a[QStringLiteral("mode")] = QStringLiteral("A");
+            a[QStringLiteral("passes")] = 2;
+            a[QStringLiteral("progress")] = 1.0;
+            a[QStringLiteral("heard")] = 1.0;
+            a[QStringLiteral("received")] = 0.96;
+            a[QStringLiteral("image")] = QStringLiteral("tiles/a.png");
+            a[QStringLiteral("image_rev")] = 1;
+            tiles.append(a);
+            QJsonObject b;
+            b[QStringLiteral("id")] = QStringLiteral("b");
+            b[QStringLiteral("slot_utc")] = iso(now - 500.0);
+            b[QStringLiteral("f_hz")] = 1100.0;
+            b[QStringLiteral("status")] = QStringLiteral("receiving");
+            b[QStringLiteral("snr_db")] = -24.0;
+            b[QStringLiteral("progress")] = 0.28;
+            b[QStringLiteral("heard")] = 0.28;
+            b[QStringLiteral("received")] = 0.2;
+            b[QStringLiteral("note")] = QStringLiteral(
+                "no header yet: picture assumes the first pass of a mode A send");
+            tiles.append(b);
+        }
+        {
+            QJsonObject st;
+            st[QStringLiteral("version")] = 1;
+            st[QStringLiteral("listening")] = true;
+            st[QStringLiteral("source")] = QStringLiteral("app");
+            st[QStringLiteral("tiles")] = tiles;
+            QFile f(state + QStringLiteral("/state.json"));
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                f.write(QJsonDocument(st).toJson());
+                f.close();
+            }
+        }
+        auto* qw = new sstvae::gui::QrssWindow(nullptr, Qt::Widget);
+        qw->set_state_dir(state);
+        sstvae::gui::QrssPage page(qw);
+        page.spectrogram()->set_clock([now] { return now; });
+        page.set_schedule_summary(QStringLiteral("Next send: \"Sunset\", mode A at 17:45Z."));
+        // The audio, a minute at a time.
+        std::mt19937 rng(7);
+        std::normal_distribution<double> noise(0.0, 1.0);
+        std::uniform_real_distribution<double> wander(-25.0, 25.0);
+        constexpr double SPAN = 2 * 3600.0;
+        double phase_a = 0;
+        double phase_b = 0;
+        double phase_c = 0;
+        double fa = 0;
+        double fb = 0;
+        for (double t0 = now - SPAN; t0 < now; t0 += 60.0) {
+            std::vector<double> x(8000 * 60);
+            for (std::size_t i = 0; i < x.size(); ++i) {
+                const double t = t0 + static_cast<double>(i) / 8000.0;
+                if (i % 160 == 0) {
+                    fa = wander(rng);
+                    fb = wander(rng);
+                }
+                double v = noise(rng);
+                const double slot_a = std::fmod(t - (now - 500.0 - 1800.0) + 7200.0, 3600.0);
+                if (t > now - 500.0 - 5400.0 && slot_a >= 0 && slot_a < 1783.0) {
+                    phase_a += 2 * std::numbers::pi * (1500.0 + fa) / 8000.0;
+                    v += 0.25 * std::cos(phase_a);
+                }
+                if (t > now - 500.0) {
+                    phase_b += 2 * std::numbers::pi * (1100.0 + fb) / 8000.0;
+                    v += 0.12 * std::cos(phase_b);
+                }
+                const double fc = 1850.0 + 6.0 * std::sin(2 * std::numbers::pi * t / 2400.0);
+                phase_c += 2 * std::numbers::pi * fc / 8000.0;
+                v += 0.05 * std::cos(phase_c);
+                x[i] = 0.1 * v;
+            }
+            page.spectrogram()->push_audio(x, t0 + 60.0);
+        }
+        page.resize(width > 0 ? width : 1400, height > 0 ? height : 720);
+        page.show();
+        qw->reload();
+        for (int i = 0; i < 5; ++i) app.processEvents();
+        const QString path = QStringLiteral("%1/qrss-tab.png").arg(out);
+        page.grab().save(path);
+        std::printf("%s\n", path.toLocal8Bit().constData());
+        page.spectrogram()->set_inverted(false);
+        app.processEvents();
+        const QString dark = QStringLiteral("%1/qrss-tab-dark.png").arg(out);
+        page.spectrogram()->grab().save(dark);
+        std::printf("%s\n", dark.toLocal8Bit().constData());
+    }
+
     if (crop) {
         constexpr int SW = 1600;
         constexpr int SH = 900;

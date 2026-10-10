@@ -14,18 +14,24 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QSplitter>
+#include <QWheelEvent>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QThread>
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <random>
 #include <vector>
 
 #include "check.hpp"
 #include "qrss_page.hpp"
+#include "qrss_spectrogram.hpp"
 #include "qrss_window.hpp"
 #include "rx/ringbuffer.hpp"
 
@@ -261,7 +267,7 @@ void test_the_qrss_tab() {
     host.show();
     QApplication::processEvents();
     check::is_true(!signals_view->isWindow() && signals_view->isVisible() &&
-                       signals_view->parentWidget() == page,
+                       signals_view->parentWidget() == page->splitter(),
                    "tab: the QRSS signals are inside the tab, not a window");
     auto* listen = page->findChild<QPushButton*>(QStringLiteral("qrss_listen"));
     auto* schedule = page->findChild<QPushButton*>(QStringLiteral("qrss_schedule_button"));
@@ -286,6 +292,138 @@ void test_the_qrss_tab() {
     check::is_true(summary->text() == QStringLiteral("Next send: x"), "tab: and shows the next send");
 }
 
+// Headerless passes go in the Provisional column, and the "mode A
+// assumed" note under them goes (the column says it); a header moves the
+// tile across to Received.
+void test_provisional_tiles() {
+    QTemporaryDir dir;
+    gui::QrssWindow w;
+    w.set_state_dir(dir.path());
+    QJsonArray tiles;
+    tiles.append(tile_json(QStringLiteral("a"), 1500.0, QStringLiteral("N0CALL"), 0.4, QString(), 0));
+    QJsonObject b = tile_json(QStringLiteral("b"), 1550.0, QString(), 0.3, QString(), 0);
+    b[QStringLiteral("note")] =
+        QStringLiteral("stored (provisional); no header yet: picture assumes the first pass of "
+                       "a mode A send");
+    tiles.append(b);
+    write_state(dir.path(), tiles, 1'000'000);
+    w.reload();
+    gui::QrssTile* ta = w.tile(QStringLiteral("a"));
+    gui::QrssTile* tb = w.tile(QStringLiteral("b"));
+    check::is_true(ta && tb, "provisional: both tiles");
+    if (!(ta && tb)) return;
+    check::is_true(ta->parentWidget() == w.received_area() && !ta->provisional(),
+                   "provisional: a tile with a header is Received");
+    check::is_true(tb->parentWidget() == w.provisional_area() && tb->provisional(),
+                   "provisional: a headerless one is Provisional");
+    check::is_true(!tb->details().contains(QStringLiteral("mode A")) &&
+                       tb->details().contains(QStringLiteral("stored (provisional)")),
+                   "provisional: the mode A note goes, the rest of the note stays");
+    QJsonArray later;
+    later.append(tile_json(QStringLiteral("b"), 1550.0, QStringLiteral("K1ABC"), 0.6, QString(), 0));
+    write_state(dir.path(), later, 2'000'000);
+    w.reload();
+    check::is_true(w.tile(QStringLiteral("b"))->parentWidget() == w.received_area(),
+                   "provisional: a header moves it to Received");
+}
+
+// The spectrogram: a tone shows where it is, darker on the default
+// (inverse) scheme, red where a synced signal is, and the controls do
+// what they say.
+void test_the_spectrogram() {
+    constexpr double NOW = 1791594000.0 + 600.0;
+    gui::QrssSpectrogram sg;
+    sg.set_clock([] { return NOW; });
+    sg.resize(800, 500);
+    sg.show();
+    QApplication::processEvents();
+    // Two minutes of a tone at 1500 Hz in quiet noise, ending now.
+    {
+        std::mt19937 rng(4);
+        std::normal_distribution<double> noise(0.0, 0.05);
+        std::vector<double> x(8000 * 120);
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            x[i] = 0.05 * std::sin(2.0 * 3.14159265358979 * 1500.0 * i / 8000.0) + noise(rng);
+        }
+        sg.push_audio(x, NOW);
+    }
+    const QImage& img = sg.image();
+    const QPoint on = sg.plot_point(NOW - 30, 1500.0);
+    const QPoint off = sg.plot_point(NOW - 30, 1100.0);
+    const QPoint old = sg.plot_point(NOW - 1000, 1500.0);
+    check::is_true(img.rect().contains(on) && img.rect().contains(old),
+                   "spectrogram: the points are on the plot");
+    if (!img.rect().contains(on)) return;
+    check::is_true(qGray(img.pixel(on)) < 100 && qGray(img.pixel(off)) > 180,
+                   "spectrogram: inverse by default, the tone dark on a light ground");
+    check::is_true(on.x() < 60, "spectrogram: the newest audio at the left");
+    check::is_true(img.pixel(old) == img.pixel(sg.plot_point(NOW - 1000, 1100.0)),
+                   "spectrogram: before the audio began, nothing drawn");
+
+    // The sun/moon flips it.
+    {
+        const QPoint c = sg.theme_button_rect().center();
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(c), QPointF(sg.mapToGlobal(c)),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&sg, &press);
+    }
+    check::is_true(!sg.inverted() && qGray(sg.image().pixel(on)) > 150 &&
+                       qGray(sg.image().pixel(off)) < 60,
+                   "spectrogram: the sun/moon makes it light on dark");
+    sg.set_inverted(true);
+
+    // A synced signal at 1500 Hz from five minutes ago: red there.
+    sg.set_markers({{1500.0, NOW - 300, NOW + 1500}});
+    const QRgb r = sg.image().pixel(on);
+    check::is_true(qRed(r) > qGreen(r) + 80 && qRed(r) > qBlue(r) + 80,
+                   "spectrogram: a synced signal is red");
+    check::is_true(qGray(sg.image().pixel(off)) > 180, "spectrogram: and only there");
+
+    // Wheel over the time axis: the scale under the pointer.
+    const auto wheel = [&sg](QPoint at, int delta) {
+        QWheelEvent e(QPointF(at), QPointF(sg.mapToGlobal(at)), QPoint(), QPoint(0, delta),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(&sg, &e);
+    };
+    const QRect axis = sg.time_axis_rect();
+    wheel(QPoint(axis.left() + 600, axis.center().y()), -120);
+    check::is_true(std::abs(sg.scale().history_spp() - 15.0 * 1.25) < 1e-9 &&
+                       sg.scale().lens_spp() == 1.0,
+                   "spectrogram: wheel over the history changes the history's scale");
+    wheel(QPoint(axis.left() + 50, axis.center().y()), 120);
+    check::is_true(std::abs(sg.scale().lens_spp() - 1.0 / 1.25) < 1e-9,
+                   "spectrogram: and over the lens, the lens's");
+    const QRect faxis = sg.freq_axis_rect();
+    wheel(QPoint(faxis.center().x(), faxis.center().y()), 120);
+    check::is_true(sg.f_hi() - sg.f_lo() < 2400.0 - 1.0, "spectrogram: wheel over frequency zooms");
+    {
+        const QPoint c = faxis.center();
+        QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(c), QPointF(sg.mapToGlobal(c)),
+                        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&sg, &dbl);
+    }
+    check::is_true(sg.f_lo() == gui::QrssSpectrogram::F_LO && sg.f_hi() == gui::QrssSpectrogram::F_HI,
+                   "spectrogram: double-click goes back to the whole range");
+}
+
+// The tab: the spectrogram and the received pane across a divider, and
+// the tiles' passes reach the spectrogram as red.
+void test_the_tab_layout() {
+    QWidget host;
+    auto* signals_view = new gui::QrssWindow(nullptr, Qt::Widget);
+    auto* page = new gui::QrssPage(signals_view, &host);
+    host.resize(1300, 700);
+    host.show();
+    QApplication::processEvents();
+    check::is_true(page->splitter() && page->splitter()->count() == 2 &&
+                       page->splitter()->widget(0) == page->spectrogram() &&
+                       page->splitter()->widget(1) == signals_view,
+                   "tab: spectrogram, then the received pane, across a divider");
+    const QList<int> sizes = page->splitter()->sizes();
+    check::is_true(sizes.size() == 2 && sizes[0] > sizes[1],
+                   "tab: the spectrogram the larger to start with");
+}
+
 int main(int argc, char** argv) {
     check::report_crashes_instead_of_prompting();
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -294,5 +432,8 @@ int main(int argc, char** argv) {
     test_the_confidence_band();
     test_audio_reaches_the_listener_once();
     test_the_qrss_tab();
+    test_provisional_tiles();
+    test_the_spectrogram();
+    test_the_tab_layout();
     return check::report("qrss window");
 }

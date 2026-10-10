@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "flow_layout.hpp"
+#include "qrss_spectrogram.hpp"
 #include "rx/ringbuffer.hpp"
 
 namespace sstvae::gui {
@@ -45,6 +46,12 @@ constexpr int PICTURE_H = 180;
 // reading at all, and an unbounded queue would only grow this process.
 constexpr qint64 MAX_BACKLOG_BYTES = 4 << 20;
 constexpr int LOG_LINES = 400;
+// A QRSS pass, from its quarter hour: what a tile's red covers.
+constexpr double PASS_S = 1782.7;
+// What the listener appends to a headerless tile's note; the Provisional
+// column says it instead.
+const QString GUESS_NOTE =
+    QStringLiteral("no header yet: picture assumes the first pass of a mode A send");
 
 QString number_or(const QJsonValue& v, int decimals, const QString& unit,
                   const QString& none = QStringLiteral("?")) {
@@ -157,11 +164,17 @@ QrssTile::QrssTile(QWidget* parent) : QWidget(parent) {
     picture_->setText(tr("Waiting for the header"));
     picture_->setWordWrap(true);
     band_ = new ConfidenceBand(this);
+    // Small print under the picture, as Glissando has it: the picture
+    // is what the tile is for.
+    QFont small = font();
+    small.setPointSizeF(std::max(6.5, small.pointSizeF() * 0.78));
     title_ = new QLabel(this);
-    QFont bold = title_->font();
+    QFont bold = font();
+    bold.setPointSizeF(std::max(7.0, bold.pointSizeF() * 0.88));
     bold.setBold(true);
     title_->setFont(bold);
     details_ = new QLabel(this);
+    details_->setFont(small);
     details_->setWordWrap(true);
     details_->setFixedWidth(PICTURE_W);
     details_->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -173,6 +186,7 @@ QrssTile::QrssTile(QWidget* parent) : QWidget(parent) {
     progress_->setTextVisible(false);
     progress_->setFixedHeight(8);
     progress_text_ = new QLabel(this);
+    progress_text_->setFont(small);
     // The band sits right under the picture it describes.
     auto* picture_and_band = new QVBoxLayout;
     picture_and_band->setSpacing(1);
@@ -184,7 +198,7 @@ QrssTile::QrssTile(QWidget* parent) : QWidget(parent) {
     box->addWidget(progress_);
     box->addWidget(details_);
     box->addStretch(1);
-    setFixedWidth(PICTURE_W + 12);
+    setFixedWidth(WIDTH);
 }
 
 void QrssTile::update_from(const QJsonObject& t, const QString& dir) {
@@ -237,8 +251,10 @@ void QrssTile::update_from(const QJsonObject& t, const QString& dir) {
                  .arg(static_cast<int>(std::lround(100.0 * heard)));
     const QString wdb = number_or(t.value(QStringLiteral("mean_w_db")), 1, tr(" dB"), QString());
     if (!wdb.isEmpty()) lines << tr("Mean weight %1").arg(wdb);
-    const QString note = t.value(QStringLiteral("note")).toString();
+    QString note = t.value(QStringLiteral("note")).toString();
+    note.remove(QStringLiteral("; ") + GUESS_NOTE).remove(GUESS_NOTE);
     if (!note.isEmpty()) lines << note;
+    provisional_ = pid.isEmpty();
     details_->setText(lines.join(QLatin1Char('\n')));
 
     const QString image = t.value(QStringLiteral("image")).toString();
@@ -298,7 +314,47 @@ QrssWindow::QrssWindow(QWidget* parent, Qt::WindowFlags flags) : QWidget(parent,
     status_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     box->addWidget(status_label_);
 
+    // Two columns of tiles. **Provisional**, at the far left: passes
+    // heard without a header, whose picture is only a guess (the first
+    // pass of a mode A send) until a header places it -- the column says
+    // so once, instead of a note under every tile. Then **Received**:
+    // everything placed by a header.
+    auto* columns = new QHBoxLayout;
+    columns->setSpacing(6);
+    auto* prov_box = new QVBoxLayout;
+    prov_box->setSpacing(2);
+    auto* prov_title = new QLabel(tr("Provisional"), this);
+    prov_title->setToolTip(tr("Passes heard without a header. The picture assumes the first "
+                              "pass of a mode A send until a header (or a repeat) places it."));
+    QFont heading = prov_title->font();
+    heading.setBold(true);
+    prov_title->setFont(heading);
+    prov_box->addWidget(prov_title);
+    prov_scroll_ = new QScrollArea(this);
+    prov_scroll_->setObjectName(QStringLiteral("qrss_provisional"));
+    prov_scroll_->setWidgetResizable(true);
+    prov_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    prov_scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    prov_host_ = new QWidget(prov_scroll_);
+    prov_list_ = new QVBoxLayout(prov_host_);
+    prov_list_->setContentsMargins(0, 0, 0, 0);
+    prov_list_->setSpacing(4);
+    prov_empty_ = new QLabel(tr("None"), prov_host_);
+    prov_empty_->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+    prov_list_->addWidget(prov_empty_);
+    prov_list_->addStretch(1);
+    prov_scroll_->setWidget(prov_host_);
+    prov_scroll_->setFixedWidth(QrssTile::WIDTH + 24);
+    prov_box->addWidget(prov_scroll_, 1);
+    columns->addLayout(prov_box);
+
+    auto* recv_box = new QVBoxLayout;
+    recv_box->setSpacing(2);
+    auto* recv_title = new QLabel(tr("Received"), this);
+    recv_title->setFont(heading);
+    recv_box->addWidget(recv_title);
     scroll_ = new QScrollArea(this);
+    scroll_->setObjectName(QStringLiteral("qrss_received"));
     scroll_->setWidgetResizable(true);
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tiles_host_ = new QWidget(scroll_);
@@ -310,7 +366,9 @@ QrssWindow::QrssWindow(QWidget* parent, Qt::WindowFlags flags) : QWidget(parent,
     empty_label_->setWordWrap(true);
     flow_->addWidget(empty_label_);
     scroll_->setWidget(tiles_host_);
-    box->addWidget(scroll_, 1);
+    recv_box->addWidget(scroll_, 1);
+    columns->addLayout(recv_box, 1);
+    box->addLayout(columns, 1);
 
     log_ = new QPlainTextEdit(this);
     log_->setReadOnly(true);
@@ -389,8 +447,22 @@ bool QrssWindow::listener_running() const {
     return proc_ && proc_->state() != QProcess::NotRunning;
 }
 
+void QrssWindow::set_spectrogram(QrssSpectrogram* spectrogram) {
+    spectrogram_ = spectrogram;
+    if (spectrogram_) {
+        spectrogram_->set_ring(ring_);
+        spectrogram_->set_markers(markers_);
+    }
+}
+
+void QrssWindow::update_markers(std::vector<QrssSpectrogram::Marker> markers) {
+    markers_ = std::move(markers);
+    if (spectrogram_) spectrogram_->set_markers(markers_);
+}
+
 void QrssWindow::set_ring(std::shared_ptr<rx::RingBuffer> ring) {
     ring_ = std::move(ring);
+    if (spectrogram_) spectrogram_->set_ring(ring_);
     // A new ring counts from 0, and anything already in it was heard
     // before we knew about it; start from now rather than send a burst
     // of old audio stamped with the current time.
@@ -522,6 +594,7 @@ void QrssWindow::reload() {
 
     // Tiles, in the order the listener lists them (newest slot first).
     QStringList order;
+    std::vector<QrssSpectrogram::Marker> markers;
     for (const QJsonValue& v : st.value(QStringLiteral("tiles")).toArray()) {
         const QJsonObject t = v.toObject();
         const QString id = t.value(QStringLiteral("id")).toString();
@@ -533,6 +606,14 @@ void QrssWindow::reload() {
             tiles_.insert(id, tile);
         }
         tile->update_from(t, state_dir_);
+        // Its pass, for the spectrogram's red.
+        const QDateTime slot = QDateTime::fromString(
+            t.value(QStringLiteral("slot_utc")).toString(), Qt::ISODate);
+        const double f_hz = t.value(QStringLiteral("f_hz")).toDouble();
+        if (slot.isValid() && f_hz > 0) {
+            const double t0 = static_cast<double>(slot.toSecsSinceEpoch());
+            markers.push_back({f_hz, t0, t0 + PASS_S});
+        }
     }
     for (auto it = tiles_.begin(); it != tiles_.end();) {
         if (!order.contains(it.key())) {
@@ -542,15 +623,33 @@ void QrssWindow::reload() {
             ++it;
         }
     }
-    // Re-lay out in order: take everything out, put it back.
+    // Re-lay out in order: take everything out, put it back, each tile
+    // in its column.
     while (QLayoutItem* item = flow_->takeAt(0)) delete item;
-    empty_label_->setVisible(order.isEmpty());
-    if (order.isEmpty()) flow_->addWidget(empty_label_);
+    while (QLayoutItem* item = prov_list_->takeAt(0)) delete item;
+    QStringList received;
+    QStringList provisional;
     for (const QString& id : order) {
+        (tiles_.value(id)->provisional() ? provisional : received) << id;
+    }
+    empty_label_->setVisible(received.isEmpty());
+    if (received.isEmpty()) flow_->addWidget(empty_label_);
+    for (const QString& id : received) {
         QrssTile* tile = tiles_.value(id);
+        tile->setParent(tiles_host_);
         flow_->addWidget(tile);
         tile->show();
     }
+    prov_empty_->setVisible(provisional.isEmpty());
+    if (provisional.isEmpty()) prov_list_->addWidget(prov_empty_);
+    for (const QString& id : provisional) {
+        QrssTile* tile = tiles_.value(id);
+        tile->setParent(prov_host_);
+        prov_list_->addWidget(tile);
+        tile->show();
+    }
+    prov_list_->addStretch(1);
+    update_markers(markers);
 
     QStringList parts;
     const bool listening = st.value(QStringLiteral("listening")).toBool();

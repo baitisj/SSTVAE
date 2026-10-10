@@ -38,10 +38,13 @@
 #include <optional>
 #include <vector>
 
+#include "qrss_spectrogram.hpp"
+
 class QCloseEvent;
 class QJsonObject;
 class QLabel;
 class QLineEdit;
+class QVBoxLayout;
 class QProgressBar;
 class QPlainTextEdit;
 class QPushButton;
@@ -69,6 +72,12 @@ public:
     // The receive pane's capture ring, or null when it is not listening.
     // Called by ReceivePanel wherever it hands the waterfall its ring.
     void set_ring(std::shared_ptr<rx::RingBuffer> ring);
+    // The QRSSTVAE tab's spectrogram: handed the same ring, and the
+    // tiles' frequencies and passes to draw in red.
+    void set_spectrogram(QrssSpectrogram* spectrogram);
+    // The two tile columns, for tests.
+    QWidget* provisional_area() const { return prov_host_; }
+    QWidget* received_area() const { return tiles_host_; }
 
     // Where the listener writes its tiles. Default: $QRSSTVAE_HOME/live,
     // else the platform's generic data directory + /qrsstvae/live (on
@@ -109,6 +118,7 @@ private:
     void update_header();
     void append_log(const QString& text);
     void on_finished(int code, QProcess::ExitStatus status);
+    void update_markers(std::vector<QrssSpectrogram::Marker> markers);
 
     QString state_dir_;
     QLineEdit* command_edit_ = nullptr;
@@ -119,6 +129,12 @@ private:
     QScrollArea* scroll_ = nullptr;
     QWidget* tiles_host_ = nullptr;
     FlowLayout* flow_ = nullptr;
+    QScrollArea* prov_scroll_ = nullptr;
+    QWidget* prov_host_ = nullptr;
+    QVBoxLayout* prov_list_ = nullptr;
+    QLabel* prov_empty_ = nullptr;
+    QPointer<QrssSpectrogram> spectrogram_;
+    std::vector<QrssSpectrogram::Marker> markers_;
     QPlainTextEdit* log_ = nullptr;
     QTimer* poll_timer_ = nullptr;
     QTimer* feed_timer_ = nullptr;
@@ -165,7 +181,10 @@ class QrssTile : public QWidget {
     Q_OBJECT
 
 public:
+    static constexpr int WIDTH = 252;
     explicit QrssTile(QWidget* parent = nullptr);
+    // No header yet: the picture is a guess (the Provisional column).
+    bool provisional() const { return provisional_; }
     // Apply one tile object from state.json; `dir` resolves its image.
     void update_from(const QJsonObject& tile, const QString& dir);
     QString title() const;
@@ -183,6 +202,7 @@ private:
     QProgressBar* progress_ = nullptr;
     QLabel* progress_text_ = nullptr;
     int image_rev_ = -1;
+    bool provisional_ = true;
     QString image_path_;
 };
 
