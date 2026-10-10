@@ -490,6 +490,7 @@ if(_want_gui)
     gui/style.cpp
     gui/flow_layout.cpp
     gui/pane_container.cpp
+    gui/image_viewer.cpp
     gui/picture_box.cpp
     gui/waterfall.cpp
     gui/rx_panel.cpp

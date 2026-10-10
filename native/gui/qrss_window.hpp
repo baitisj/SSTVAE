@@ -199,6 +199,12 @@ public:
     int progress_percent() const;
     QString progress_text() const;
     ConfidenceBand* band() const { return band_; }
+    // The picture file shown, at its full size ("" before one).
+    QString image_path() const { return image_path_; }
+
+protected:
+    // Opens the picture in a viewer to zoom and pan (image_viewer.hpp).
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private:
     QLabel* picture_ = nullptr;

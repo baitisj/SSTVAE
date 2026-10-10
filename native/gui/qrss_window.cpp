@@ -13,6 +13,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
 #include <QPlainTextEdit>
@@ -32,6 +33,7 @@
 #include <vector>
 
 #include "flow_layout.hpp"
+#include "image_viewer.hpp"
 #include "qrss_spectrogram.hpp"
 #include "rx/ringbuffer.hpp"
 
@@ -284,6 +286,15 @@ QString QrssTile::details() const { return details_->text(); }
 bool QrssTile::has_picture() const {
     return !picture_->pixmap().isNull();
 }
+void QrssTile::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && !image_path_.isEmpty()) {
+        // From the file, at full size: the tile shows a reduction.
+        open_image_viewer(QPixmap(image_path_), title_->text(), this);
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
+}
+
 int QrssTile::progress_percent() const { return progress_->value(); }
 QString QrssTile::progress_text() const { return progress_text_->text(); }
 
