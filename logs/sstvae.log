@@ -1,0 +1,13 @@
+2026-10-10 20:24:47  app  info  model ready
+2026-10-10 20:24:47  rx   info  starting to listen (set to start with the app)
+2026-10-10 20:24:48  rx   info  [audio in] no device matching "Monitor of WebSDR_stream"; using the system default
+2026-10-10 20:24:48  rx   info  [audio in]  at 44100 Hz, resampled to 8000 Hz
+2026-10-10 20:24:48  rx   info  listening (device at 44100 Hz)
+2026-10-10 20:28:13  app  info  model ready
+2026-10-10 20:28:13  rx   info  starting to listen (set to start with the app)
+2026-10-10 20:28:13  rx   info  [audio in] WebSDR_capture at 48000 Hz, resampled to 8000 Hz
+2026-10-10 20:28:13  rx   info  listening (device at 48000 Hz)
+2026-10-10 20:30:40  app  info  model ready
+2026-10-10 20:30:40  rx   info  starting to listen (set to start with the app)
+2026-10-10 20:30:41  rx   info  [audio in] WebSDR_capture at 48000 Hz, resampled to 8000 Hz
+2026-10-10 20:30:41  rx   info  listening (device at 48000 Hz)

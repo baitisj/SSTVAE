@@ -1,0 +1,6 @@
+[in#0/x11grab @ 0x55e4e25a6e00] Stream #0: not enough frames to estimate rate; consider increasing probesize
+[aist#1:0/pcm_s16le @ 0x55e4e25b9cc0] Guessed Channel Layout: stereo
+[flv @ 0x55e4e25ba0c0] Failed to update header with correct duration.
+[flv @ 0x55e4e25ba0c0] Failed to update header with correct filesize.
+stimate rate; consider increasing probesize
+[aist#1:0/pcm_s16le @ 0x55641f18acc0] Guessed Channel Layout: stereo

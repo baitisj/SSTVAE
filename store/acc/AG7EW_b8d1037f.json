@@ -1,0 +1,27 @@
+{
+ "callsign": "AG7EW",
+ "codec_id": 53720,
+ "created": 1791692395.5067933,
+ "foreign": [],
+ "members": [
+  {
+   "em_round": 0,
+   "mean_w_db": 9.134326291104124,
+   "method": "header",
+   "segment": 0,
+   "uid": "1990767_1103738_d60149cc",
+   "z_ref": 196.95514227697092
+  },
+  {
+   "em_round": 0,
+   "mean_w_db": 0.881346320896388,
+   "method": "header",
+   "segment": 0,
+   "uid": "1990767_1104358_a408acae",
+   "z_ref": 29.241943236486538
+  }
+ ],
+ "mode": 0,
+ "picture_id": 3100705663,
+ "updated": 1791692396.70886
+}

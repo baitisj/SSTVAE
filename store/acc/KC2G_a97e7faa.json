@@ -1,0 +1,27 @@
+{
+ "callsign": "KC2G",
+ "codec_id": 53720,
+ "created": 1791692397.876825,
+ "foreign": [],
+ "members": [
+  {
+   "em_round": 0,
+   "mean_w_db": -6.03427634738832,
+   "method": "header",
+   "segment": 0,
+   "uid": "1990767_1205472_11834407",
+   "z_ref": 6.37492739314971
+  },
+  {
+   "em_round": 0,
+   "mean_w_db": -3.62750979287092,
+   "method": "header",
+   "segment": 1,
+   "uid": "1990769_1206082_48f31a83",
+   "z_ref": 25.402646951018237
+  }
+ ],
+ "mode": 1,
+ "picture_id": 2843639722,
+ "updated": 1791694106.2156994
+}

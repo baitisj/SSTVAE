@@ -1,0 +1,5 @@
+{"audio":{"backend":"qt","input_device":"WebSDR_capture","output_device":"QRSS_stream_silent"},
+ "rig":{"enabled":false},
+ "folders":{"receive_dir":"/home/baitisj/.qrsstvae-stream/received","transmit_dir":"/home/baitisj/.qrsstvae-stream/received","template_dir":"/home/baitisj/.qrsstvae-stream/templates"},
+ "receive":{"auto_start":true},
+ "ui":{"mode":"qrsstvae"}}

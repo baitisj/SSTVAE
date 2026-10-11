@@ -1,0 +1,19 @@
+passband store /tmp/qrss-data-snap/store/passband: 4000 Hz I/Q int16, scale 8192
+  2026-10-11T03:00:00Z   1970.4 s written in 3 range(s), flac, 14.9 MB apparent, 14.9 MB on disk
+  2026-10-11T04:00:00Z   3065.5 s written in 1 range(s), i16, 57.6 MB apparent, 49.1 MB on disk
+dial log: none
+
+=== slot 2026-10-11T04:30:00Z  (t0 2026-10-11T04:30:01Z, frame ends 2026-10-11T04:59:43Z)
+  frame stored: 70.93%  (1264.5 s of 1782.7 s)
+  holes (1, 523.2 s in all; seconds after t0):
+      1264.54 ..   1787.70   523.16 s   2026-10-11T04:51:05Z
+  clipped I/Q values: 0 of 10236304
+  median power per minute (dB re 1 FE unit, slot median -25.6):
+     -25.4  -25.7  -25.3  -25.3  -25.3  -26.1  -25.6  -25.5  -25.8  -25.4
+     -25.6  -26.2  -25.7  -25.8  -25.2  -25.7  -25.3  -26.6  -24.9  -26.1
+     -24.8  -26.0    ---    ---    ---    ---    ---    ---    ---    ---
+       ---
+
+listener log (the last lines state.json keeps):
+  2026-10-11T04:34:12Z slot 2026-10-11T04:00:00Z: frame over, 2 pass(es) (264 s)
+  2026-10-11T04:48:25Z slot 2026-10-11T04:15:00Z: frame over, 2 pass(es) (218 s)

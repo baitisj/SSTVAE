@@ -1,0 +1,19 @@
+{
+ "callsign": "AG7EW",
+ "codec_id": 53720,
+ "created": 1791694105.3913913,
+ "foreign": [],
+ "members": [
+  {
+   "em_round": 0,
+   "mean_w_db": 6.8113629994204405,
+   "method": "header",
+   "segment": 0,
+   "uid": "1990769_1104137_2a7b6943",
+   "z_ref": 197.6310890587758
+  }
+ ],
+ "mode": 0,
+ "picture_id": 888185294,
+ "updated": 1791694105.4077504
+}
