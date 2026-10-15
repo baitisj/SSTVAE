@@ -1,0 +1,586 @@
+[
+ {
+  "worktree": "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-1",
+  "branch": "worktree-wf_8af3e0e3-a7f-1",
+  "commit": "f8282565ba6d7c7766451962247a5be4ace3df14",
+  "files": [
+   "native/core/qrss/tx.hpp",
+   "native/core/qrss/tx.cpp",
+   "native/core/qrss/wav.hpp",
+   "native/core/qrss/wav.cpp",
+   "native/bindings/module/qrss/tx.cpp",
+   "native/tests/qrss/test_tx_audio.cpp",
+   "tests/qrss_native/tx.py",
+   "tests/test_qrss_native_tx.py",
+   "tests/test_qrss_native_tx_audio.py"
+  ],
+  "tests": [
+   {
+    "cmd": "timeout 600 ninja -C native/build-qrss -j2",
+    "result": "built (26/26 after the last edit), no warnings in the new files"
+   },
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core --output-on-failure",
+    "result": "18/18 passed. The new qrss_core_tx_audio has 173 checks and takes ~5 s"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_tx_audio.py tests/test_qrss_native_tx.py",
+    "result": "32 passed in 57 s (the tx_audio file alone takes ~54 s)"
+   },
+   {
+    "cmd": "... pytest -q tests/test_qrss_native_tx.py tests/test_qrss_native_ce.py tests/test_qrss_native_lwave.py",
+    "result": "124 passed in 16 s"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_smoke.py",
+    "result": "2 passed (C++ transmit -> Python receive). The header reports 155 substitutions and 46 from-import sites; tx.transmit_audio and _transmit_audio_l are the native builtins"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_ce.py",
+    "result": "25 passed, 1 deselected, 1 xfailed. The xfail (test_m5_far_skirt_at_80_hz) also xfails on the Python reference"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_lwave.py",
+    "result": "25 passed"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_beacon.py",
+    "result": "28 passed"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_cli.py",
+    "result": "3 passed, 4 deselected (slow)"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_channel.py",
+    "result": "34 passed, 2 deselected"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_lchannel.py",
+    "result": "25 passed, 2 deselected"
+   },
+   {
+    "cmd": "python tools/check_layering.py && python tools/check_includes.py && python tools/gen_qrss_config_header.py --check",
+    "result": "all ok. check_includes first flagged std::min without <algorithm> in the binding; fixed before the commit"
+   }
+  ],
+  "parity": "Bit-exact (bytes compared):\n- CE transmit_audio on the reference platform. The file probes that numpy's float64 sin/cos are libm's and that its complex multiply is fused; elsewhere it falls back to 1e-12. Cases: tiny with every combination of carriers 1200, 1500, 2650 and 1500.3, lead-in 0/5 s, .qrsp+header FSK, .qrsp+header OOK, OOK beacon file, and the same file forced to FSK; short with half of those combinations; one FULL pass; argument forms (str, numpy and Fraction carriers, numpy q/segment/pre_s, ook by truthiness, chunk_s of 1e-9, 0.000123, 7/8000, 7.3 and 1e9, other amplitude/pre_s/post_s); and a 2100 s custom frame chunked so that one chunk takes the closed-form path. Length equals slot_samples every time.\n- PassAudio against its own one-shot audio, for CE and L: blocks of 1, 7, 4096, 1e5 and the whole pass on tiny and l-tiny; render at chunk boundaries one sample at a time; float32 equals astype(float32). The ctest checks block 1 over whole passes too.\n- WAV files equal wavio.write_wav / write_wav_float (scipy) byte for byte: for an array, streamed from PassAudio, int16 and float32, peaks 0.95/0.5/1.0, values on rounding ties, silence, empty input (both refuse the int16 write before creating a file; both write the float one), and a missing directory (same OSError).\n- Every refusal's type and text: from transmit_audio, the --native-qrss adapter and the PassAudio constructor.\n\nWithin tolerance:\n- L (l-tiny, l-short, all four carriers, lead 0/5, .qrsp+header and FSK beacon file, one l-full, the _transmit_audio_l entry point): the tolerance is 1e-9 and measured differences are about 1e-15 (clipper FFT rounding). Of the 1e-12 CE fallback cases, none ran here, because the probes hold on this platform.\n\nNot compared: an RF64 file (over 4 GiB, about 74 h at 8 kHz) and slow-tier suites.\n\nTiming: Python takes 2.8 s for a full pass and 2.5 s for l-full; C++ is about 3x faster on CE. Nothing needed a slow mark.",
+  "deviations": [
+   "Arguments are converted in a different order. The binding float()s lead_in_s, pre_s, post_s, amplitude and chunk_s before the reference reaches them. When two arguments are bad at once (for example src=None and lead_in_s='x'), the native code can raise the conversion error where Python raises the source error. A non-numeric amplitude or chunk_s is a TypeError from float(), not numpy's UFuncTypeError, which has different text. All tested single refusals match exactly.",
+   "A carrier whose exact fraction does not fit in int64 (a huge Fraction) raises OverflowError when it is converted, where numpy would refuse later at the period den*8000.",
+   "wav::to_int16 maps NaN to 0 and clamps to the int16 range. numpy's cast of those values is unspecified, and peak-normalised audio never reaches them.",
+   "The array writers (sstvae_native.qrss.tx.write_wav / write_wav_float) convert the input to float64 first. wavio, given a float32 array, normalises in float32. Transmit audio is always float64, so this case does not arise in practice.",
+   "core/audio/wavio (dr_wav) is not used. Its float32 header has a 16-byte fmt chunk and no fact chunk, so its bytes are not scipy's, and it takes the whole signal at once. core/qrss/wav writes scipy's exact header, including RF64 past 4 GiB, and streams the samples."
+  ],
+  "shared_changes_needed": [],
+  "notes": "Pass-audio lane, committed as f828256 on top of WIP 584110a. Nothing was pushed.\n\nReference finding for whoever owns sstvae/qrss/ce.py (no Python was edited):\n- ce.phase_at is discontinuous at every whole-symbol tau. The pulse is cut at +-8 symbols with a step of p(8) = 0.006, the same step test_qrss_ce's M5 xfail cites. _pulse_offsets keeps the j = +-8 term when |tau| <= 8. At an exact integer tau both ends are inside the cut; one ulp away, only one is.\n- The grid path (phase_grid, the table PULSE_TABLE) takes the two-sided value. The closed form (phase_at) takes whichever side its float tau lands on.\n- Measured jumps are up to 0.0199 rad (about 0.003-0.005 rad at tau 1000.0 and 5000.0). In transmit_audio, the same long pass chunked so that a chunk starts off the 16 kHz grid differs from default chunking by up to 7.4e-3 at amplitude 0.5. That is 602 samples, each at a whole-symbol tau.\n- Presets cannot reach it. The closed-form path needs a piece starting more than 16384005 samples (~2048 s) from t0, and the longest preset is ~1800 s.\n- The C++ reproduces both paths bit for bit (test_long_frame_closed_form) and documents this in tx.hpp.\n- It may matter wherever phase_at is evaluated off-grid on purpose, such as the channel simulator's time_scale != 1. There an off-grid tau lands within an ulp of a whole symbol only rarely, but when it does the result takes one side of the step.\n\nOther notes:\n- PassAudio::render is const and touches no shared state, so blocks can be rendered from several threads.\n- The Python binding exposes PassAudio(...): len, size, n_pre, position, chunk, waveform_l, carrier (num, den), render(i0, m, dtype), read(m, dtype), seek(i), write_wav(path, float=False, peak=0.95). It also exposes module-level write_wav(path, x, peak) and write_wav_float(path, x). A write failure raises OSError with errno and filename, as open() would.\n- The int16 WAV renders the pass twice, once for the peak and once to write, so a 30-minute pass is never held in memory. float32 renders it once.\n- tests/test_qrss_native_tx_audio.py runs in ~54 s on the shared 4-CPU box. Most of that is the Python reference; the longest test is the 2100 s closed-form frame at ~13 s."
+ },
+ {
+  "worktree": "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2",
+  "branch": "worktree-wf_8af3e0e3-a7f-2",
+  "commit": "afa3ce87452cbdd9c3d4409aa04e10d6d3afeaf5",
+  "files": [
+   "native/CMakeLists.txt",
+   "native/bindings/module/CMakeLists.txt (in WIP commit facc664)",
+   "native/core/qrss/codec/codec.hpp",
+   "native/core/qrss/codec/codec.cpp",
+   "native/core/qrss/codec/encode.hpp (in WIP commit facc664)",
+   "native/core/qrss/pynum.hpp",
+   "native/core/qrss/pynum.cpp",
+   "native/bindings/module/qrss/codec/codec.cpp",
+   "native/bindings/module/qrss/pynum.cpp",
+   "native/apps/sstvae_qrss/main.cpp",
+   "native/apps/sstvae_qrss/subcommand.hpp",
+   "native/apps/sstvae_qrss/subcommand.cpp",
+   "native/apps/sstvae_qrss/argparse.hpp",
+   "native/apps/sstvae_qrss/argparse.cpp",
+   "native/apps/sstvae_qrss/common.hpp",
+   "native/apps/sstvae_qrss/common.cpp",
+   "native/apps/sstvae_qrss/encode.cpp",
+   "native/apps/sstvae_qrss/beacon.cpp",
+   "native/tests/CMakeLists.txt",
+   "native/tests/qrss/test_pynum.cpp",
+   "native/tests/qrss/codec/test_codec.cpp",
+   "native/tests/qrss/cli/test_cli.cpp",
+   "tests/qrss_native/codec.py",
+   "tests/qrss_codec_fixtures.py",
+   "tests/test_qrss_native_codec.py",
+   "tests/test_qrss_native_cli.py"
+  ],
+  "tests": [
+   {
+    "cmd": "timeout 600 ninja -C native/build-qrss-codec -j2 (codec ON, full tree)",
+    "result": "built clean, 0 warnings in new code"
+   },
+   {
+    "cmd": "timeout 600 ninja -C native/build-qrss -j2 (codec OFF, full tree)",
+    "result": "configures and builds; sstvae-qrss has beacon only and `sstvae-qrss encode` says 'built without the codec', exit 2"
+   },
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss-codec -R qrss_core",
+    "result": "20/20 passed (new: qrss_core_pynum 206 checks, qrss_core_codec 94, qrss_core_cli 124)"
+   },
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core",
+    "result": "19/19 passed (no qrss_core_codec without the codec)"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py",
+    "result": "330 passed, 1 skipped (the codec-off-only check), ~50 s"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py",
+    "result": "182 passed, 149 skipped (codec parts skip cleanly)"
+   },
+   {
+    "cmd": "SSTVAE_REQUIRE_CODEC=1 SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py -m codec",
+    "result": "35 passed"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 .venv/bin/python -m pytest -q --native-qrss=tx tests/test_qrss_format.py",
+    "result": "49 passed (header lists the codec row module; v5 codec-id test passes against the C++)"
+   },
+   {
+    "cmd": "pytest tests/test_qrss_native_infra.py (both builds); tests/test_qrss_native_picture.py tests/test_qrss_native_beaconfile.py (codec build)",
+    "result": "187 passed each; 41 passed"
+   },
+   {
+    "cmd": ".venv/bin/python tools/check_layering.py && tools/check_includes.py && tools/gen_qrss_config_header.py --check",
+    "result": "layering ok (313), includes ok (315), config header current"
+   }
+  ],
+  "parity": "Bit-exact:\n- codec_id_from_onnx: 0xD1D8 for each of v5-{encoder,decoder}-{fp16,fp32}.onnx and for their directory (with or without a trailing slash), and equal to the reference on hand-built ONNX models (written by the test) carrying 27 different sstvae.source_sha256 values: absent, empty, short, signed, underscored, 0x-prefixed, padded, not hex. Also equal on directories (encoder preferred, decoder fallback, ambiguous encoders, neither part -> FileNotFoundError with the reference's text) at fp16, fp32 and int8.\n- onnxruntime refusals: exception class (onnxruntime.capi.onnxruntime_pybind11_state.*) and message text equal for garbage and missing files.\n- resolve_onnx (explicit path) and pathlib str/suffix: exact, including the SystemExit texts.\n- load_image on 640x480 PNGs (RGB, L, RGBA, P): arrays equal.\n- encode_picture: identical fp16 segment bytes and picture ID for modes A, B, C at fp16 and mode B at fp32, with the native module's onnxruntime 1.28.0 and the venv's 1.31.0.\n- CLIs side by side, 50 beacon and 27 encode cases: exit status, stdout and output file bytes identical. stderr is identical for SystemExit refusals; argparse errors match on the message line (the program name differs by design); for uncaught exceptions the native prints only the traceback's last line, and that line is identical.\n- pynum vs int()/float(): equal on 45 int strings in two bases and 45 float strings.\n\nNot exact, compared by kind only:\n- an empty .onnx, or a directory where the model should be: onnxruntime's wording differs between 1.28 and 1.31;\n- a corrupt .qrsp zip: only the zipfile.BadZipFile class is compared;\n- an unreadable image: only the \"<image>: \" prefix and exit 1 are compared.\n\nNot compared: --help layout, and encode with no --model (the native cache is not huggingface_hub's).",
+  "deviations": [
+   "encode with no --model looks in the native model cache (SSTVAE_MODEL_CACHE or the platform cache) and downloads through the Qt fetcher. It never reads huggingface_hub's cache. This is by design (CLAUDE.md, 'Model artifacts').",
+   "An image the native image layer cannot read is refused as '<image>: cannot read <path>: <stb/WebP/HEIF reason>' instead of PIL's text. The native layer reads a different set of formats from PIL. A 640x480 image at any other size is resized by stb, not PIL LANCZOS, so the latents (and the picture ID) differ. This is the same difference CLAUDE.md already accepts for sstvae-encode.",
+   "An exception the script does not catch prints only the traceback's last line ('ValueError: ...'), exit 1, with no Python stack.",
+   "A damaged .qrsp zip keeps zipfile.BadZipFile as its class but uses the native npz parser's words. A damaged member header is ValueError. The reference reads members lazily, so where a corrupt member and a missing one meet, which one is reported can differ.",
+   "int()/float() parsing is ASCII only. Unicode digits and Unicode whitespace (e.g. NBSP), which Python accepts, are refused. Python's 4300-digit int limit is not reproduced.",
+   "argparse: --help is laid out by a simpler formatter (one usage line, description kept as written, wrapped at 78), and the usage line is not wrapped to the terminal width. Error messages and their order match.",
+   "An empty .onnx, or a directory named like a model, is refused with onnxruntime 1.28's wording, which differs from what the venv's onnxruntime 1.31 says."
+  ],
+  "shared_changes_needed": [
+   "tests/qrss_native/picture.py docstring still says 'codec_id_from_onnx is codec glue and is not ported'. It is ported now; the row lives in tests/qrss_native/codec.py. Not edited because it is outside the allowed file set.",
+   "SSTVAE's native OnnxCodec (native/core/codec/codec.hpp) has no public accessor for an artifact's sstvae.source_sha256 (plan 1.5). The glue opens its own metadata-only onnxruntime session instead. An accessor there would remove that second session.",
+   "The venv (/home/user/sstvae/.venv) has onnxruntime 1.31.0, but uv.lock pins 1.28.0, the version the native build links. Encoder parity is bit-identical anyway, so I did not install 1.28.0. Resyncing the venv would make the onnxruntime error texts agree too."
+  ],
+  "notes": "Everything requested is done and committed on top of WIP commit facc664 (not rewritten): afa3ce87452cbdd9c3d4409aa04e10d6d3afeaf5 on worktree-wf_8af3e0e3-a7f-2 in /home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2. Not pushed. Encoder parity is bit-identical across onnxruntime 1.28.0 (native) and 1.31.0 (venv), so nothing was installed.\n\nHow it fits together:\n- The CLI sources are an OBJECT library, sstvae_qrss_cli, globbed from native/apps/sstvae_qrss/*.cpp minus main.cpp. encode.cpp is left out when the codec is off. The ctest links it and runs subcommands in-process, and a static library would drop the self-registering objects.\n- The transmit lane adds native/apps/sstvae_qrss/transmit.cpp with a `Subcommand::Register` and edits no shared file. main.cpp's NOT_BUILT table entry for transmit is overridden automatically once the subcommand registers.\n- Python startup costs about 1 s per CLI run, so tests/test_qrss_native_cli.py runs its cases on 4 threads. Input files are symlinked into each run directory rather than copied.\n- The CLI binary is found through SSTVAE_QRSS_CLI, or as `sstvae-qrss` beside the module's build directory.\n\nOne bug was found and fixed along the way: int() and float() strip only Py_ISSPACE (\\t \\n \\v \\f \\r and space), not \\x1c-\\x1f, which str.isspace() also counts. The first pynum draft stripped those too.\n\nThe reference itself looked right throughout; nothing to report there."
+ },
+ {
+  "worktree": "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-1",
+  "branch": "worktree-wf_8af3e0e3-a7f-1",
+  "commit": "73758d5e22a450ca94dfdf16fbdedffd928f5a8e",
+  "files": [
+   "native/core/qrss/tx.hpp",
+   "native/core/qrss/tx.cpp",
+   "native/bindings/module/qrss/tx.cpp",
+   "native/tests/qrss/test_tx_audio.cpp",
+   "tests/test_qrss_native_tx_audio.py"
+  ],
+  "tests": [
+   {
+    "cmd": "timeout 600 ninja -C native/build-qrss -j2",
+    "result": "26/26 built, no warnings in the changed files"
+   },
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core --output-on-failure -j2",
+    "result": "18/18 passed. qrss_core_tx_audio now also checks check_block's range refusals; it takes about 5 s"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_tx_audio.py tests/test_qrss_native_tx.py",
+    "result": "33 passed in 58.8 s. The tx_audio file alone takes about 57 s: the new test_edge_arguments adds 2.3 s, and the 13.9 s long-frame test is the largest"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_smoke.py tests/test_qrss_ce.py tests/test_qrss_cli.py",
+    "result": "30 passed, 5 deselected, 1 xfailed (the M5 far-skirt xfail, which also xfails on the reference). The header shows 155 substitutions and 46 from-import sites, with tx among the modules"
+   },
+   {
+    "cmd": "... pytest -q --native-qrss=tx tests/test_qrss_channel.py tests/test_qrss_lchannel.py tests/test_qrss_beacon.py tests/test_qrss_lwave.py",
+    "result": "112 passed, 4 deselected (slow)"
+   },
+   {
+    "cmd": "scratch probes (not committed): about 60 extra argument and refusal combinations against the reference",
+    "result": "Everything realistic matches: carriers as str, Decimal, numpy ints, bool, complex, '1_500' and '.5e4'; the l-medium and medium passes (bit-exact CE; L within 7e-16); block sizes 32767, 32769, 262145 and 999999 on l-medium; header and segment mismatches; segment given as str or float; q given as str. The only differences are the exotic type errors listed under deviations"
+   },
+   {
+    "cmd": "python tools/check_layering.py && python tools/check_includes.py && python tools/gen_qrss_config_header.py --check",
+    "result": "all ok"
+   }
+  ],
+  "parity": "Unchanged from the lane's report, with new probes added:\n- CE is bit-exact against tx.transmit_audio on the reference platform (numpy's trig is libm's and its complex multiply is fused); elsewhere the tolerance is 1e-12.\n- L is within 1e-9; measured differences are 5e-16 to 7e-16.\n- WAV files are byte-identical to wavio/scipy.\n\nThe new test_edge_arguments uses tiny and l-tiny passes. Each probe below was compared bit for bit, or within 1e-9 for L, or by refusal type and text:\n- A float carrier 1500.1234567, whose fraction is 1438472883/958903 (period 7.7e9).\n- An exact Fraction carrier with a denominator past 2^20.\n- An odd n_pre (pre_s = 12.000125) with chunk_s 7.3, on CE and on L with a 10 s lead-in.\n- CE carriers at 300.0 and 2700.\n- L's lowest pilot, 312407/970: as a Fraction, as a float, and one ulp below (refused, with the same text).\n- numpy float32 for pre_s, post_s, lead_in_s, amplitude and chunk_s.\n- Integer amplitude and pre_s, and post_s = 60.\n- PassAudio.render with huge m: IndexError for both float64 and float32.\n\nScratch probes outside the suite also showed medium and l-medium full passes bit-exact (CE) and within 6.7e-16 (L), and l-medium chunk-invariant at four odd block sizes.\n\nNot compared: RF64 files and the slow tier.",
+  "deviations": [
+   "Unchanged from the lane's list: argument conversion order when two arguments are bad at once; a carrier Fraction whose exact value does not fit in int64; NaN and out-of-range values in the int16 cast; the float64 coercion in the array WAV writers; core/audio/wavio (dr_wav) not used.",
+   "Extended: when pre_s, post_s, chunk_s or amplitude is None, the native code raises float()'s TypeError, \"float() argument must be a string or a real number, not 'NoneType'\". The reference raises the TypeError of its arithmetic, such as \"unsupported operand type(s) for *: 'NoneType' and 'int'\". The exception type is the same and the text differs. A numeric string such as '3' for post_s, pre_s or amplitude is accepted natively, where the reference refuses it later or misbehaves (str * 8000). A spec or header of the wrong type gives AttributeError on both sides, but naming a different attribute. All of these are exotic; nothing in the CLI, the app or the tests passes them.",
+   "The carrier phase uses a correct mulmod, as ce.to_audio already did. numpy's int64 product nn*(num % period) would wrap only past about 1e9 samples into a pass when den > 380,000; that is out of reach for any pass, so no realistic audio differs."
+  ],
+  "shared_changes_needed": [
+   "tests/test_qrss_native_ce.py (wave 2, outside this lane) has the same Python 3.13-only math.fma call at import time: `EXACT_CE = _libm_trig() and _fused_cmul()`. CI's python jobs run Python 3.12, which has no math.fma. Wherever numpy's float64 sin/cos equal libm's (as on this Linux box), that module fails to collect with AttributeError. The fix is the same one applied here: a getattr(math, 'fma', None) fallback to float(Fraction(x) * Fraction(y) + Fraction(z)), which matched math.fma on 200,000 random triples."
+  ],
+  "notes": "Review of the pass_audio lane (f828256), with fixes committed as 73758d5 on the same branch. Nothing was pushed.\n\nFINDINGS\n1. FIXED (real, CI-breaking). tests/test_qrss_native_tx_audio.py called math.fma at import time to probe numpy's fused complex multiply. math.fma is new in Python 3.13, while ci.yml and native-build.yml use 3.12. Wherever _libm_trig() holds, the module would fail to collect there. It now falls back to an exact rational fma, checked against math.fma on 200,000 triples. With math.fma deleted, EXACT_CE is still True on this platform. The same bug in test_qrss_native_ce.py is under shared_changes_needed.\n2. FIXED (minor). PassAudio.render(i0, m) in the binding allocated an m-sample numpy array before the range check. A request past the end therefore raised MemoryError (\"Unable to allocate 7.11 PiB\") or ValueError (\"array is too big\") instead of the documented IndexError. A moderate m wasted that much memory first. PassAudio::check_block(i0, m) is now public; render_any uses it and the binding calls it before allocating. Covered in the ctest and the parity test.\n3. FIXED (doc). The chunk() comment now says the value is clamped to [1, size()].\n\nCHECKED AND FOUND CORRECT (no change):\n- ce_baseband reproduces ce.baseband exactly:\n  - the transmit_audio chunk base, the 2^18 sub-piece bounds, start_s = (base - n_pre)/8000 and its 1e-9 exact-path test;\n  - tau on the int64 grid and in the closed form;\n  - the per-piece unkeyed skip (+0 against computed signed zeros);\n  - the (amp + 0j) * phasor product.\n- Sub-block evaluation does not change any sample:\n  - grid_sum sums positions in ascending order and its zeros add exact +0;\n  - phase_at, cw_phase_turns and ramp_envelope are elementwise per sample;\n  - to_audio's nn = sample index whatever the block;\n  - lwave.resample is per sample with a +0 accumulator.\n- Refusal order matches transmit_audio and _transmit_audio_l throughout:\n  - the L+OOK check and the carrier/pilot check come first, then segment and header, then the OOK file on L, then windows without a callsign;\n  - then pre_s whole (NaN/inf), lead-in, pre_s coverage (with each waveform's ramp), and slot_symbols, including q;\n  - then L frame_baseband, carrier_fraction, slot_samples, int(chunk_s * 8000), negative length, and finally window_keying and the period on the first chunk, only when n > 0.\n- The exact-grid threshold sits at 2048.000625 s from t0, confirmed by brute force over 2^26 samples. So every preset at the default chunk_s takes the grid path, and test_long_frame_closed_form is the only coverage of the closed form.\n- The WAV headers match scipy 1.18.1's write(): fmt sizes 16/18, the fact chunk, RIFF and RF64 sizes, and the data-size clamp. Empty input raises before the file is opened, as numpy's max() does.\n- Threading: render touches only const members and static tables. In the binding, pos_ is read and written only while the GIL is held.\n\nPORTABILITY NOTE, not fixed (cross-module convention): core/qrss/wav.cpp opens files with std::fopen(std::string), and npz.cpp and beaconfile.cpp use std::ofstream(std::string). On Windows those strings are read in the ANSI code page, so a UTF-8 path with non-ASCII characters (e.g. a user directory C:\\\\Users\\\\Jos\u00e9) fails to open. The app should hand these modules std::filesystem::path or wide paths when it lands.\n\nREFERENCE NOTES (no Python edited):\n- Python's int16 write_wav casts out-of-range floats with an unspecified numpy cast (only reachable with peak > 1).\n- The previous report's note about ce.phase_at being discontinuous at whole-symbol tau still stands. It is why the grid path and the closed-form path disagree by up to about 1e-2, and why the reference's audio depends on chunk_s for passes running more than 2048 s past t0.\n\nThe ctest has -ffp-contract=off (tests/CMakeLists.txt sets it for every qrss_core test). The venv's onnxruntime was not involved."
+ },
+ {
+  "worktree": "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2",
+  "branch": "worktree-wf_8af3e0e3-a7f-2",
+  "commit": "3b7d3be42a7e34a1e64166fb2556abfba573a342",
+  "files": [
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/apps/sstvae_qrss/argparse.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/apps/sstvae_qrss/argparse.hpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/apps/sstvae_qrss/common.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/apps/sstvae_qrss/common.hpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/apps/sstvae_qrss/encode.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/apps/sstvae_qrss/main.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/core/qrss/pynum.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/core/qrss/pynum.hpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/native/tests/qrss/cli/test_cli.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_8af3e0e3-a7f-2/tests/test_qrss_native_cli.py"
+  ],
+  "tests": [
+   {
+    "cmd": "timeout 600 ninja -C native/build-qrss-codec -j2 ; timeout 600 ninja -C native/build-qrss -j2",
+    "result": "both trees build clean, no warnings in the changed files"
+   },
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss-codec -R qrss_core",
+    "result": "20/20 passed (qrss_core_cli now 151 checks)"
+   },
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core",
+    "result": "19/19 passed (codec off)"
+   },
+   {
+    "cmd": "mutation check: test_qrss_core_cli built against the pre-fix argparse.cpp/common.cpp",
+    "result": "12 of 148 checks FAILED (trailing '--', scalar classes), so the new checks catch the old behaviour"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py",
+    "result": "356 passed, 1 skipped (the codec-off-only check), ~57 s"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py",
+    "result": "199 passed, 158 skipped (codec parts skip cleanly)"
+   },
+   {
+    "cmd": "SSTVAE_REQUIRE_CODEC=1 SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py -m codec",
+    "result": "44 passed"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 .venv/bin/python -m pytest -q --native-qrss=tx tests/test_qrss_format.py",
+    "result": "49 passed; header: stage tx, 154 substitutions, 46 from-import sites, modules include codec"
+   },
+   {
+    "cmd": "pytest -q tests/test_qrss_native_infra.py tests/test_qrss_native_picture.py tests/test_qrss_native_beaconfile.py (codec build)",
+    "result": "228 passed"
+   },
+   {
+    "cmd": "scratch fuzzer: random argv (about 60 tokens) through qrss_beacon.py/qrss_encode.py main() in-process vs sstvae-qrss, 5 seeds x 500-700 cases",
+    "result": "before the fix: 7 distinct mismatches (trailing '--', '-='); after: 0"
+   },
+   {
+    "cmd": ".venv/bin/python tools/check_layering.py && tools/check_includes.py && tools/gen_qrss_config_header.py --check",
+    "result": "layering ok (313), includes ok (315), config header current (exit 0)"
+   }
+  ],
+  "parity": "Bit-exact, unchanged by this review and re-verified: codec_id_from_onnx is 0xD1D8 for v5 encoder/decoder at fp16 and fp32 and for their directory, and matches the reference for 27 hand-built metadata values. encode_picture gives identical segment bytes and picture ID for modes A, B and C. The CLIs, run side by side, now agree on 74 beacon and 37 encode cases: exit status, stdout and output bytes are exact, SystemExit texts are exact, argparse messages match after \"error: \", and an uncaught exception matches on the traceback's last line.\n\nNew cases that agree exactly:\n- argparse: a trailing or misplaced '--', '-=x', '-1\\n'.\n- beacon: an input that is a directory, a non-ASCII callsign, a callsign with a trailing space.\n- beacon, .qrsp scalars: a 1-d version or mode (TypeError), an infinite version (OverflowError), a complex version (TypeError), a float version.\n- encode, --model: a missing encoder .onnx (onnxruntime NoSuchFile), a missing sibling, a decoder file with --precision fp32, a non-encoder model with --codec-id (InvalidArgument), garbage with --codec-id (InvalidProtobuf), an encoder path that is a directory (FileNotFoundError).\n- encode, other: --codec-id ' +0x_d1d8 ', image 'scene.png/'.\n- 640x480 PNGs in L, RGBA, P, 1 and LA modes give the same picture ID through the CLI (scratch probe).\n\nA fuzzer feeding random argv to argparse found no mismatch over 3,100 cases after the fix.\n\npy_float matches float() under a de_DE LC_NUMERIC.\n\nNot compared:\n- --help layout;\n- encode with no --model;\n- onnxruntime's wording for a directory given as the model (1.28 and 1.31 differ, class included).",
+  "deviations": [
+   "(from the lane, still true) encode with no --model reads the native model cache and fetches through Qt; it never reads huggingface_hub's cache.",
+   "(from the lane) An image is decoded by the native image layer (stb/WebP/HEIF), not PIL. The refusal text after '<image>: ' differs, and any size other than 640x480 is resized differently. NEW: a 16-bit PNG at 640x480 also gives a different picture. PIL converts I;16 to RGB by clipping at 255, so the picture comes out nearly white; stb scales it by >>8. Measured: picture ID 90cb2490 from Python, 231e67e5 native, which is the 8-bit picture. This is SSTVAE's images layer and was not changed.",
+   "(from the lane) An uncaught exception prints only the traceback's last line. NEW: main() also catches any std::exception a subcommand misses and prints it as '<ValueError|OverflowError|IndexError|MemoryError|RuntimeError>: msg' with exit 1, never an abort.",
+   "(from the lane) A damaged .qrsp zip keeps the zipfile.BadZipFile class but uses the native parser's words. Native npz parses every member up front.",
+   ".qrsp scalars Python's int() accepts but the native npz layer refuses: a '<U1' string member such as np.array('1') (Python reads it as 1), and a uint64 above 2^63-1 (Python reads a wide int and refuses later with the version/ID text; native raises OverflowError). Both need a hand-crafted file.",
+   "int(), float() and argparse's negative-number test are ASCII-only. Python also accepts Unicode digits and whitespace.",
+   "A non-UTF-8 output path: Python writes the file, then fails printing the 'wrote' line (UnicodeEncodeError, exit 1); native prints the bytes and exits 0."
+  ],
+  "shared_changes_needed": [
+   "tests/qrss_native/picture.py's docstring still says `codec_id_from_onnx` is codec glue and not ported. It is ported now, through tests/qrss_native/codec.py. Not edited because it is outside this lane's files.",
+   "Transmit lane: sstvae-qrss runs QCoreApplication, which calls setlocale(LC_ALL, \"\"). main.cpp now resets LC_NUMERIC and py_float no longer depends on it. Add a side-by-side `transmit --freq 1500.3` case under LC_ALL=de_DE.UTF-8 with a LOCPATH from localedef. tests/test_qrss_native_cli.py has a `decimal_comma_locale` fixture for this. With it the reset is tested for real; encode and beacon read no floats, so nothing tests it yet."
+  ],
+  "notes": "The review found three real bugs in the lane's code and fixed them:\n- **Trailing `--` (fixed):** `sstvae-qrss beacon in.qrsp out.bin --callsign K1ABC --` wrote a beacon file and exited 0. The script refuses it: \"unrecognized arguments: --\", exit 2.\n- **Directory as the encoder (fixed):** `encode` with a --model directory that holds a directory named `*-encoder-fp16.onnx` crashed with std::terminate (exit -6). The script exits 1 with FileNotFoundError.\n- **Locale (fixed, latent):** in any build with the Qt fetcher, `setlocale(LC_ALL, \"\")` would have made a decimal-comma locale misread every float argument. For example, `--freq 1500.3` would read as 1500, and floats would print as \"1500,3\". I confirmed with an LD_PRELOAD shim that Qt makes that call. encode and beacon read no floats, so this only bites from transmit on.\n\nEverything else in the lane checked out:\n- resolve_onnx path normalisation, directory search, hidden files and prefix traps;\n- codec_id hex parsing, including signed, underscored and 0x values;\n- onnxruntime exception classes and texts;\n- the order of refusals in encode, and that no file is left behind on any refusal;\n- every argparse path the fuzzer reached.\n\nI worked with the onnxruntime already in the venv (1.31.0). All encode comparisons stayed bit-identical, so I did not install 1.28.0.\n\nWindows: `source_sha256` turns the UTF-8 path into a wide string byte by byte. That is copied from SSTVAE's codec.cpp, which does the same, so non-ASCII model paths would fail on Windows in both places. I left it alone to match the existing convention.\n\nThe scratch probes and fuzzer are in /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/probe/ and are not committed.",
+  "findings": [
+   {
+    "what": "argparse: '--' was always dropped. argparse drops it only when a positional's -*A-* match takes it; after the positionals are filled it is an unrecognized argument. 'in.qrsp out.bin --callsign K1ABC --' wrote the beacon file and exited 0, where the script exits 2 with 'unrecognized arguments: --'. 'a b --opt x -- y' also reported 'y' instead of '-- y'.",
+    "fixed": true
+   },
+   {
+    "what": "argparse: a single-dash argument starting '-=' prefixes every option string in _get_option_tuples, so it is 'ambiguous option: -=x could match -h, --help, ...'. Native reported it as unrecognized. The single-dash branch is now argparse's own, not a '-h'-only special case.",
+    "fixed": true
+   },
+   {
+    "what": "argparse: the negative-number pattern ^-\\d+$ also matches before one final newline (re's $), so '--segment $'-1\\n'' is a value. Native said 'expected one argument'.",
+    "fixed": true
+   },
+   {
+    "what": "encode: an encoder path that resolve_onnx's glob returned as a directory makes codec_id_from_onnx throw NoModelFile. encode.cpp did not catch it, so the process aborted through std::terminate (exit -6). The script prints an uncaught FileNotFoundError and exits 1. It is caught now, and main() also catches any std::exception a subcommand misses, so the binary never aborts.",
+    "fixed": true
+   },
+   {
+    "what": "Locale: QCoreApplication (the model fetcher, SSTVAE_HAVE_FETCH) calls setlocale(LC_ALL, \"\") on Unix, so LC_NUMERIC follows the environment. Under de_DE, py_float's strtod would read '1500.3' as 1500.0, and snprintf-based float reprs would print '1500,3'. main() now resets LC_NUMERIC to C, and py_float swaps in the locale's decimal point before strtod. Latent for encode and beacon, real for transmit.",
+    "fixed": true
+   },
+   {
+    "what": "beacon: every load_qrsp failure after parsing became ValueError. Python raises numpy's TypeError for a non-0-d scalar member ('only 0-dimensional arrays can be converted to Python scalars'), OverflowError for an infinite float, and TypeError for a complex. These are now mapped with the reference's texts.",
+    "fixed": true
+   },
+   {
+    "what": "16-bit PNG, 640x480: PIL clips I;16 at 255 and stb scales by >>8, so the picture and its picture ID differ. This is SSTVAE's images layer, outside this lane; recorded as a deviation.",
+    "fixed": false
+   },
+   {
+    "what": "Hand-crafted .qrsp members that Python's int() reads but the native npz layer refuses: a '<U1' string scalar, and a uint64 above int64 max. Exotic; recorded as deviations.",
+    "fixed": false
+   },
+   {
+    "what": "Windows: source_sha256, like SSTVAE's codec.cpp, widens the UTF-8 path to std::wstring byte by byte, so non-ASCII model paths would not open. Left as is to match the existing convention.",
+    "fixed": false
+   },
+   {
+    "what": "Not a C++ bug: with --codec-id and a directory where the encoder should be, onnxruntime 1.28 (native) raises InvalidArgument and 1.31 (venv) raises InvalidProtobuf. Only a pinned-version venv would agree.",
+    "fixed": false
+   }
+  ]
+ },
+ {
+  "worktree": "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5",
+  "branch": "worktree-wf_5c80865c-1d3-5",
+  "commit": "1afd26bd96d0ee4ae39ed7a2e9a9ca88ffda24a6",
+  "files": [
+   "native/apps/sstvae_qrss/transmit.cpp",
+   "native/apps/sstvae_qrss/main.cpp",
+   "native/apps/sstvae_qrss/subcommand.hpp",
+   "native/CMakeLists.txt",
+   "native/core/qrss/slot.hpp",
+   "native/core/qrss/slot.cpp",
+   "native/core/qrss/api.hpp",
+   "native/core/qrss/api.cpp",
+   "native/core/qrss/codec/api.hpp",
+   "native/core/qrss/codec/api.cpp",
+   "native/core/qrss/config.hpp",
+   "native/bindings/module/qrss/slot.cpp",
+   "native/bindings/module/qrss/api.cpp",
+   "native/bindings/module/qrss/codec/api.cpp",
+   "native/tests/qrss/test_slot.cpp",
+   "native/tests/qrss/test_api.cpp",
+   "native/tests/qrss/cli/test_cli.cpp",
+   "tools/gen_qrss_config_header.py",
+   "tests/qrss_native/slot.py",
+   "tests/test_qrss_native_slot.py",
+   "tests/test_qrss_native_api.py",
+   "tests/test_qrss_native_cli.py"
+  ],
+  "tests": [
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss-codec -R qrss_core -j4",
+    "result": "23/23 passed (includes new qrss_core_slot, qrss_core_api; qrss_core_cli now 204 checks incl. transmit digests/refusals)"
+   },
+   {
+    "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j4",
+    "result": "22/22 passed (no qrss_core_codec in the codec-free tree)"
+   },
+   {
+    "cmd": "pytest tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py (build-qrss-codec)",
+    "result": "458 passed, 1 skipped (the no-codec-only check), 121 s; includes ~100 transmit-vs-script cases and the 4 C++->Python chain tests"
+   },
+   {
+    "cmd": "pytest tests/test_qrss_native_tx_audio.py tests/test_qrss_native_tx.py tests/test_qrss_native_api.py tests/test_qrss_native_slot.py (build-qrss-codec)",
+    "result": "258 passed, 74 s"
+   },
+   {
+    "cmd": "pytest the other 12 tests/test_qrss_native_*.py (build-qrss-codec)",
+    "result": "2280 passed, 111 s"
+   },
+   {
+    "cmd": "pytest tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py (build-qrss)",
+    "result": "297 passed, 162 skipped (codec-only), 84 s"
+   },
+   {
+    "cmd": "pytest tx_audio, tx, api, slot (build-qrss)",
+    "result": "256 passed, 2 skipped (open_encoder needs the codec), 68 s"
+   },
+   {
+    "cmd": "pytest the other 12 tests/test_qrss_native_*.py (build-qrss)",
+    "result": "2280 passed, 111 s"
+   },
+   {
+    "cmd": "pytest tests/test_qrss_native_api.py (build-qrss-codec)",
+    "result": "49 passed incl. codec e2e (7.2 s): API encode of a 640x480 picture is bit-exact against qrss_encode's path; CE short pass -> sim -6 dB -> receive_slot header has the API's picture ID"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_smoke.py",
+    "result": "2 passed, 8 s (stage tx: 160 substitutions, slot module included)"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_format.py",
+    "result": "49 passed, 1.5 s"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_beacon.py",
+    "result": "28 passed, 21 s"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_cli.py",
+    "result": "3 passed, 4 deselected (slow), 9 s"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_ce.py",
+    "result": "25 passed, 1 deselected, 1 xfailed, 7 s"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_lwave.py",
+    "result": "25 passed, 4 s"
+   },
+   {
+    "cmd": "python tools/check_layering.py && python tools/check_includes.py && python tools/gen_qrss_config_header.py --check",
+    "result": "all ok after one fix: check_includes caught a missing <utility> in core/qrss/slot.cpp"
+   }
+  ],
+  "parity": "Bit-exact:\n- `sstvae-qrss transmit` stdout, stderr, exit codes and the no-file-on-refusal rule match qrss_transmit.py in every case (about 100 in test_qrss_native_cli.py; 9 refusals and 4 digests in the ctest).\n- Every CE WAV (int16 and --float) is byte-identical, as are the L int16 WAVs, the L full --float WAV and every WAV header.\n- `api.problem()` and `api.pass_audio`'s ValueError give the script's SystemExit text, in its order, for all 30 cases in test_qrss_native_api.py.\n- `api.pass_audio` equals the script's --float samples byte for byte for CE.\n- The slot parser matches CPython 3.13 `datetime.fromisoformat` / `sequences.parse_slot`: the table plus a 20000-string fuzz.\n- `api.encode_picture` / `open_encoder` / `encode_file` on a 640x480 picture give the same fp16 segments and picture ID as the reference encode of the PNG.\n\nWithin tolerance:\n- L --float WAV: 11 samples of an l-short pass are 1 float32 ulp off (at most 1.1e-13), inside the 1e-9 + float32-spacing bound. `api.pass_audio` for L is held to that same bound, and CE to 1e-12 + spacing only where numpy's trig/cmul differ from the C library's (EXACT_CE false). int16 is allowed 1 LSB but was exact in every case.\n- Chain (C++ encode \u2192 C++ transmit \u2192 `chm.simulate_audio` at -6 dB \u2192 Python `receive_slot`), for CE and L:\n  - The SHORT header matches exactly: callsign, grid FN42, picture ID, mode, segment, codec ID. The CW ID reads K1ABC.\n  - The TINY latents measured 8.7 dB (CE) and 9.9 dB (L) latent SNR against a > 6 dB floor.\n  - Measured against the noiseless render, what the received latents add to the picture correlates 0.968 / 0.976, against a > 0.9 floor.\n\nNot compared:\n- The reverse direction (Python transmit \u2192 C++ receive): out of scope, since there is no C++ receiver.\n- At sizes other than 640x480, the API's fit/resize is not compared with PIL's (the accepted stb-vs-LANCZOS difference CLAUDE.md records).",
+  "deviations": [
+   "Slot parsing follows CPython 3.13's datetime.fromisoformat, and 3.12 differs on two corners. 3.12 accepts '06:00:00.Z' and drops microseconds from an offset. test_qrss_native_slot.py skips those VERSION_DEPENDENT rows and the fuzz when it is not running on 3.13.",
+   "quarter_hour_start for a q whose datetime falls outside years 1..9999 raises OverflowError 'date value out of range' (q=281558112 and q=-69039553 are tested to match Python). A q outside int64 cannot be passed to the C++ at all; Python would take an arbitrary-size int.",
+   "sstvae-qrss transmit with a .qrsp and a --segment beyond int64: the reference reaches transmit_audio with a Python big int. The C++ runs the same carrier/pilot check first and then refuses with the reference's 'segment must be 0..M, not <decimal>' text, so the visible result is the same; only the internal path differs.",
+   "When the input .qrsp is malformed in a way numpy itself reports (npz/npy parse errors), the C++ wording of numpy's own error text may differ. The class and the version/shape refusals that picture.load_qrsp raises do match (covered by the earlier beacon tests).",
+   "Undecodable bytes in arguments: Python writes surrogate-escaped text to stdout/stderr, and the C++ writes the raw bytes.",
+   "api.frame_spec / PassRequest.frame refuses a frame outside FRAMES with \"frame must be one of full, medium, short, tiny, not '<x>'\". The script cannot reach this, because argparse rejects such a frame first with a usage error, so there is no reference text to match.",
+   "The API's codec end-to-end test receives a SHORT pass, not the TINY or l-tiny the brief named. TINY frames carry no header and therefore no picture ID to read back. The TINY and l-tiny passes are covered by the CLI chain test's picture check instead."
+  ],
+  "shared_changes_needed": [],
+  "notes": "The reference behaves pathologically on noise-free audio. Python's receiver (receive_slot) on a clean TINY/l-tiny pass returns spurious extra passes from grating-lobe candidates and is very slow, so the chain and e2e tests add channel noise at -6 dB via chm.simulate_audio before receiving. That is the realistic case anyway, but a receiver that does worse at infinite SNR is worth a look by whoever owns sstvae/qrss/receiver.py (not edited here).\n\nPython's qrss_transmit.py refuses an OOK beacon file under --waveform L ('this beacon file keys its callsign windows on and off, which waveform L does not do: make an FSK one (spec 2.7)'). The API's problem() reproduces this and it is now a tested case.\n\ntools/gen_qrss_config_header.py gained a 'pass timing' section, and native/core/qrss/config.hpp was regenerated; --check is clean. Its values:\n- SLOT_S=900 and T0_OFFSET_S=1, from frontend.slot_t0;\n- TX_CARRIER_HZ=1500, TX_PRE_S=12, TX_POST_S=3, TX_AMPLITUDE=0.5 and TX_CHUNK_S=120, from inspect.signature(tx.transmit_audio);\n- FULL_DURATION_S=1782.678125, asserted equal for full and l-full.\n\nThe run_parity.sh scratch harness runs each group under its own timeout 200, and no slow-marked test was run. Nothing under native/gui, docs/, sstvae/ or the qrss_*.py scripts was edited. Nothing was pushed.",
+  "api": "Header native/core/qrss/api.hpp (Qt-free, in sstvae_qrss), namespace sstvae::qrss::api.\n\nConstants (constexpr, from the generated qrss/config.hpp):\n- SAMPLE_RATE=8000\n- SLOT_S=900\n- T0_OFFSET_S=1\n- AUDIO_LEAD_S=12\n- AUDIO_TAIL_S=3\n- PASS_S=1782.678125\n- CARRIER_MIN_HZ=300, CARRIER_MAX_HZ=2700, CARRIER_DEFAULT_HZ=1500\n- LEAD_IN_MAX_S=10\n- FRAMES{\"full\",\"medium\",\"short\",\"tiny\"}\n\nNames:\n- std::optional<int> mode_index(std::string_view) (\"A\"/\"B\"/\"C\" give 0/1/2)\n- int passes_for(std::string_view mode)\n- enum class Waveform{CE,L}; waveform_named(std::string_view) returns optional<Waveform>; waveform_name(Waveform)\n- const frame::FrameSpec& frame_spec(Waveform, std::string_view frame=\"full\")\n\nSlots:\n- int64 parse_slot(std::string_view iso) throws invalid_argument with sequences.parse_slot's texts\n- std::string slot_iso(int64 q)\n- int64 slot_of(double unix_s)\n- quarter_hour_s(q), t0_s(q), audio_start_s(q)\n- int64 pass_samples(Waveform, frame)\n- double audio_end_s(q, Waveform, frame)\n\nSources:\n- using Source = tx::Source (variant of picture::StoredPicture or beaconfile::BeaconFile)\n- using Encoder = codec::Encoder\n- picture::StoredPicture encode_picture(const images::Picture&, int64 mode, int64 codec_id, const Encoder&)\n- Source read_source(const std::string& path)\n\nOne pass:\n- struct PassRequest{ int64 q; Waveform waveform=CE; double freq_hz=1500; optional<string> callsign; optional<string> grid; int64 segment=0; string frame=\"full\"; double lead_in_s=0; bool ook=false; }\n- tx::PassPlan plan_pass(const Source&, const PassRequest&)\n- std::string problem(const Source&, const PassRequest&) returns \"\" or qrss_transmit.py's SystemExit text, in its order\n- tx::PassAudio pass_stream(const Source&, const PassRequest&)\n- std::vector<float> pass_audio(const Source&, const PassRequest&) is float32 at 8 kHz, sample 0 = t0 - 12 s; it throws std::invalid_argument with problem()'s text\n- void write_wav(const Source&, const PassRequest&, const std::string& path, bool float32)\n\nCodec half, native/core/qrss/codec/api.hpp (in sstvae_qrss_codec, links onnxruntime):\n- struct OpenEncoder{ std::string onnx_path; int64 codec_id; Encoder encode; } (encode is mutex-guarded; the session is built on first call)\n- OpenEncoder open_encoder(const optional<string>& model, string_view precision=\"fp16\", optional<int64> codec_id={}, const checkpoint::Fetcher& = nullptr). It throws:\n  - codec::ModelError / CheckpointError for resolve_onnx's texts;\n  - codec::OrtError when onnxruntime refuses the artifact;\n  - codec::NoModelFile for a directory with neither part;\n  - invalid_argument when the metadata is missing and no codec_id was given.\n- StoredPicture encode_file(const string& image_path, int64 mode, const OpenEncoder&)\n\nHow native/gui's qrss_tx.cpp would call it:\n1. Once, off the GUI thread: `auto enc = api::open_encoder(std::nullopt /*published v5 via cache/fetcher*/);`.\n2. Per picture, off the GUI thread: `picture::StoredPicture sp = api::encode_picture(composed_picture, *api::mode_index(\"B\"), enc.codec_id, enc.encode);`. This could be cached by picture ID.\n3. Build the request: `api::PassRequest r; r.q = api::slot_of(next_quarter_hour_unix); r.waveform = api::Waveform::CE; r.freq_hz = carrier; r.callsign = mycall; r.grid = grid; r.segment = seg; r.lead_in_s = lead;`.\n4. For the GUI's problem(): `std::string why = api::problem(sp, r);`. Show it and disable Send when it is non-empty.\n5. To play: `tx::PassAudio a = api::pass_stream(sp, r);`, then render blocks into the soundcard, starting at `api::audio_start_s(r.q)` unix time and ending by `api::audio_end_s(r.q, r.waveform, r.frame)`. Alternatively, `std::vector<float> x = api::pass_audio(sp, r);` gives the whole pass at once (about 14.4M samples for FULL).\n6. Key PTT for that window. `api::write_wav(sp, r, path, true)` produces the same audio as `qrss_transmit.py --float` for saving or debugging.\n7. A .qrsp or .bin from disk goes through `api::read_source(path)` in place of sp.\n\nPython view for tests: sstvae_native.qrss.api, with the same names; pass_audio(src, q, *, waveform='CE', freq_hz=1500, callsign=None, grid=None, segment=0, frame='full', lead_in_s=0.0, ook=False), where src is a path or a dataclass. With the codec, it also has open_encoder(model=None, precision='fp16', codec_id=None), which returns an object with codec_id, onnx_path, encode_picture(rgb, mode) and encode_file(path, mode)."
+ },
+ {
+  "worktree": "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5",
+  "branch": "worktree-wf_5c80865c-1d3-5",
+  "commit": "18aa704bc10f4534449dc6786447250534f64e01",
+  "files": [
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/frame.hpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/frame.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/tx.hpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/tx.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/ce.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/slot.hpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/slot.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/api.hpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/core/qrss/api.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/apps/sstvae_qrss/transmit.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/bindings/module/qrss/slot.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/bindings/module/qrss/tx.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/tests/qrss/test_slot.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/native/tests/qrss/test_api.cpp",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/tests/test_qrss_native_slot.py",
+   "/home/user/sstvae/.claude/worktrees/wf_5c80865c-1d3-5/tests/test_qrss_native_api.py"
+  ],
+  "tests": [
+   {
+    "cmd": "timeout 200 ninja -C native/build-qrss -j2 && timeout 200 ninja -C native/build-qrss-codec -j2",
+    "result": "Both trees built cleanly with no warnings in the changed files. A -Wmaybe-uninitialized warning that my slot.cpp edit introduced was fixed with an explicit size guard."
+   },
+   {
+    "cmd": "cd native/build-qrss && timeout 200 ctest -j2 --output-on-failure",
+    "result": "100% passed, 44/44 (the whole codec-free tree; qrss_core_slot now 117 checks, qrss_core_api 101)"
+   },
+   {
+    "cmd": "cd native/build-qrss-codec && timeout 200 ctest -j2 --output-on-failure",
+    "result": "100% passed, 45/45 (whole codec tree, includes qrss_core_codec)"
+   },
+   {
+    "cmd": "SSTVAE_REQUIRE_CODEC=1 SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 pytest tests/test_qrss_native_slot.py tests/test_qrss_native_api.py tests/test_qrss_native_tx.py tests/test_qrss_native_tx_audio.py",
+    "result": "260 passed in 79 s. The 2 new tests are the de_DE refusal run and the read_source OSError text; the slot overflow test was extended."
+   },
+   {
+    "cmd": "SSTVAE_REQUIRE_CODEC=1 SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss-codec/python timeout 200 pytest tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py",
+    "result": "458 passed, 1 skipped (the check that runs only without the codec), 134 s. Includes the 4 C++->Python chain tests."
+   },
+   {
+    "cmd": "SSTVAE_REQUIRE_CODEC=1 ... (build-qrss-codec) timeout 200 pytest the other 12 tests/test_qrss_native_*.py in two batches (beaconfile ce filters frame header infra | lwave morse picture polar precoder sequences)",
+    "result": "1121 + 1159 = 2280 passed (63 s + 50 s). The 6+6 warnings are numpy overflow RuntimeWarnings from the reference."
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 pytest tests/test_qrss_native_tx_audio.py tests/test_qrss_native_tx.py tests/test_qrss_native_api.py tests/test_qrss_native_slot.py",
+    "result": "258 passed, 2 skipped (open_encoder needs the codec), 74 s"
+   },
+   {
+    "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 pytest tests/test_qrss_native_cli.py tests/test_qrss_native_codec.py",
+    "result": "297 passed, 162 skipped (codec-only), 79 s"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_smoke.py tests/test_qrss_format.py (build-qrss-codec)",
+    "result": "51 passed, 11 s"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_beacon.py tests/test_qrss_ce.py",
+    "result": "53 passed, 1 deselected, 1 xfailed, 27 s. The xfail is test_m5_far_skirt_at_80_hz, a strict xfail that also fails on the reference. The header reads 'QRSS against the C++ port, stage tx (160 substitutions, 46 from-import sites, modules beaconfile, ce, codec, filters, frame, header, lwave, morse, picture, polar, precoder, sequences, slot, tx)'."
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_cli.py",
+    "result": "3 passed, 4 deselected (slow), 8 s"
+   },
+   {
+    "cmd": "pytest --native-qrss=tx tests/test_qrss_lwave.py",
+    "result": "25 passed, 5 s"
+   },
+   {
+    "cmd": "python tools/check_layering.py && python tools/check_includes.py && python tools/gen_qrss_config_header.py --check",
+    "result": "layering ok (328 files), includes ok (330 files), config header current (exit 0)"
+   },
+   {
+    "cmd": "scratch probes, run before the fixes (tests/test_zz_probe_transmit.py, deleted, not committed)",
+    "result": "About 50 extra transmit-vs-script cases all match: defaults, flag combinations, refusal order, exit codes, no output file on refusal, and stdout lines. A 300k-string grammar fuzz of the slot parser matches CPython 3.13 datetime.fromisoformat. The only mismatches found are the bugs listed under findings."
+   }
+  ],
+  "parity": "Unchanged from the reviewed stage, with these additions.\n\nBit-exact:\n- `sstvae-qrss transmit` matches qrss_transmit.py in every case compared: stdout, stderr, exit codes and the no-file-on-refusal rule. That is about 100 cases in test_qrss_native_cli.py, 9 refusals and 4 digests in the ctest, and about 50 further scratch probes in this review. It now holds under a decimal-comma LC_NUMERIC too: numbers in stdout and in refusals go through frame::py_format, never through a bare printf.\n- Every CE WAV (int16 and --float) is byte-identical, as are the L int16 WAVs, the L full --float WAV and every WAV header.\n- `api.problem()` and `api.pass_audio`'s ValueError give the script's SystemExit text, in its order, for all 30 cases. They now also do so under de_DE (test_refusals_ignore_a_decimal_comma_locale), where before the fix the L pilot refusal read '287,9 Hz'.\n- `api.pass_audio` equals the script's --float samples byte for byte for CE.\n- The slot parser matches CPython 3.13 `datetime.fromisoformat` / `sequences.parse_slot`: the table, the 20000-string fuzz in the suite, and a 300k-string grammar fuzz in this review.\n- `quarter_hour_start` refusals now match Python's class and text at every boundary:\n  - 'date value out of range' outside years 1..9999.\n  - 'days=N; must have magnitude <= 999999999' once q // 96 passes timedelta's limit.\n  - 'Python int too large to convert to C int' once it passes a C int. Through the binding this holds for any Python int, including 2**63, 10**30 and 1.5e300.\n  - Pinned at 11 int64 boundaries in the ctest and at 16 values in pytest.\n- `api.read_source`'s failure text equals Python's OSError str (open(path, 'rb')), errno included, for a missing file, a directory and a path containing a quote.\n- `api.encode_picture` / `open_encoder` / `encode_file` on a 640x480 picture give the same fp16 segments and picture ID as the reference encode of the PNG.\n\nWithin tolerance:\n- L --float WAV: 11 samples of an l-short pass are 1 float32 ulp off (at most 1.1e-13), inside the 1e-9 + float32-spacing bound. `api.pass_audio` for L is held to that same bound, and CE to 1e-12 + spacing only where numpy's trig/cmul differ from the C library's. int16 is allowed 1 LSB but was exact in every case.\n- Chain (C++ encode \u2192 C++ `sstvae-qrss transmit` binary \u2192 `chm.simulate_audio` at -6 dB \u2192 unsubstituted Python `receive_slot`), for CE and L. This review checked that it really is C++ transmit \u2192 Python receive:\n  - The SHORT header matches exactly: callsign, grid, picture ID, mode, segment, codec ID. The CW ID reads K1ABC.\n  - The TINY latents measured 8.7 dB (CE) and 9.9 dB (L) latent SNR against a > 6 dB floor.\n  - What the received latents add to the picture correlates 0.968 / 0.976 with the noiseless render, against a > 0.9 floor.\n\nNot compared:\n- The reverse direction (Python transmit \u2192 C++ receive): there is no C++ receiver.\n- At sizes other than 640x480, the API's fit/resize is not compared with PIL's (the accepted stb-vs-LANCZOS difference).\n- read_source's texts for a file that is not a zip at all come from the native npz reader, not from numpy or zipfile.",
+  "deviations": [
+   "Slot parsing follows CPython 3.13's datetime.fromisoformat, and 3.12 differs on two corners: it accepts '06:00:00.Z' and drops microseconds from an offset. test_qrss_native_slot.py skips those VERSION_DEPENDENT rows and the fuzz when not on 3.13.",
+   "sstvae-qrss transmit with a .qrsp and a --segment beyond int64: the reference reaches transmit_audio with a Python big int. The C++ runs the same carrier/pilot check first and then refuses with the reference's 'segment must be 0..M, not <decimal>' text, so the visible result is the same; only the internal path differs.",
+   "When the input .qrsp is malformed in a way numpy itself reports (npz/npy parse errors, or a file that is not a zip at all), the C++ text is the native npz reader's ('npz: file is empty', 'npz: file does not start like a zip archive ...') rather than numpy's or zipfile's. The class (ValueError / std::invalid_argument) and the version and shape refusals that picture.load_qrsp raises itself do match. This is now documented on api::read_source.",
+   "Undecodable bytes in arguments: Python writes surrogate-escaped text to stdout/stderr, and the C++ writes the raw bytes.",
+   "api.frame_spec / PassRequest.frame refuses a frame outside FRAMES with \"frame must be one of full, medium, short, tiny, not '<x>'\". The script cannot reach this, because argparse rejects such a frame first with a usage error, so there is no reference text to match.",
+   "The API's codec end-to-end test receives a SHORT pass, not TINY or l-tiny. TINY frames carry no header and therefore no picture ID to read back; the TINY and l-tiny passes are covered by the CLI chain test's picture check instead.",
+   "api::encode_picture refuses an empty picture, or one whose rgb is not width x height x 3 bytes, with its own std::invalid_argument text. The reference cannot be handed such a picture (PIL images are always consistent), so there is no reference text to match.",
+   "Dropped from the reviewed list: the quarter_hour_start deviation. It now gives Python's class and text for every input, including ints outside int64 through the binding."
+  ],
+  "shared_changes_needed": [],
+  "findings": [
+   {
+    "what": "Refusal and stdout numbers depended on the locale. tx.cpp, ce.cpp and sstvae-qrss transmit formatted with snprintf('%g' / '%.1f' / '%.2f'), whose decimal point is LC_NUMERIC's. A QApplication sets LC_NUMERIC from the environment, and the app will call api::problem from inside one. Under de_DE, api.problem for an L pass at 310 Hz said 'puts the data down to 287,9 Hz' where the script says '287.9 Hz'; the pre_s refusal and the %g carrier texts were affected the same way. The fix is frame::py_format, a locale-independent printf for one float, and a pytest that runs every refusal case under de_DE. (py_repr and pynum were already locale-safe.)",
+    "fixed": true
+   },
+   {
+    "what": "api::read_source gave unhelpful errors when a file could not be read. A directory threw libstdc++'s 'basic_filebuf::underflow error reading the file: Is a directory', and a missing file threw '<path>: cannot open' with no reason. It now throws api::ReadError (a std::runtime_error carrying path and errno) whose text is Python's OSError: \"[Errno 2] No such file or directory: 'x.qrsp'\", '[Errno 21] Is a directory: ...', with the path in Python repr. It reads with stdio rather than ifstream.",
+    "fixed": true
+   },
+   {
+    "what": "api::encode_picture read out of bounds for an images::Picture whose rgb.size() is not width*height*3, or whose width or height is 0 or negative. images::fit indexes by the declared geometry, and the app builds Pictures from QImage. Such a picture is now refused with std::invalid_argument before the resize and before the encoder is called; test_api.cpp checks that the stub encoder is never invoked.",
+    "fixed": true
+   },
+   {
+    "what": "slot::quarter_hour_start said 'date value out of range' for every out-of-range q. Python's text changes with distance: 'days=N; must have magnitude <= 999999999' once q // 96 passes timedelta's limit (|q| >= ~9.6e10), and 'Python int too large to convert to C int' once it passes a C int. The binding also refused a q outside int64 with pybind's cast error instead of Python's OverflowError. Now exact at every boundary in C++, and for any Python int through the binding.",
+    "fixed": true
+   },
+   {
+    "what": "Duplicated defaults: tx::slot_samples, Carrier(), PassSpec and the tx bindings repeated 12.0 / 3.0 / 1500 / 0.5 / 120 as literals instead of taking config::TX_PRE_S / TX_POST_S / TX_CARRIER_HZ / TX_AMPLITUDE / TX_CHUNK_S from the generated QRSS config. The values were right today but could drift, against the project's 'numbers only from the generated header' rule. They now come from the config.",
+    "fixed": true
+   },
+   {
+    "what": "Checked and correct, no change needed: sstvae-qrss transmit against qrss_transmit.py line by line (argument handling, defaults, refusal texts and order, exit codes, no output file on refusal, stdout), with about 50 new probes; the slot parser against CPython 3.13 on a 300k grammar fuzz; and the chain test, which runs the C++ sstvae-qrss binary for transmit and the unsubstituted Python receive_slot for receive, so it is genuinely C++ tx -> Python rx.",
+    "fixed": true
+   },
+   {
+    "what": "Checked and correct, no change needed (API for the app): the API is reentrant. It is pure functions plus PassAudio::render, which is const and safe to call from a worker thread; OpenEncoder.encode is guarded by a mutex; no global mutable state. A codec not loaded gives a clear 'encode_picture: no encoder' refusal, or open_encoder's own refusal. pass_audio returns float32, matching the script's --float file that the GUI reads today. A FULL pass (about 1800 s of audio) is about 14.4 M samples, roughly 58 MB of float32 from pass_audio; pass_stream renders it in blocks with no whole-pass buffer.",
+    "fixed": true
+   },
+   {
+    "what": "Not fixed, minor: std::strerror is not guaranteed thread-safe. It is used only on error paths (api::ReadError and the existing wav.cpp writer). glibc returns static strings for known errnos, so this matters only for unknown errnos on some libcs.",
+    "fixed": false
+   },
+   {
+    "what": "Not fixed, pre-existing and project-wide: all native file I/O (read_source, write_wav, the CLI) opens narrow char paths. A non-ASCII path on Windows will fail to open; the app should pass paths it got from QFile::encodeName or open the files itself.",
+    "fixed": false
+   },
+   {
+    "what": "Not fixed, API shape and not a bug: api::slot_of requires an exact quarter hour (it throws otherwise), and there is no 'next slot after now' helper. The app must compute ceil(now / SLOT_S) itself. Refusal texts mention CLI flags ('--ook', '--callsign', '--lead-in') because they are the script's texts; the app shows them verbatim.",
+    "fixed": false
+   }
+  ],
+  "notes": "This is the final-review commit 18aa704 on top of 1afd26b. It does not touch sstvae/ Python, the qrss_*.py CLIs, native/gui/ or docs/, and nothing was pushed. The scratch probe file (tests/test_zz_probe_transmit.py) was deleted before committing.\n\nNothing in the reference looked wrong.\n\nFor whoever wires the app:\n- Catch std::invalid_argument for refusals (or call problem() first, which returns the text). api::ReadError (a std::runtime_error) means the file could not be read; its .err is the errno.\n- Refusal texts no longer depend on LC_NUMERIC, so calling into the API under QApplication is safe. CLI main.cpp already restored LC_NUMERIC for argument parsing.\n- The GUI today shells out to qrss_transmit.py --float and reads the WAV back. api::pass_audio returns the same float32 samples directly; pass_stream avoids holding a 58 MB FULL pass at once.",
+  "api": "The in-process API is Qt-free:\n- native/core/qrss/api.hpp, namespace sstvae::qrss::api, library sstvae_qrss. It builds and is tested without onnxruntime.\n- native/core/qrss/codec/api.hpp, library sstvae_qrss_codec, for an encoder loaded from a model.\n\nThe app calls it from a worker thread. Every function is reentrant, PassAudio::render is const, and OpenEncoder.encode is mutex-guarded. All refusal texts are locale-independent: they are safe under QApplication's LC_NUMERIC and identical to the scripts'.\n\nEncode:\n- encode_picture(const images::Picture&, int64 mode, int64 codec_id, const Encoder&) -> picture::StoredPicture. This is qrss_encode.py's path: fit to 640x480, scale to [0,1], encode, from_latents.\n- It throws std::invalid_argument, in order, with:\n  - picture.py's mode and codec-ID texts;\n  - 'encode_picture: no encoder' when the codec is not loaded;\n  - 'encode_picture: an empty picture (WxH)' for an empty picture;\n  - 'encode_picture: a WxH picture needs N bytes of RGB, not M' when the picture's rgb is not W*H*3 bytes.\n- open_encoder(optional<string> model, precision, codec_id, Fetcher) -> OpenEncoder{onnx_path, codec_id, encode}. encode is mutex-guarded.\n- encode_file(image_path, mode, const OpenEncoder&) -> StoredPicture.\n\nInput:\n- read_source(path) -> Source, which is a StoredPicture (.qrsp) or a BeaconFile (.bin, chosen by the beacon magic).\n- It throws std::invalid_argument for a file that is neither: beaconfile's texts, load_qrsp's texts, or the native npz reader's for a file that is not a zip.\n- It throws api::ReadError (a std::runtime_error with .path and .err = errno, and Python's OSError text, e.g. \"[Errno 2] No such file or directory: 'x.qrsp'\") when the file cannot be read.\n\nOne pass:\n- PassRequest{q, waveform, freq_hz, callsign, grid, segment, frame, lead_in_s, ook}.\n- problem(src, req) -> \"\" or the script's SystemExit refusal text, in the script's order.\n- plan_pass(src, req) -> tx::PassPlan.\n- pass_audio(src, req) -> std::vector<float> at 8 kHz. This is exactly qrss_transmit.py --float's samples. It throws std::invalid_argument with problem()'s text. A FULL pass is about 14.4 M samples (about 58 MB).\n- pass_stream(src, req) -> tx::PassAudio, to render in blocks.\n- write_wav(src, req, path, float32).\n\nSlot clock:\n- parse_slot(text) -> q. It uses CPython 3.13 fromisoformat rules and throws std::invalid_argument with sequences.parse_slot's text.\n- slot_iso(q).\n- slot_of(quarter_hour_unix_s) needs an exact quarter hour.\n- quarter_hour_s, t0_s, audio_start_s, audio_end_s(q, waveform, frame), pass_samples(waveform, frame).\n\nFrames and modes:\n- frame_spec(waveform, frame), mode_index, passes_for, waveform_named / waveform_name, FRAMES {full, medium, short, tiny}.\n\nConstants (all from the generated qrss/config.hpp):\n- SAMPLE_RATE 8000, SLOT_S 900, T0_OFFSET_S 1, AUDIO_LEAD_S 12, AUDIO_TAIL_S 3, PASS_S 1782.678125.\n- CARRIER_MIN_HZ / CARRIER_MAX_HZ 300 / 2700, CARRIER_DEFAULT_HZ 1500, LEAD_IN_MAX_S 10."
+ }
+]

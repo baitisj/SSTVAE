@@ -1,0 +1,308 @@
+[
+ {
+  "wave": "4",
+  "kind": "simplification",
+  "what": "Python's mutable ChanCapture._psd became a NoisePsdSlot: a shared_ptr behind a mutex with get_or_compute, shared by copies. It computes once under contention, with no mutable global.",
+  "evidence": "native/tests/qrss/test_trackbase.cpp test_psd_slot: computed == 1 under 8 threads",
+  "status": "n/a",
+  "where": "native/core/qrss/trackbase",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "simplification",
+  "what": "np.average(weights=) is used by the acquire, track and ltrack lanes, which would each have re-derived it. The skeleton review added it once as math::average, bit-exact with numpy's TypeError/ZeroDivisionError texts.",
+  "evidence": "acquire.py:820-821, track.py:621/627, ltrack.py:1110/1116; native/core/math/npstats",
+  "status": "fixed",
+  "where": "native/core/math/npstats average",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "simplification",
+  "what": "The NoisePsdFn seam lets chan.cpp (and later lead_in_span) call frontend::noise_psd directly in C++. The rows still honour a test's monkeypatched frontend.noise_psd, keeping argument spies working without a Python round trip on the normal path.",
+  "evidence": "tests/qrss_native/chan.py _noise_psd(); tests/test_qrss_native_chan.py::test_the_seam_gets_the_references_arguments",
+  "status": "n/a",
+  "where": "native/core/qrss/chan, frontend",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "simplification",
+  "what": "scipy's not-a-knot CubicSpline solve goes through solve_banded and LAPACK zgtsv with complex right-hand sides, but the matrix is real, so a small zgtsv emulation is bit-exact with no LAPACK dependency. The vendored pocketfft also matches numpy's bit for bit.",
+  "evidence": "tests/test_qrss_native_cubic_spline.py::test_bitwise (n up to 2000); tests/test_qrss_native_npfft.py::test_c2c_every_length",
+  "status": "n/a",
+  "where": "native/core/math/cubic_spline",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "simplification",
+  "what": "M*M in a1_gamma can be computed in double instead of int64: Python's exact product rounded once equals the double product for every |M| < 2^53. This removes signed-overflow UB with no change in bits.",
+  "evidence": "ctest pins a1_gamma(3037000500) = (0x1.56fbe7c0f11bap+31, 0x1.0e38e38e24c69p+0), the Python value",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_stats a1_gamma",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "simplification",
+  "what": "Python writes the inverse-variance kappa combination twice, inline in demod.calibrate and as ldemod._combine, and the two are identical. The C++ has one demod::combine, and _combine's row is an alias.",
+  "evidence": "sstvae/qrss/demod.py:178-191 vs ldemod.py:210-222",
+  "status": "n/a",
+  "where": "native/core/qrss/demod combine",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "simplification",
+  "what": "In both implementations extract recomputes median(|u|^2 over pos >= 0) over the whole grid in each of its four symbol_estimates calls. Computing it once per track would remove most of extract's remaining cost without changing any result.",
+  "evidence": "demod.py:73; about 4 x 29k-element nth_element on a FULL pass; C++ extract on a full stub 21.3 ms (Python 34.9 ms), symbol_estimates(ref) alone 2.15 ms, slower than Python's 1.72 ms",
+  "status": "open",
+  "where": "sstvae/qrss/demod.py extract (and native demod)",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "simplification",
+  "what": "track._parabola duplicates acquire._parabola, and ltrack imports it. The C++ keeps one parabola (float and double overloads) in acquire_stats, and the track_timing rows map _parabola to it.",
+  "evidence": "wave 4 math notes; wave 5 track timing notes: rows file maps _parabola to acquire_stats._parabola (float32 dispatch for ltrack's L pilot)",
+  "status": "fixed",
+  "where": "native/core/qrss/acquire_stats parabola",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "simplification",
+  "what": "Caching TbdHit.f_hz per hit is a one-line Python fix worth about a third of track_before_detect's runtime, with no format change. The C++ caches it with identical output.",
+  "evidence": "cProfile: 3816 polyfit calls = 0.97 s of 2.99 s on FULL. Fixed in the reference in wave 7 (commit ce73aff: @functools.cached_property, 'TbdHit.f_hz fitted once').",
+  "status": "fixed",
+  "where": "sstvae/qrss/acquire.py TbdHit.f_hz",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "simplification",
+  "what": "acquire::np_log_f32 in the A3 lane and math::np::log_f32 (nplog.hpp) in the A1/A2 lane were two transcriptions of numpy's simd_log_FLOAT. The A3 copy was deleted at merge.",
+  "evidence": "native/core/qrss/acquire_tbd.cpp vs wf_c19e1b62-a4e-2/native/core/math/nplog.hpp (A3/cwid review); merged in commit 21ba9bf 'wave 5 follow-ups (one float32 log ...)'",
+  "status": "fixed",
+  "where": "native/core/qrss/acquire_tbd, math/nplog.hpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "6b",
+  "kind": "simplification",
+  "what": "receive_pass and _receive_pass_l fold into one C++ function. They share prepare, gate V, channel_for, the round A/B sequencing, the header and cw decisions and the PassResult assembly; only the tracker and the header decoder differ, and both are a dispatch on the waveform. Python could do the same.",
+  "evidence": "native/core/qrss/receiver.cpp receive_pass",
+  "status": "n/a",
+  "where": "native/core/qrss/receiver.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "simplification",
+  "what": "One slot orchestration template serves two policies: typed records with the GIL released, and py::object with every stage resolved through receiver's globals per call. Both give bitwise-equal results with one copy of the budget, merge and gating logic, and spies see exactly the reference's call sequence.",
+  "evidence": "receiver_slot_flow.hpp; test_receive_slot runs PYTHON_MODE scenarios both ways; 49k-call fuzz logs identical",
+  "status": "n/a",
+  "where": "native/core/qrss/receiver_slot_flow.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "simplification",
+  "what": "Making _owned lazy took one template parameter: owned_by(p, d, found, lines), with lines() called once per owner. It also stops an infinite iterator entry from hanging, since unpack3 takes at most 4 items.",
+  "evidence": "receiver_slot_flow.hpp owned_by; test_owned_walks_a3_lazily (iter(range(10**9)) entry: 'too many values to unpack (expected 3)')",
+  "status": "n/a",
+  "where": "native/core/qrss/receiver_slot_flow.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "simplification",
+  "what": "simfile walks the zip itself only because npz.hpp cannot read a 0-d '<U' member. With str support in npz::parse_npz, about 120 lines go away.",
+  "evidence": "cli-receive port insight [5]; shared_changes_needed [4]",
+  "status": "open",
+  "where": "native/core/qrss/npz.cpp, simfile.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "simplification",
+  "what": "A typed q would retire a whole class of bugs: q is int64 in the records and uint64 in the scrambler, so every boundary between them needs a check (the CLI, receive_pass and now parse_slot each have one).",
+  "evidence": "w6b_insights_entries.py section 3; the cli-receive review's q < 0 finding",
+  "status": "open",
+  "where": "native/core/qrss (q type)",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b, 7",
+  "kind": "simplification",
+  "what": "pathlib_str existed twice (CLI receive.cpp and the codec glue), because the codec glue is not linked in no-codec builds. Wave 7 moved it into sstvae_qrss proper (core/qrss/pypath) as one copy.",
+  "evidence": "cli-receive shared_changes_needed [5]; paths-cleanups item 2",
+  "status": "fixed",
+  "where": "native/core/qrss/pypath.{hpp,cpp}",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b, 7",
+  "kind": "simplification",
+  "what": "Mutually exclusive groups in argparse.hpp replaced about 120 lines of receive.cpp emulation of --just-ce | --just-l (usage rewriting, abbreviation matching, error-order heuristics) with one exclusive() call. The conflict is raised where CPython's take_action does: after type/choices, before the missing-required and unrecognized errors.",
+  "evidence": "git diff 8fe5b44 -- native/apps/sstvae_qrss/receive.cpp; test_argparse.cpp 229 checks; 6 parsers and 55 command lines pinned from CPython 3.13",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/argparse.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "simplification",
+  "what": "verify_track(fit=False, timing=best) gives exactly what verify_track(fit=True) gave on the blind line try, so one coarse grid serves both. The C++ factoring (timing_peaks -> timings_of / tries_of) leaves fit_timing and fit_timing_tries as two-line wrappers over the shared grid.",
+  "evidence": "native/core/qrss/track_timing.cpp timings_of/tries_of; test_qrss_native_track_timing.py::test_fit_timing_tries",
+  "status": "n/a",
+  "where": "native/core/qrss/track_timing.cpp, ltrack_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "simplification",
+  "what": "stderr_text's decoder and fs_decode are now one function (fs_unit), so the stderr escapes and the reprs cannot disagree about which bytes form a code point.",
+  "evidence": "native/core/qrss/pypath.cpp fs_unit; the stderr digests are unchanged after the refactor",
+  "status": "n/a",
+  "where": "native/core/qrss/pypath.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "8",
+  "kind": "simplification",
+  "what": "Emulating Path.mkdir(parents=True, exist_ok=True) exactly needed a recursive create_directory walk. std::filesystem::create_directories gives NotADirectoryError where Python gives FileExistsError (when the root is a regular file), and does not say which component failed.",
+  "evidence": "native/core/qrss/rawfile.cpp make_dirs; error-parity cases in test_qrss_native_passband.py.",
+  "status": "n/a",
+  "where": "native/core/qrss/rawfile.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "simplification",
+  "what": "One shared replay header (store_session.hpp) runs the generator's op table, so test_store.cpp and test_associate.cpp do not mirror the session by hand. Each op's expected result is json.dumps text that the C++ rebuilds as a pyjson::Value and dumps, so the pins need no per-type comparison code.",
+  "evidence": "native/tests/qrss/store_session.hpp run_op; store_pins.hpp OPS[].want. Rerunning gen_store_pins.py reproduces the pins byte for byte.",
+  "status": "n/a",
+  "where": "native/tests/qrss/store_session.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "simplification",
+  "what": "store.cpp's own strip/isdigit/strtoll/stod parser duplicated pynum, which pyjson already used. Replacing it removed about 40 lines and the <cctype> and <limits> includes, and made the two text-number paths the same code.",
+  "evidence": "native/core/qrss/store.cpp py_int/py_float (commit 8fff495).",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "simplification",
+  "what": "The reference's capture_prepare builds default_rng(q) and calls standard_normal(0) even when nothing is missing. The C++ draws nothing then, and its typed finish path draws nothing for a slot it will not receive.",
+  "evidence": "test_finish_receive_typed_draws_no_noise_for_nothing.",
+  "status": "n/a",
+  "where": "native/core/qrss/live.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "simplification",
+  "what": "Comparing whole outputs as text (state.json, listener.log, json.dumps of the tiles and of each call record) under a frozen clock gave strong parity for little code. Once time.time() was frozen and the receivers became seams that look up the patched module functions at each call, every stub scenario matched byte for byte. The ctest replays the same records from JSON with a 15-line Script stub.",
+  "evidence": "tests/test_qrss_native_listener.py snapshot()/same(); native/tests/qrss/test_listener.cpp Script.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_listener.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "simplification",
+  "what": "str.upper() is reproduced by a generated 1525-entry table (the full case mapping, including SpecialCasing expansions such as sharp s to SS), searched with lower_bound, with invalid UTF-8 bytes passed through to mimic surrogate-escape. No ICU dependency.",
+  "evidence": "tools/gen_qrss_unicode_tables.py UPPER; test case key-every-upper compares all 1525 through the OSError path.",
+  "status": "n/a",
+  "where": "native/core/qrss (decode parse_key)",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "simplification",
+  "what": "Once the reference wrote corr_stat's t as a Python float and 'accepted' as a bool, the port could drop two type-tracking flags it had carried only to reproduce numpy scalar formatting.",
+  "evidence": "native/core/qrss/associate.hpp diff 136c208..HEAD: Corr::numpy and Validation::t_numpy removed.",
+  "status": "fixed",
+  "where": "native/core/qrss/associate.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "simplification",
+  "what": "test_live.cpp's hand-printed pins, which the w8 live review flagged, became tools/gen_qrss_live_pins.py, which writes golden_qrss/live_pins.json, plus a staleness test. After the reference fixes, one rerun replaced editing about 20 expectations by hand.",
+  "evidence": "live_pins.json is 769 lines; test_qrss_core_live has 277 checks; gen_qrss_live_pins.py --check is current.",
+  "status": "fixed",
+  "where": "tools/gen_qrss_live_pins.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "simplification",
+  "what": "util::remove_file already refuses directories rather than calling std::filesystem::remove (which deletes an empty one). Reusing it made the best-effort temporary sweep a two-line fix that stays identical to Python's Path.unlink.",
+  "evidence": "native/core/util/fileio.hpp:247 (9a reference-fixes review).",
+  "status": "n/a",
+  "where": "native/core/util/fileio.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "simplification",
+  "what": "Stereo decorrelation is worth almost nothing on the passband store because I and Q are uncorrelated, so an estimate-then-verify channel assignment loses nothing that matters. Costing all four channel pairs exactly would be wasted time.",
+  "evidence": "0.01-0.05% from stereo modes on the hours; M/S chosen in 2 of 3516 frames (fbench stats).",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "simplification",
+  "what": "An equivalent of 'flac -t' needs no CLI: libFLAC's decoder, with MD5 checking on and error callbacks counted, takes about 40 lines of ctypes. It turned a permanently skipped check into a running one.",
+  "evidence": "tests/test_qrss_native_flac.py::test_libflac runs 41 streams in 0.38 s and detects a single flipped STREAMINFO MD5 bit.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_flac.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "simplification",
+  "what": "listen_api.cpp's guarded_seams kept a second hand-copied set of the listener's default seams (candidates, detect, receive_slot, finish, associate) that could drift. live::default_seams(cfg, seams) now fills them once, for both the constructor and the Session.",
+  "evidence": "Commit c80c93b. The review diffed default_seams against the old constructor and guarded_seams and found no other copy in native/.",
+  "status": "fixed",
+  "where": "native/core/qrss/listener.cpp, listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "10/em",
+  "kind": "simplification",
+  "what": "On the receive_pass branch, rereceive hands receive_pass the ChanCapture it already built through ReceiverSeams.channel_for, so the capture is mixed and its noise PSD computed once instead of twice (Python builds an identical second channel inside receive_pass). The seam meant for tests doubles as a reuse path with no new API.",
+  "evidence": "native/core/qrss/em_refine.cpp rereceive (s.channel_for lambda)",
+  "status": "n/a",
+  "where": "native/core/qrss/em_refine.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "simplification",
+  "what": "Exact reuse in the search: a 250 Hz capture's channel and noise floor once for all candidates, a candidate's derotated channel once for all segments, the capture's chunk FFTs once per (segment, candidate) instead of per clock step, and retro_detect prepares a slot's capture once for both search and receive (the reference prepares it twice). Taking the channel once is valid only because channel_for at the CH rate ignores the detection, and the noise floor's laziness has to follow the reference's reach test or it becomes an observable change (which the review then found and fixed).",
+  "evidence": "sstvae/qrss/receiver.py:207-211; native/core/qrss/em_search.cpp search_prepared; identical numbers",
+  "status": "n/a",
+  "where": "native/core/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "simplification",
+  "what": "The Python repr of a JSON value existed only in decode.cpp; moving it to pyjson::repr lets the store raise Python's 'bad pass uid <repr>' without the store depending on decode.",
+  "evidence": "native/core/qrss/pyjson.cpp repr(), decode.cpp py_repr now one line",
+  "status": "n/a",
+  "where": "native/core/qrss/pyjson.cpp",
+  "group": "stage4-wave10"
+ }
+]

@@ -1,0 +1,5 @@
+pass 1990584_1500032_cce9603c   L l-tiny
+  pilot       1500.032 Hz at t0   drift -0.016 Hz/min   wander 0.031 Hz rms
+  doppler    0.108 Hz   clock -24.8 ppm   Z_ref 121.7   SNR2500 -6.3 dB   kappa 0.77
+  header     not decoded
+  mean W     +9.71 dB

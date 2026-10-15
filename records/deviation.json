@@ -1,0 +1,911 @@
+[
+ {
+  "wave": "wave 1",
+  "kind": "deviation",
+  "what": "The C++ bounds Python ints to int64 and caps frame counts at 2^53.",
+  "evidence": "frame/infra port notes.",
+  "status": "n/a",
+  "where": "native/core/qrss",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "deviation",
+  "what": "The C++ always returns C-contiguous outputs and never emits numpy RuntimeWarnings.",
+  "evidence": "Port notes.",
+  "status": "n/a",
+  "where": "native/core/qrss bindings",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "deviation",
+  "what": "The scipy filter port covers only what QRSS uses.",
+  "evidence": "Only constant mode and the hamming/hann/kaiser windows; float16/longdouble and a Kaiser beta with more than one element raise NotImplementedError.",
+  "status": "n/a",
+  "where": "native/core/qrss/filters",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "deviation",
+  "what": "The npz reader is narrower than numpy's.",
+  "evidence": "Refuses compressed, big-endian and structured archives and odd spellings; parses eagerly; create_system is always 3.",
+  "status": "n/a",
+  "where": "native/core/qrss/npz",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "deviation",
+  "what": "Rational is int64-only and parses ASCII digits only.",
+  "evidence": "infra port notes.",
+  "status": "n/a",
+  "where": "native/core/qrss/rational",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "deviation",
+  "what": "The C++ frame layout cache is a mutex-guarded LRU of 16.",
+  "evidence": "frame port notes.",
+  "status": "n/a",
+  "where": "native/core/qrss/frame",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "deviation",
+  "what": "The CE and L transmit functions narrow or change some inputs and errors.",
+  "evidence": "to_audio takes 1-D z only; _pulse_offsets returns a list; carrier_fraction falls back to Python Fraction for exotic types; mix_turns/resample/clip refuse fs <= 0; a CE frame given to L functions raises AssertionError rather than AttributeError; non-fp16 segs are rounded once.",
+  "status": "n/a",
+  "where": "native/core/qrss/ce, lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "deviation",
+  "what": "sstvae-qrss encode loads models and pictures differently from Python.",
+  "evidence": "Uses the native model cache, not huggingface_hub; stb image decode, not PIL.",
+  "status": "n/a",
+  "where": "native sstvae-qrss CLI",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "deviation",
+  "what": "The C++ CLI's error output differs from Python's.",
+  "evidence": "An uncaught exception prints only the traceback's last line; --help layout is simpler than argparse's; undecodable arguments are echoed as raw bytes on stdout.",
+  "status": "n/a",
+  "where": "native sstvae-qrss CLI",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "deviation",
+  "what": "WAV output is written by core/qrss/wav rather than dr_wav wavio, and NaN maps to int16 0.",
+  "evidence": "core/qrss/wav reproduces scipy's exact header, RF64 included.",
+  "status": "n/a",
+  "where": "native/core/qrss/wav",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "lstsq/polyfit use a one-sided Jacobi SVD, eigh a cyclic Jacobi eigen-solver, and solve/inv partial-pivot LU, because native/ has no LAPACK. They agree with numpy to rounding (normwise), not bitwise.",
+  "evidence": "lstsq x within 1e-10 and singular values within 1e-12; solve/inv/eigh/eigvalsh 1e-12 (~1e-15 well-conditioned); eigenvector signs not compared. Rank decisions are bit-exact, including rcond <= 0 / >= 1. For [[nan,1],[0,1]]x=[1,1], solve gives [nan,nan] where numpy gives [nan,1]. eigh with non-finite input returns NaN, like numpy, and raises nothing.",
+  "status": "n/a",
+  "where": "native/core/math/linalg",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "PathFn sorts with std::stable_sort (NaN last), refuses f/w of a different length from t, and emits no RankWarning. A NativePathFn called on a scalar returns np.float64 where the reference's spline path gives a 0-d ndarray, and the text of scipy's make_lsq_spline 'Out of bounds' refusal is approximated.",
+  "evidence": "Repeated times give ~5e-12 spline-coefficient differences (tie order); distinct times are bit-exact (572 cases, 0 differences; a 4000-point 1800 s path max diff 0.0). The length refusal reads ValueError 'PathFn: t, f and w must have the same length'; every receiver call site passes equal lengths.",
+  "status": "n/a",
+  "where": "native/core/qrss/trackbase PathFn",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "PassResult.load requires the dtypes the receiver writes and maps missing/extra meta keys differently from Python. Other narrow I/O differences: a Python int in a float field is written '0.0', not '0'; a 0x0 cov is written (0,0); JSON ints are limited to int64; bindings narrow float64 arrays to float32; and save maps RuntimeError to OSError.",
+  "evidence": "Required dtypes: float32 z/w/hdr_llr/psi, complex64 ch, 2-D float64 timing_cov. An extra meta sub-key is ignored where Python raises TypeError; a missing one gives KeyError where Python gives TypeError. Receiver-produced files are byte-identical in both directions across 10 variants (one pinned at sha 575b8255..., 2544 bytes), and the meta JSON is identical to json.dumps.",
+  "status": "n/a",
+  "where": "native/core/qrss/types PassResult",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "pass_uid's binding takes f_hz as a double; Python given an np.float32 multiplies by 1000 in float32 before round(). Past 2^63 the C++ prints with printf('%.0f').",
+  "evidence": "Exact on glibc/macOS and UCRT from VS 2019 16.2; older MSVC runtimes would print zeros after 17 digits (unreachable for a real frequency). The receiver always passes a Python float.",
+  "status": "n/a",
+  "where": "native/core/qrss/types pass_uid",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "noise_psd takes an explicit NoisePsdOptions::old_edge_noise; left unset, it reads QRSS_OLD_EDGE_NOISE as the reference does. rules::set_old writes only the C environment, and the Python binding writes os.environ first so os.environ, monkeypatch and getenv agree.",
+  "evidence": "rules::old/set_old race through getenv/setenv, as documented: set the rules at startup or pass old_edge_noise. old, set_old and apply agree with os.environ in one process and in a child; refusal texts are identical.",
+  "status": "n/a",
+  "where": "native/core/qrss/frontend, rules",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "Python's lru_caches became mutex-guarded LRU caches of immutable shared_ptr<const> results. Unlike the reference, _noise_response, _fold_power and _fe_power cannot be mutated through a returned value.",
+  "evidence": "lane notes: caches are mutex-guarded LRUs or function-local statics; noise_psd_at computes its table once with eight concurrent callers (ctest counting stub)",
+  "status": "n/a",
+  "where": "native/core/qrss/frontend",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "The front end changes only how work is batched, with outputs bit-equal. The bindings accept the chunk arguments and ignore them; running_median/normalise use a window kept sorted across hops; oaconvolve works in batches of about 2^17/n rows; StreamFE.push consumes its buffer from an offset.",
+  "evidence": "chunk == 0 raises the reference's 'range() arg 3 must not be zero'. For chunk < 0 the reference returns uninitialised np.empty memory and the binding returns the real result. Medians are bit-equal and oaconvolve matches its earlier output and scipy bitwise. StreamFE's outputs, a0 and pending() equal live.StreamFE after every push.",
+  "status": "n/a",
+  "where": "native/core/qrss/frontend, math/convolve",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "Front-end edge refusals differ on absurd inputs. quantise_mix raises OverflowError for |f|*64 >= 2^63 (int64 Rational) where Python builds a huge Fraction, noise_psd with fs=0 does not raise ZeroDivisionError, and unported scipy modes and shapes raise NotImplementedError.",
+  "evidence": "Unported: 'valid', N-D, scalar worN and other maximum_filter1d modes. make_chan returns a dict that the row converts with _rx.to_ref. convolve is bound only for the parity tests and substitutes nothing.",
+  "status": "n/a",
+  "where": "native/core/qrss/frontend, math/convolve",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "A 3-point CubicSpline matches only to 1e-13, because scipy solves it densely with LAPACK gesv. The native CubicSpline refuses real y (scipy's real path divides where its complex path multiplies by a reciprocal), other bc_types, extrapolate=False and multi-dimensional y.",
+  "evidence": "3-point: at most 1e-13 relative near the knots; unreachable from preamble_search, which always has hundreds of knots",
+  "status": "n/a",
+  "where": "native/core/math/cubic_spline",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "median_filter with a window of exactly 2n+1 (scipy's lim2 == 0) uses scipy's generic NI_Select path, because the fast path reads past the array. The value always matches but the sign of a zero or a NaN case can differ; only odd sizes, mode reflect and 1-D are supported.",
+  "evidence": "ndfilter parity: every n 1..40 against every odd window up to 2n+7 is bit-exact elsewhere; the 2n+1 window is value-exact only",
+  "status": "n/a",
+  "where": "native/core/math/ndfilter",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "npfft supports only norm='backward', 1-D input or a forward fft along the last axis of a 2-D array. It refuses irfft of an empty input with explicit n (ValueError 'irfft: empty input') where numpy reads past the buffer.",
+  "evidence": "anything else raises NotImplementedError; longdouble FFTs not compared",
+  "status": "n/a",
+  "where": "native/core/math/npfft",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "Several acquire_stats edges differ from the reference. gumbel_p agrees only to 4e-16 on AVX-512, NEP 50 mixed typing for _parabola is emulated only in the binding, and some refusal texts and return types differ on unrealistic inputs.",
+  "evidence": "gumbel_p: numpy's own exp and SVML expm1, so A3's p < pfa decision could flip only within an ulp of pfa. preamble_scales with a negative scale: own ValueError text instead of numpy's reshape error. Negative spectrogram chunk: NotImplementedError. py_round with 4*fs past int64: OverflowError. a1_gamma at fs < ~0.375 Hz returns np.float64 where Python returns Python floats (and ZeroDivisionError at M=0); left unchanged.",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_stats",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "deviation",
+  "what": "The demod bindings read track arrays through np.asarray, assume gi(p) = p - pos[0] instead of calling tr.gi, and refuse some argument forms with their own text. Non-0/1 hdr_bits are refused where the reference computes 1 - 2b.",
+  "evidence": "Lists work where CE's reference raises TypeError. extract converts q to uint64 first ('q must fit in uint64'). The matched filters require a 1-D z and refuse a 2-D pos with ValueError (numpy reports a broadcast failure). A 0-d/2-D meas gives IndexError for size 0. meas and hdr_bits are converted eagerly. With several malformed arrays a different IndexError can come first. longdouble/object z computes in float64/complex128. kappa_estimates_l returns Python floats. g_shrink(+inf) gives NaN without numpy's RuntimeWarning.",
+  "status": "n/a",
+  "where": "native/bindings demod_rx.hpp, ce_rx, lwave_rx",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "Four non-bitwise seeds in the track core are accepted and pinned: _smooth sums sequentially where np.convolve uses OpenBLAS ddot, templates use libm exp instead of numpy's SIMD exp, _lowpass computes complex64 input in double, and refine_timing's Newton step uses the math lane's LU. The swap test shows _smooth and templates' sf are the only array-level seeds.",
+  "evidence": "_smooth 1e-15/1e-16; templates c 1 ulp (3e-16 rel), sf 1.9e-10; _lowpass on complex64 1.6e-7 apart (real callers pass complex128). refine_timing within an ulp: tau0 1.4e-17, ppm 1.9e-16, cov 2e-18 relative. Matching _smooth exactly would tie the C++ to one CPU's BLAS kernel (SkylakeX vs Haswell vs NEON differ).",
+  "status": "n/a",
+  "where": "native/core/qrss/track",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "track()'s freq argument must be a PathFn (Python's or native), and a track with no timing raises the same AttributeError, only earlier. A few binding edges differ on exotic inputs.",
+  "evidence": "Binding edges: select_q accepts lists (reference: AttributeError); remove_spread checks shape at a different point (both ValueError); z_ref_stat raises a different error type on malformed input. _recenter returns a C++ PathFn evaluating to 1e-9 Hz. symbol_mf's chunk is ignored. The pass_uid sha8 suffix may differ because it hashes float32 z. Non-1-D header bits now match numpy's outcomes and messages.",
+  "status": "n/a",
+  "where": "native/core/qrss/track, bindings track.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "fit_timing correlates by the direct sparse gather for every lag count (plan 2b), where the reference switches to FFT correlation above 64 lags. The grids agree to rounding and every peak, decision and timing is the same; a term straddling an end of x counts 0, as in the reference's own direct path.",
+  "evidence": "C++ grid vs reference FFT grid 1.05e-13 of scale (bar 1e-12); vs its direct path 4.4e-15; tau0 8.2e-12 CH samples, slip 5.0e-11; receiver.channel_for pads captures so the straddle never happens there",
+  "status": "n/a",
+  "where": "native/core/qrss/track_timing fit_timing",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "Gate V parity bars are set from the reference's own conditioning rather than the task's 1e-8. With identical inputs the glue is bit-exact (test_gate_v_composition).",
+  "evidence": "Z_ref is held to 1e-7 (measured 4.5e-8) and resid_ratio to 1e-6 (measured 1.1e-7). On the noise capture: Z_ref 1e-4 absolute (6.1e-6), P 1e-3 (1.3e-4). At the q floor: Z_ref 1e-5 (3.65e-7), P 1e-3 (4.6e-5), u 1e-7 (4.3e-9).",
+  "status": "n/a",
+  "where": "native/core/qrss/track_timing verify/verify_track",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "Small track_timing differences: fit_statistic is not bit-exact (~1e-15, from _lowpass and the dense-MF oaconvolve), and a NaN-score peak sorts last where Python's -score key is unordered for NaN. Complex known symbols are refused, and verify returns a value copy whose identity the rows restore where Python returns its argument.",
+  "evidence": "statistic x 9.8e-16 of scale, sig2 2.3e-15; identity is preserved for refine_path/line_path when unchanged and for verify_track's timing when fit=False",
+  "status": "n/a",
+  "where": "native/core/qrss/track_timing",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "A2 matches only to rounding. S is a per-cell in-order sum where numpy's einsum uses BLAS zgemm, chunk phases use std::atan2 instead of numpy's SIMD arctan2, oaconvolve's FFT order differs, and lead_in_span's z comes from a convolution scipy does with ducc0's real-input FFT. The returned span can differ only if z lands within an ulp of z_min.",
+  "evidence": "S ~2e-15; Lambda 1.4e-15 / 2.0e-15 (bar rtol 1e-9) with the same argmax cell every time; f_hz identical; tau0_s 4.0e-14 s; phase 3.5e-12 rad; m/local 6.5e-16 / 9.4e-16; lead-in z ~6e-16 with ~21% of samples bit-equal; preamble_p on a given S exact",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "carrier_lines breaks exact float32 ties highest bin first, where numpy's unstable argsort may order them differently. The A1/A2 binding also refuses some inputs, nests helpers that cannot be hooked, routes lead_in_span's noise floor through a seam, and maps f_mix None to Rational(0).",
+  "evidence": "Ties were never observed in any probe. Refused (NotImplementedError): non-float32 or non-2-D CarrierStats.stat, non-1-D fe, non-2-D chunk table. Not hookable via acquire's module attributes: helpers inside native composites (_a2_input, _preamble_sums, CubicSpline, carrier_line_stats). lead_in_span's noise floor uses a NoisePsdFn seam. f_mix None -> Rational(0) for a hand-built _A2Input/_A2Channel; no real caller produces that.",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12 and its binding",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "A3 differs in a few places: TbdHit.f_hz and _path_line fit by QR instead of numpy's SVD polyfit, and inputs where Python errors or returns garbage raise NotImplementedError. f_hz is computed once per hit, eagerly for the first hit, and tbd_viterbi reads float32 E in place at half the memory.",
+  "evidence": "f_hz intercept 1.6e-15, slope 3.6e-10 relative (ctest holds f_hz to 1e-9 Hz). NotImplementedError for a narrow band, B < |max_step| < 2B (with numpy's wording), and fe dtypes other than complex64/complex128/float64. shape_frames is reached through a TbdOptions::keep_fn seam. Every other TbdHit field is bit-exact and in the same order, except p_value (2.1e-16).",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_tbd",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "deviation",
+  "what": "cwid refuses column-major 2-D unit stacks, complex64 channels, float32 noise_psd and rank > 2 stacks rather than compute different bits. match is bit-exact only where OpenBLAS dispatches the SkylakeX ddot.",
+  "evidence": "numpy sums column-major stacks pairwise per column, differing from 8 rows up; row-major stacks in any stride pattern are exact. A 0-d input gives the reference's IndexError. Non-x86 BLAS ddot is allowed 1e-10 for match.",
+  "status": "n/a",
+  "where": "native/core/qrss/cwid and its binding",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "6a",
+  "kind": "deviation",
+  "what": "acquire's hints are converted with float()/int() before any stage runs. A malformed hint raises the reference's type and text, but on the one-frame path a bare string hint '1650' is accepted as 1650.0 where the reference raises TypeError once there are hits. The review notes the core raises only when it reaches the bad hint, and the stubbed fuzz matches the stage calls made before it.",
+  "evidence": "port:acquire-arbitration deviations [0]-[1]; review deviation [2]",
+  "status": "open",
+  "where": "native/core/qrss/acquire.cpp, bindings/module/qrss/acquire.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "deviation",
+  "what": "Inside the native acquire(), arbitration (drop_*, merge_hits, _hint_items, frame_map) is always the C++'s, so a test monkeypatching those attributes does not affect it; stage functions are still honoured through seams. The drop_*/merge_hits bindings read all 14 PreambleHit fields, so they need PreambleHit-like objects.",
+  "evidence": "port:acquire-arbitration deviations [2]-[3]",
+  "status": "open",
+  "where": "native/core/qrss/acquire.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a, 6b",
+  "kind": "deviation",
+  "what": "NaN sort keys may order differently: std::stable_sort and Python's timsort place NaN Lambda or p keys differently. receiver_slot sorts NaN z_ref last explicitly. No passed hit or realistic detection carries one.",
+  "evidence": "acquire port deviation [4], review [1]; receiver_slot port deviation [1]; ltrack_timing review deviation [2]",
+  "status": "open",
+  "where": "acquire.cpp, receiver_slot.cpp, ltrack_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "deviation",
+  "what": "On the single-frame path Python computes abs(h.f_hz - f) in float32 for an np.float32 hint (NEP 50); the C++ uses float64. The joint path converts with float() first. No caller passes float32 hints.",
+  "evidence": "review:acquire-arbitration deviation [0]",
+  "status": "open",
+  "where": "native/core/qrss/acquire.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "deviation",
+  "what": "track_l's arrays agree to 1e-9 relative, not bitwise, because its leaves agree only to rounding: pilot_filter (pocketfft vs scipy's ducc0), and track's _smooth/_recenter and trackbase's freq_path_spline from other lanes. With those leaves swapped in, the reference's track_l is bitwise the C++'s.",
+  "evidence": "Worst arrays 4.4e-10 at the frame's end, P 1.4e-12, pu 1.1e-11, timing 1.6e-12 CH samples. Whole receive_pass: f_hz 2.3e-13 / 9.1e-13 Hz; z at most 7.45e-9 (one float32 ulp).",
+  "status": "open",
+  "where": "native/core/qrss/ltrack.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "deviation",
+  "what": "The ltrack binding emulates Python's failure modes where the core refuses differently. On a CE frame it raises the reference's AttributeError/AssertionError (the core throws invalid_argument via l_only). pilot_wave with a 0-d tau raises the reference's TypeError (the core computes a value). data_mf with N-d positions derives the error from the shape and reach rather than computing; 16 shapes were probed.",
+  "evidence": "port:ltrack-core deviations [2]-[5]",
+  "status": "open",
+  "where": "native/bindings/module/qrss/ltrack.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "deviation",
+  "what": "track_l row edge differences. When refine returns a bitwise-identical timing, the row hands back the caller's old Timing object where Python makes a new equal one. With no timing and an invalid path, 'track_l needs a timing' comes before freq_path_spline's error. int_of_integral raises OverflowError for floats >= 2^63. All unreachable or identity-only.",
+  "evidence": "review:ltrack-core deviations [0]-[2]; findings 6-7 (not fixed)",
+  "status": "open",
+  "where": "native/bindings/module/qrss/ltrack.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "deviation",
+  "what": "fit_timing_l always correlates by the direct sparse gather; Python uses an FFT above 64 lags. The grid agrees to rounding except a term straddling an end of x, which the receiver never produces. For a non-finite sample of x, numpy's complex v * ok makes both parts NaN while the C++'s four real gathers keep the finite part.",
+  "evidence": "ltrack_timing deviations [0]-[2]; grid vs FFT 7.2e-14 of scale",
+  "status": "open",
+  "where": "native/core/qrss/ltrack_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "Receiver per-pass binding differences. _receive_pass_l has no row (folded into receive_pass), and _centres exists only in the binding. A CH-rate capture must be complex64 (NotImplementedError otherwise; Python accepts complex128). decode_header decodes a failing sum twice. erase_s is validated up front. mean_w_db of an empty w gives NaN without numpy's warning. prepare hard-codes the front end's default parameters, so monkeypatching frontend defaults is not seen.",
+  "evidence": "port:receiver-pass deviations [0]-[4]; review deviations [0]-[3]",
+  "status": "open",
+  "where": "native/core/qrss/receiver.cpp, bindings/module/qrss/receiver.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "Receiver seams: receiver-level names that tests monkeypatch (prepare, channel_for, verify, verify_l, noise_psd, and the slot stages) are std::function seams, resolved per call from the module attribute. The C++ is called directly when the attribute is still the native row, and a Python spy is called with the GIL held.",
+  "evidence": "port:receiver-pass deviation [5]; receiver_slot notes",
+  "status": "n/a",
+  "where": "native/bindings/module/qrss/receiver*.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "Slot half differences. The rules' constants (GHOST_HZ, MERGE_HZ, ALIAS_*, L_OWN_*, CE_RESID_MIN) are compiled in, and the rule functions are not called through receiver's globals. In typed mode a detection without timing raises ValueError where the reference raises TypeError deep in arithmetic. In Python mode, computed numbers arrive as Python float, not np.float64.",
+  "evidence": "port:receiver-slot deviations [0], [2], [4]",
+  "status": "open",
+  "where": "native/core/qrss/receiver_slot.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "The C++ receive API (rx_api) takes old_edge_noise/old_gating per call (ReceiveConfig), where Python reads module switches (rules.old) and the QRSS_OLD_* environment. This is deliberate, for thread safety, and it lets the listener run two configurations side by side.",
+  "evidence": "native/core/qrss/rx_api.hpp; port:receiver-slot deviation [6]",
+  "status": "open",
+  "where": "native/core/qrss/rx_api.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "Residual WAV reader differences after the review's scipy-faithful rewrite. The multichannel NaN payload is compiler-dependent. A data size numpy cannot allocate gives MemoryError in the reference, while the C++ reads what is there. A huge resampling factor throws bad_alloc. A 16-byte float container follows the platform long double (TypeError on Windows and macOS arm64). Warnings are emitted at stacklevel 1.",
+  "evidence": "review:receiver-slot deviations [0]-[5]",
+  "status": "open",
+  "where": "native/core/qrss/wavread.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "Stage 2's sstvae-qrss receive supported --no-store only: the default, --store, --passband and --no-passband are refused up front ('the multi-pass store is not ported to sstvae-qrss yet (plan stage 3) ...', exit 1). Python stores, associates and writes the passband.",
+  "evidence": "port:cli-receive deviation [0]",
+  "status": "open",
+  "where": "native/apps/sstvae_qrss/receive.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b, 7",
+  "kind": "deviation",
+  "what": "--image writes PNG only. Any name without .png/.apng is refused up front, a narrower list than Pillow's (wave 7 mirrors only the missing-directory check). PNG bytes come from stb, so only pixels are compared with Pillow.",
+  "evidence": "port:cli-receive deviation [1]; wave 7 build deviation [2] (test_image_names_png_only)",
+  "status": "open",
+  "where": "native/apps/sstvae_qrss/receive.cpp, codec/receive_image.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b, 7",
+  "kind": "deviation",
+  "what": "Narrower .npz reading than Python. Compressed (savez_compressed) and zip64 archives are refused. fe must be complex64 1-D. Multi-byte big-endian members are refused ('npy: dtype >X is not supported', where Python reads a '>c8' fe). A uint64 q above int64 gives OverflowError where Python accepts it. qrss_simulate.py writes none of these.",
+  "evidence": "port:cli-receive deviations [5]-[6]; review:reference-fixes deviations [0], [2]",
+  "status": "open",
+  "where": "native/core/qrss/simfile.cpp, npz.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b, 7",
+  "kind": "deviation",
+  "what": "fs == 0 and a 2-D fe in an .npz were refused by the C++ with texts naming the member, where Python failed later (ZeroDivisionError, sliding_window_view). Wave 7 item 8 made Python use simfile's texts, so the refusals now agree.",
+  "evidence": "review:cli-receive deviations [0]-[1]; wave 7: texts byte-identical between Python and C++",
+  "status": "fixed",
+  "where": "sstvae/qrss/channel.py load_npz; simfile.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "CLI cosmetic differences. The argparse usage line is not wrapped at the terminal width. Python's numpy and WAV warnings on stderr are not reproduced, nor full tracebacks (last line only). A '<U' width too large for numpy gives an EOF text instead of the descr error. --start past year 2255 double-rounds its seconds. WAV read errors at 6b carried the C++ reader's text.",
+  "evidence": "port:cli-receive deviations [3], [7]; review:cli-receive deviations [3]-[4], finding 7",
+  "status": "open",
+  "where": "native/apps/sstvae_qrss/receive.cpp, simfile.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "deviation",
+  "what": "A pass uid's third field (a SHA-256 of z's float32 bytes) differs from Python's wherever z is not bitwise equal, so tests compare a uid by its q and frequency parts.",
+  "evidence": "port:cli-receive deviation [8]",
+  "status": "open",
+  "where": "native/core/qrss/receiver.cpp uid",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "deviation",
+  "what": "The in-process transmit API (api.cpp) still refuses q < 0 with sequences.scrambler's 'q must fit in uint64, not -1', after the request's own refusals, while qrss_transmit.py now stops in its --slot parser. The API takes q as a number and never sees slot text. The review notes api::slot_of still accepts a negative q.",
+  "evidence": "build:reference-fixes deviation [0]; review:reference-fixes insight [8]",
+  "status": "open",
+  "where": "native/core/qrss/api.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "deviation",
+  "what": "C++ TbdHit::f_hz() still refits the line on every call; only Python caches it, since item 4 asked only for Python. The result is the same, and the refit runs 3-9 times per acquire at about 0.16 ms in Python.",
+  "evidence": "build:reference-fixes deviation [1]",
+  "status": "open",
+  "where": "native/core/qrss/acquire_tbd",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "deviation",
+  "what": "Windows CLI and path differences. Paths are spelled with POSIX slashes (pypath), also in the --image directory refusal. MinGW splits the command line with CommandLineToArgvW, which differs from the CRT for consecutive double quotes inside a quoted argument; MSVC uses wmain. A non-UTF-8 bytes path gives EILSEQ where Python raises UnicodeDecodeError. stdout is UTF-8 bytes without changing the console code page.",
+  "evidence": "build:paths-cleanups deviations [0]-[3]; review:reference-fixes deviation [1]",
+  "status": "open",
+  "where": "native/core/qrss/pypath, apps/sstvae_qrss/main.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "deviation",
+  "what": "stdout carries a non-UTF-8 name's raw bytes. That matches the scripts under the C/POSIX locale or UTF-8 mode; under other locales the scripts die with UnicodeEncodeError and the native does not imitate the crash. stderr matches in every locale. The native also opens ONNX models in non-UTF-8 directories, where the reference fails.",
+  "evidence": "build:paths-cleanups deviations [4]-[5]; review:paths-a7 deviation [1]",
+  "status": "open",
+  "where": "native/apps/sstvae_qrss/main.cpp, codec glue",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "deviation",
+  "what": "On POSIX, a --callsign, --grid or --codec-id containing a surrogate's UTF-8 bytes (ED A0..BF xx) is still read as one surrogate by the core validators. Both implementations refuse it, but the refusal text can differ ('\\ud800' vs '\\udced\\udca0\\udc80'). A clean fix needs separate str and byte forms through api.cpp's verbatim messages; nothing reaches the air from it.",
+  "evidence": "review:paths-a7 deviation [0], finding 6",
+  "status": "open",
+  "where": "native/core/qrss morse, header, pynum validators; api.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "deviation",
+  "what": "Acceptance test design choices. The new rx_api.receive_slot binding has no Python counterpart and no row, so the 13 scenario tests skip under --native-qrss=rx. The pin tests take the native fixture, so the module-free python CI job never sees a stale pin. Python receive times are printed but not stored, so a regeneration diff stays clean.",
+  "evidence": "build:acceptance deviations [0], [1], [4]",
+  "status": "open",
+  "where": "tests/test_qrss_native_acceptance.py, tools/gen_qrss_rx_reference.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Packing works with nothing installed, because the C++ has its own FLAC encoder and a dr_flac reader (Python needs soundfile). The packed FLAC bytes differ from libFLAC's; the samples are identical, and each implementation reads the other's hours.",
+  "evidence": "Passband parity: cross reads exact in both directions, STREAMINFO MD5 equal to libFLAC's convention.",
+  "status": "n/a",
+  "where": "native/core/qrss/passband.cpp, flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "deviation",
+  "what": "The LPC encoder makes its own choices rather than libFLAC's. Predictors from all windows are ranked together with energy-scaled errors and the best 3 costed; the order cap is 12 (level 5 uses 8); partial_tukey(2) is used beside tukey(0.5), and punchout was rejected at -0.13% for +1 s per hour. Precision is the fewest bits needed, clamped so bps + precision + ilog2(order) <= 32. Stereo assignment is by estimate, FIXED is gated at 1.1x, the default partition order is 6, partition orders above 8 are refused, and a frame not the size it was costed at is refused.",
+  "evidence": "9b FLAC build deviations; the review confirmed every choice yields valid subset streams.",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Raw .i16 writes are not synced, where Python's mm.flush() does an msync on every call. The C++ write runs in feed(), the GUI/audio pump, which should not wait on the device. Data is synced once before an hour is packed or unpacked, and the packed FLAC is fsynced.",
+  "evidence": "Documented in passband.hpp; after a power cut the index may name samples that read back as zeros.",
+  "status": "n/a",
+  "where": "native/core/qrss/passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "The C++ passband store gives concurrency guarantees Python did not have at the time. expire() takes the store's lock, two pack_hour calls are serialized by a pack mutex, the swap also checks an in-process write counter (gen_) besides the mtime, FLAC Reader opens take a process-wide mutex, and StoreOptions::before_swap is a C++-only test seam. Python later gained the serialization and the counter in 9a items j and m.",
+  "evidence": "w8 passband build and review deviations.",
+  "status": "n/a",
+  "where": "native/core/qrss/passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Integers are int64 in C++ where Python's are unbounded. Hours above HOUR_MAX (2^62/3600) and slots or sample indices past int64 are refused; store key_name picture IDs, slot_time q and JSON ints past int64 raise; dials past int64 are skipped; decode refuses a --key ID beyond int64. due() skips an accumulator whose picture_id is past int64, where Python returns a row.",
+  "evidence": "w8 passband, store and live deviations; 9a decode deviation 5; 9b leftovers review finding 5 (a documented pyjson limit, in store.hpp).",
+  "status": "n/a",
+  "where": "native/core/qrss (pyjson, store, passband, live, decode)",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Small edge differences in the passband store: meta.json values are type-checked, with a different error text; store attributes are read-only properties; pack_hour(True) packs hour 1 where Python returns False; a bool or str fs converts differently; the FLAC reader accepts only 16-bit streams; and on Windows an OS error with no errno mapping is reported as EIO. A negative fs was refused only in C++ until 9a item k.",
+  "evidence": "w8 passband build and review deviations (unrealistic inputs, left alone).",
+  "status": "n/a",
+  "where": "native/core/qrss/passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Store binding differences: an int clock is written to JSON as a float. A native Accumulator's members, foreign and parts are fresh objects at each access, and its S/W numpy views alias the C++ arrays. Arrays must hold 3 x 52800 values on load, pass uids must be str, and a pass .npz is read whole (every member inflated and CRC-checked) where np.load is lazy. Under --native-qrss the Store row is a thin Python facade, because tests monkeypatch module attributes.",
+  "evidence": "w8 store build deviations 1-8.",
+  "status": "n/a",
+  "where": "native/core/qrss/store.cpp, tests/qrss_native/_store.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Two Store objects on one root in one process share that root's mutex, a C++-only thread-safety guarantee (store.py has no lock). Each object still keeps its own caches, as two Python processes do.",
+  "evidence": "w8 store review deviation 0.",
+  "status": "n/a",
+  "where": "native/core/qrss/store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "The C++ due() skipped damaged accumulators whose damage raises TypeError or BadZipFile in Python, where those exceptions propagated. Python converged in 9b (TypeError, then OverflowError and the callsign type).",
+  "evidence": "w8 store review deviation 3; 9b leftovers item 4 and its review.",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp due",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Dial-file parsing differed: an infinite dial or a time past float range was skipped, where Python raised OverflowError; the file was read as UTF-8 'replace' rather than in the locale encoding; and pynum's numeric strings were ASCII-only. Python converged in 9a items s and t, and pynum gained Unicode spaces and digits in 9a (59bd840). Only the int64 limit remains.",
+  "evidence": "w8 live build deviations 1-3; w8 live review shared change for pynum.",
+  "status": "fixed",
+  "where": "native/core/qrss/live.cpp DialLog, pynum",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "The default noise fill (when no seam is given) is the C++ generator (xoshiro256** with Box-Muller), not numpy's default_rng(q) samples: same distribution, different draws. The rows hand in numpy's noise, so captures there are bit-identical; QRSS_LIVE_NOISE=cpp selects the C++ generator.",
+  "evidence": "w8 live build deviation 5; checked by distribution tests only.",
+  "status": "n/a",
+  "where": "native/core/qrss/live.cpp default_noise",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Tile.to_json writes null for a non-finite float, and Tile.from_json refuses a value of the wrong JSON type. Python converged in 9a item x and 9b leftovers item 8.",
+  "evidence": "w8 live build deviations 6-7.",
+  "status": "fixed",
+  "where": "native/core/qrss/live.cpp Tile",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "deviation",
+  "what": "Small live.py edges: LiveConfig's error shows the waveforms as a tuple; FeRing's x and ok are copies, not views; a non-bool mask is converted with asarray(bool); FeRing.write refuses non-1-D input; utc_iso of a float past 2^53 rounds as a double. restrict reading its spans once was a deviation until Python converged in 9a item u.",
+  "evidence": "w8 live build deviations 4 and 8-12.",
+  "status": "n/a",
+  "where": "native/core/qrss/live.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "An exception in a live refresh is logged once per slot and message, and the slot is retried at its next refresh; an exception never leaves step(). Python's background worker was changed to match (9a item aa), but its synchronous step() still raises.",
+  "evidence": "listener.hpp; test_a_refresh_exception_is_retried; 9a reference-fixes deviation 3.",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "An unreadable state.json, or one with the wrong structure, starts the listener fresh. Python converged in 9a item y, and at a12c3b8 the parity test was changed to expect both to start fresh.",
+  "evidence": "9a listener deviation 1; commit a12c3b8.",
+  "status": "fixed",
+  "where": "native/core/qrss/listener.cpp load_previous",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "The C++ listener's concurrency model differs. One internal mutex is taken by every public method, so run() and the app need no external lock, and idle() is exact. The end-of-slot child process (finish_process) is replaced by one low-priority finish worker thread, and a replay waits with wait_idle() rather than polling. DIAL_GUARD_S is a seam. In threaded mode only, store.due is read before the listener lock, and elapsed/progress are read before the capture read.",
+  "evidence": "9a listener deviations 2, 5, 6 and 9; review deviations 4-5. Sync mode is fuzz-confirmed identical.",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "The C++ listener writes its files with LF ('\\n') on every platform, where Python's text-mode writes produce CRLF on Windows.",
+  "evidence": "9a listener deviation 7.",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "Listener binding: the store must be the C++ Store (the _store facade), and a passband argument is rebuilt as a C++ PassbandStore. Records returned by Python seams are handed back as the original objects, found by content fingerprint, and the receivers get a real receiver.Prepared.",
+  "evidence": "9a listener deviation 8.",
+  "status": "n/a",
+  "where": "native/bindings/module/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "sstvae-qrss decode refused --em and --retro ('not in this build yet; use qrss_decode.py', exit 2) after the picture was found.",
+  "evidence": "9a decode deviation 0. Ported in wave 10 (git log: fd03683, e9b96d4 'decode --em/--retro').",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/decode.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "decode output differences. It writes PNG only and refuses other extensions; without the codec it refuses every picture at the render step; PNG bytes come from stb, not Pillow (the pixels are identical); --help is laid out at 78 columns and usage lines never wrap. On a damaged store it raises different exception classes, prints '?' for an unreadable member, and gives its own error texts for a malformed PassResult npz. Mean W uses 10*log10 from libc rather than numpy, equal at the printed 2 decimals in every case run.",
+  "evidence": "9a sources-decode build deviations 1-4, 6, 8 and 9; review deviations 0-2.",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/decode.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "deviation",
+  "what": "StreamSource refuses a NaN or negative timeout, and from 1e9 s up (or infinite) it waits without a deadline, where Python raises OverflowError past PY_TIMEOUT_MAX. A read error ends the stream and is exposed through error(), where Python's reader thread dies.",
+  "evidence": "9a sources review deviation 3; sources.hpp.",
+  "status": "n/a",
+  "where": "native/core/qrss/sources.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "deviation",
+  "what": "Signals in sstvae-qrss listen: SIGTERM stops it like Ctrl-C ('stopped' logged, state.json not listening, exit 0), where the script dies with nothing written. On Windows, Ctrl-C, Ctrl-Break and closing the console do the same through SetConsoleCtrlHandler. SIGPIPE is ignored, and a stdin read error ends the audio like EOF, prints the error and exits 1.",
+  "evidence": "9b listen build deviations 0, 4 and 5; review deviation 2.",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/listen.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "deviation",
+  "what": "Stopping is bounded at about 1.5 s (STOP_BOUND_S): a receive still in flight is abandoned, nothing of it reaches the sink, store, tiles/ or state.json, and the CLI ends with std::_Exit after flushing. Python's close() waits up to 5 s, or minutes for FULL. A receive that finishes within the bound is kept and state.json is written once more. In the API, an early stop() skips backfill and recover(), and interrupt() during a replay feeds one more chunk.",
+  "evidence": "9b listen build deviations 3 and 9; review deviations 0-3.",
+  "status": "n/a",
+  "where": "native/core/qrss/listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "deviation",
+  "what": "A plain build without the codec prints a no-pictures notice once and runs as if --no-pictures had been given, instead of refusing. The end-of-slot receive runs on a thread, and the help says so. The help text differs in four places, WAV warnings print without Python's file:line prefix, and PushSource is named 'app capture (8 kHz)'.",
+  "evidence": "9b listen build deviations 1, 2, 6, 7 and 9.",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/listen.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "deviation",
+  "what": "write_png writes a temporary sibling and renames it over the target. It therefore replaces a symlink rather than writing through it, and fails in a read-only directory holding a writable target, where PIL's Image.save succeeds; crash safety was chosen. The tile PNG's in-flight temporary name also differs from Python's.",
+  "evidence": "9b leftovers review deviation 1; leftovers deviation 0.",
+  "status": "n/a",
+  "where": "native/core/qrss/png.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "deviation",
+  "what": "The listener binding surfaces std::system_error as RuntimeError rather than OSError.",
+  "evidence": "9b leftovers review deviation 2 (pre-existing, outside that lane).",
+  "status": "open",
+  "where": "native/bindings/module/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "deviation",
+  "what": "Wave 9b's CI tsan job ran acquire and receiver_slot outside ctest, under timeout (900 s and 1500 s), because they outlived the 120 s TIMEOUT. That step had no ctest bound and no per-test reporting.",
+  "evidence": "9b leftovers deviation 5. Replaced in the follow-up by a 1500 s TIMEOUT when CMAKE_CXX_FLAGS contains -fsanitize=thread, with both back in ctest -R (c80c93b).",
+  "status": "fixed",
+  "where": ".github/workflows/ci.yml, native/tests/CMakeLists.txt",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "deviation",
+  "what": "TSan-specific test settings: the CI tsan job also builds and runs test_qrss_core_listen_api, the listener test's check::Watchdog is 1200 s under ThreadSanitizer (UNDER_TSAN) instead of 110 s, and test_abandon_racing paces its feeder by completed receives.",
+  "evidence": "Follow-up build deviations 0-2.",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_listener.cpp, ci.yml",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "deviation",
+  "what": "Where Python's math module raises, py_lgamma returns +inf; template_z then throws std::invalid_argument 'math domain error' (ValueError) at a pole or for log(<=0) and std::overflow_error 'math range error' (OverflowError) on overflow, matching the reference's exceptions and texts.",
+  "evidence": "skeleton build deviations",
+  "status": "n/a",
+  "where": "native/core/qrss/em.cpp, math/special",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "deviation",
+  "what": "Binding-only differences on input no caller produces, found by the skeleton reviewer and left unfixed: template_z truncates a float n_chunks to int64 (rx::as_int); prior_from flattens a 2-D S/W where Python broadcasts or refuses (the core takes 1-D spans; lmmse_latents' binding does full numpy broadcasting with numpy's text); lmmse_latents evaluates int(q) before the broadcast refusal, so malformed q gives TypeError where Python gives ValueError; known_keying raises UnicodeEncodeError on a lone-surrogate str where Python returns None (a non-str call returns None as in the reference).",
+  "evidence": "skeleton review findings 6-9 (fixed: false); skeleton build deviations",
+  "status": "open",
+  "where": "native/bindings/module/qrss/em.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "deviation",
+  "what": "prior_from_u64 is a core addition for q past int64 (Python's scrambler accepts 0..2^64-1); the binding range-checks with the reference's text 'q must fit in uint64, not {q}', raised after lmmse's own refusal.",
+  "evidence": "skeleton build deviations; parity over q including 2**64-1 and -1",
+  "status": "n/a",
+  "where": "native/core/qrss/em.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "deviation",
+  "what": "The four tail functions are added to sstvae_native.qrss.special by a new registrar file, special_tail.cpp (order 7), because the existing special binding file was not editable in this lane.",
+  "evidence": "skeleton build deviations",
+  "status": "n/a",
+  "where": "native/bindings/module/qrss/special_tail.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10",
+  "kind": "deviation",
+  "what": "C++-only hooks with no Python counterpart: Hooks.log (the reference's lines), Hooks.progress and Hooks.cancel with em::Cancelled (registered as a RuntimeError subclass) and CancelFlag. Cancel is polled only at consistent points: rereceive before measuring its own path and before the receive_pass branch starts (not between receive_pass's two rounds); retro before every slot and every (segment, candidate). em_refine's progress total is recounted at each round's start (done + rounds left x members) and never lowered except at convergence; retro reports progress per slot. em_api::refine/retro return cancelled=true instead of throwing; RefineResult.history then holds only round boundaries recorded before the cancel, every listed pass is stored and the one in flight is not.",
+  "evidence": "skeleton build/EM review/retro build/integrate build deviations; native/core/qrss/em.hpp THREADS, em_api.hpp",
+  "status": "n/a",
+  "where": "native/core/qrss/em.hpp, em_refine, em_search, em_api",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "deviation",
+  "what": "rereceive always computes and returns the final path (Python's return_path=True); the binding and the row drop it when return_path is False, so Python-visible behaviour is the reference's.",
+  "evidence": "EM build deviations",
+  "status": "n/a",
+  "where": "native/core/qrss/em_refine.cpp rereceive",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "deviation",
+  "what": "Everything under rereceive is C++ (receive_pass, track, extract, line_path, refine_path, verify_track), so a test spying on sstvae.qrss.track/demod/receiver through the row would not see the calls (none does today). Only em.rereceive is seam-able from em_refine: the row passes _seams={'rereceive': fn} whenever em.rereceive is not the native row (resolved once per call), and the C++ calls it with the GIL held and the reference's objects. 'The native row' means carrying __qrss_native__ and no __wrapped__.",
+  "evidence": "EM build deviations and notes (test_p4_em_smoke_tiny and test_qrss_native_store's EM run use the seam); EM review deviations",
+  "status": "n/a",
+  "where": "native/bindings/module/qrss/em_refine.cpp, tests/qrss_native/em_refine.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10",
+  "kind": "deviation",
+  "what": "Complex64-only converters: in the EM binding a pass whose ch is not complex64, or cw_known whose units are None or not (192,), is NotImplementedError; in the retro lane a complex128 250 Hz capture is refused (NotImplementedError 'complex64 only') where Python keeps full precision. Real inputs (PassResult.ch, make_chan output) are complex64; the complex128 case was a retro-review finding left unfixed.",
+  "evidence": "EM build deviations; retro review finding (fixed: false) and deviations",
+  "status": "open",
+  "where": "native/bindings/module/qrss rx converters",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "deviation",
+  "what": "A split rereceive with a prior whose length differs from n_data throws std::invalid_argument with numpy-like broadcast text, where Python raises numpy's ValueError from np.where (text may differ); unreachable from em_refine, which builds the prior with em_prior at n_data.",
+  "evidence": "EM build deviations",
+  "status": "n/a",
+  "where": "native/core/qrss/em_refine.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "deviation",
+  "what": "chunk_template refuses chunk <= 0 (invalid_argument) where the reference divides by zero or reshapes oddly; f_mix_hz is converted to an exact Rational eagerly at the call (a bad value raises before the store is read), where the reference converts it inside _search_input.",
+  "evidence": "retro build deviations",
+  "status": "n/a",
+  "where": "native/core/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "deviation",
+  "what": "retro_detect converts slots (and pb.slots()) to ints all at once before searching, where Python converts each lazily; with a bad entry late in the list the C++ raises before writing anything while Python raises after associating earlier finds. Found by the retro reviewer, left as an arguably safer ordering difference.",
+  "evidence": "retro review finding (fixed: false) and deviations",
+  "status": "open",
+  "where": "native/core/qrss/em_search.cpp retro_detect",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "deviation",
+  "what": "retro_detect is built as retro_detect_steps over five replaceable steps (slots, capture, search, receive, associate); the binding uses the C++ steps and overrides one with a Python callable only where a test has replaced it (template_search/receive_template/associate seams, or a passband object that is not a PassbandStore, whose captures stay opaque in SlotInput.other). A real PassbandStore is read by a C++ PassbandStore opened on pb.root; the rows fall back to the reference functions for a non-native S.Store. Python is called with the GIL held, the C++ search/receive runs with it released.",
+  "evidence": "retro build notes and deviations",
+  "status": "n/a",
+  "where": "native/bindings/module/qrss/em_search.cpp, tests/qrss_native/em_search.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "deviation",
+  "what": "sstvae-qrss decode --em with a round count past 2^31 runs at most 2^31 rounds (em_api::MAX_ROUNDS), because em_refine's progress total is rounds x members and would overflow int64; Python iterates range(1, N+1) with an arbitrary int. Unobservable: rounds stop once one gains less than 0.05 dB.",
+  "evidence": "integrate build deviations; tested with a 30-digit --em, identical output",
+  "status": "n/a",
+  "where": "native/core/qrss/em_api.cpp, apps/sstvae_qrss/decode.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "deviation",
+  "what": "em_api checks the estimator name up front (std::invalid_argument with the receiver's text), including \"\" for retro after the review, where the reference meets a bad estimator only at the first re-receive or find (or never, when nothing is found). The CLI never passes one.",
+  "evidence": "integrate build and review deviations",
+  "status": "n/a",
+  "where": "native/core/qrss/em_api.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "deviation",
+  "what": "A corrupt passband meta.json under decode --retro ends 'ValueError: <msg>' in C++ where Python's traceback ends 'json.decoder.JSONDecodeError: <msg>' (same message; JSONDecodeError is a ValueError subclass). Documented in decode.cpp's header.",
+  "evidence": "integrate review deviations; ~60 extra side-by-side probe cases all agree except this class name",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/decode.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "deviation",
+  "what": "Accumulator::uids() still converts every member uid up front (now with the bad-uid message) while Python's acc.uids keeps a non-str uid until a store call reaches it; the two sites where the order is observable (em_refine's round loop, retro_detect's held-q set) now refuse when they reach the member, and the remaining callers (associate, listener, store prune) differ only in which of two errors a doubly-damaged accumulator reports first.",
+  "evidence": "integrate review deviations",
+  "status": "n/a",
+  "where": "native/core/qrss/store.cpp Accumulator::uids",
+  "group": "stage4-wave10"
+ }
+]

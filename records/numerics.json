@@ -1,0 +1,848 @@
+[
+ {
+  "wave": "wave 1",
+  "kind": "numerics",
+  "what": "Converting double to half through float32 double-rounds, so the C++ converts in one rounding.",
+  "evidence": "Double-rounding hits 5.5e-5 of values (277/5M), ~8 latents per mode-C picture.",
+  "status": "n/a",
+  "where": "native/core/qrss/half",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "numerics",
+  "what": "numpy complex division is Smith's algorithm (multiply by reciprocal), and the port has to copy it.",
+  "evidence": "Plain division differs on ~13% of values; complex64 division per-part differs on 43%.",
+  "status": "n/a",
+  "where": "native/core/qrss",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "numerics",
+  "what": "Polar decoding metrics came out bit-identical even though the test only asserts 1e-9.",
+  "evidence": "600/600 vectors plus 1042 adversarial vectors bit-identical.",
+  "status": "n/a",
+  "where": "native/core/qrss/polar",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "numerics",
+  "what": "The filters are bit-exact against scipy with no tolerance. That relies on x86-64 glibc libm.",
+  "evidence": "filters port notes.",
+  "status": "n/a",
+  "where": "native/core/qrss/filters",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "numerics",
+  "what": "CE audio is bit-exact only where numpy trig matches libm and numpy uses a fused SIMD complex multiply; the test probes both and falls back to 1e-12. std::fma is used deliberately in to_audio to mirror numpy's SIMD.",
+  "evidence": "ce_tx notes: LIBM/FUSED probes; 1e-12 fallback.",
+  "status": "n/a",
+  "where": "native/core/qrss/ce",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "numerics",
+  "what": "L clip and frame_baseband differ from Python only at the last-ulp level, from FFT and pow implementations.",
+  "evidence": "Max abs 7.9e-16 to 1.33e-15, from scipy.fft ducc0 vs pocketfft and SVML pow for the 1.5 pass; bit-exact with numpy.fft substituted.",
+  "status": "n/a",
+  "where": "native/core/qrss/lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "numerics",
+  "what": "The float32 L WAV output has a few samples one float32 ulp off.",
+  "evidence": "l-short --float: 11 samples 1 float32 ulp off (<= 1.1e-13). App commit: 8 of 14.4M samples differ by one float32 ulp.",
+  "status": "n/a",
+  "where": "native/core/qrss PassAudio / wav",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "numerics",
+  "what": "glibc pow(x,2) is not x*x on about 0.1% of doubles.",
+  "evidence": "1642 of 2,000,000 doubles (review:l_tx).",
+  "status": "fixed",
+  "where": "native/core/qrss/lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "numerics",
+  "what": "np.savez output is reproducible, so the C++ npz writer produces byte-identical files.",
+  "evidence": "np.savez uses 1980-01-01 timestamps.",
+  "status": "n/a",
+  "where": "native/core/qrss/npz",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "numerics",
+  "what": "The qrss ctests were not compiled with -ffp-contract=off at first, so an arm64 FMA could flip a pinned digest. tests/CMakeLists.txt later set it for every qrss_core test.",
+  "evidence": "Risk estimated at ~1e-7 probability; fixed per pass_audio notes.",
+  "status": "fixed",
+  "where": "native/tests/CMakeLists.txt",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "numerics",
+  "what": "A random-input RMS test cannot catch a summation-order bug, because fp16 rounding hides it. Tie-placed inputs are needed.",
+  "evidence": "review:picture_chain test-gap finding.",
+  "status": "fixed",
+  "where": "tests (picture RMS)",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "numerics",
+  "what": "Python 3.12 and 3.13 fromisoformat differ on two corners. The C++ parse_slot follows CPython 3.13, and 3.12 slot rows are skipped.",
+  "evidence": "codec_cli/integrate notes; api.hpp parse_slot uses CPython 3.13 rules.",
+  "status": "n/a",
+  "where": "native/core/qrss sequences/parse_slot",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "numpy 2.5's complex arithmetic is its own loop formulas, chosen by CPU dispatch. Multiply is FMA-fused only on the X86_V3/V4 targets, complex/real division is Smith's method (multiply by the reciprocal), and complex np.abs is a SIMD hypot, larger*sqrt(fma(r,r,1)), not libm's. The reference's bits therefore depend on the host CPU; npcomplex.hpp reproduces the V3/V4 forms with std::fma on every machine.",
+  "evidence": "The textbook forms disagree with numpy in about 25% (multiply), 43% (division) and 35% (abs) of results (npcomplex.hpp, numpy 2.5.3). With NPY_DISABLE_CPU_FEATURES down to X86_V2, 44% of the complex products changed (frontend review). This Xeon dispatches X86_V4. blank, normalise, channelise, extract and the matched filters are bit-equal only with these forms. On a non-AVX-512/FMA host the 1-ulp/99.9% bar, not bit equality, is the operative check (demod review).",
+  "status": "n/a",
+  "where": "native/core/math/npcomplex.hpp, lwave::np_abs/np_mul, demod::np::cdiv",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "Python's builtin abs() of an np.complex128 scalar is numpy scalar math (npy_cabs, i.e. libm hypot), not the np.abs ufunc formula. Mapping every abs() of a numpy complex to the ufunc formula is wrong wherever the reference applies the builtin to a scalar from np.sum.",
+  "evidence": "measured: 4224 of 20000 random complex sums differ by 1 ulp between the np.abs formula and builtin abs; std::hypot vs builtin abs 0/50000 (wave 5 A1/A2 review; fix at native/core/qrss/acquire_a12.cpp lead_in_impl)",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12.cpp lead_in_span",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "numerics",
+  "what": "numpy 2.x vendors the same pocketfft as native/third_party, so numpy FFTs agree bitwise; scipy's FFTs are ducc0. Complex-complex convolutions come out bit-identical, but when one operand is real scipy transforms it with ducc0's real-input FFT, which pocketfft-style code cannot reproduce to the bit. Statistics downstream of such a convolution must be specified to rounding.",
+  "evidence": "noise_psd worst rel 0 under both rules over 90 frequencies. oaconvolve worst 5.9e-16 (frontend port), and 1.1e-15 relative over many-batch sizes up to 400k x 2001 (review, test_convolve_many_blocks). ~21% of lead-in MF samples bit-equal, 6e-16 relative; a pocketfft probe matched at n=1250 but not at power-of-2 lengths (wave 5 A1/A2 review). Vendored pocketfft is bit-identical to numpy 2.5.3's for every length 1..65536 incl. Bluestein primes (test_qrss_native_npfft.py::test_c2c_every_length).",
+  "status": "n/a",
+  "where": "native/core/math/convolve, npfft",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "numpy 2.5 does not run complex64/float32 FFTs uniformly in single precision. Forward fft/rfft compute in double and round once (fct is the Python int 1, which only the double loop accepts), while ifft/irfft run pocketfft's float plans; the release notes claim all four are native single precision. em.py:501 calls np.fft.fft on a complex64 R and needs the complex64 overloads.",
+  "evidence": "pfu.fft.resolve_dtypes((complex64, int, None)) -> complex128 loop; a float-plan port mismatched 192/200 random length-4 transforms, while widen/compute/narrow matched; test_npfft single-precision digest 32b785ca...",
+  "status": "n/a",
+  "where": "native/core/math/npfft",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "scipy.signal.oaconvolve runs its FFTs in single precision on a complex64 input even with float64 taps, so track._lowpass's result depends on its input dtype. track and fit_timing pass complex128 z_d, so the receiver is unaffected.",
+  "evidence": "scratchpad lp.py: complex64 rows 1.2e-7..1.7e-7 vs 1e-15 for complex128/float64",
+  "status": "n/a",
+  "where": "sstvae/qrss/track.py _lowpass",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "numerics",
+  "what": "numpy's float32 np.log is its own SIMD algorithm (AVX2/AVX512F), not correctly rounded and not logf: about 5% of float32 arguments differ by 1 ulp. A1's parabola vertex and A3's tbd_emissions/_bins_path depend on it, so it was ported as math/nplog.hpp log_f32, which is exact on every non-negative float32. numpy's float64 log on AVX-512 is SVML and differs from glibc too.",
+  "evidence": "np.log(np.float32(7)) = 0x1.f2272cp+0 vs correctly rounded 0x1.f2272ap+0 (wave 4 math). test_numpys_float32_log; exhaustive probe found 0 mismatches over 0x0..0x80000000 plus negative ranges, and the test keeps [0.5,2) (8.4M values, ~2 s) (wave 5 A1/A2 review). float64 log differs on about 0.37% of inputs in (0,1) and 0.012% overall (wave 5 A3/cwid review).",
+  "status": "n/a",
+  "where": "native/core/math/nplog.hpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "numerics",
+  "what": "numpy's SIMD/AVX-512 np.exp, and SVML expm1, are about 1 ulp from glibc on ~5% of arguments. Anything downstream is therefore a tolerance claim rather than bitwise: mean_template's exp(-v/2), gumbel_p and hence TbdHit.p_value, and track's templates sf.",
+  "evidence": "mean_template worst 1.57e-16, ~95% bit-identical, 100% with nu = 0 (wave 4 demod). gumbel_p at most 4e-16 relative, measured 2.0e-16; TbdHit.p_value 1.6e-16 (wave 4 math review) and 2.1e-16 (wave 5 A3). templates sf 1.9e-10 elementwise (wave 5 track). data_estimates' exp(-beta^2 rho/2) happens to agree for the rho in use (0, 0.054).",
+  "status": "n/a",
+  "where": "ce_rx mean_template, acquire_stats gumbel_p, track templates",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "np.angle is a SIMD arctan2, 1 ulp from std::atan2 in about 7% of arguments. It is the main source of A2's phase and tau0 differences, far under the bars.",
+  "evidence": "smoke diff: phase worst 3.5e-12 rad, tau0_s worst 4.0e-14 s",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12 (preamble_search)",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "Squaring an np.float64 scalar (x ** 2) calls libm pow, which differs from x*x on about 1 in 1200 values; squaring an array is exact. GCC folds pow(x, 2.0) into x*x, so the port keeps pow with a volatile exponent.",
+  "evidence": "Measured in the wave 4 math lane. Applied to CubicSpline's dxr[0]**2 and dxr[-1]**2 (native/core/math/cubic_spline.cpp scalar_square), a1_gamma's rho and demod::np::py_pow; pow(x, 2.0) equals x*x for K_LIN, A0, 0.5 and 0.8 (demod review).",
+  "status": "n/a",
+  "where": "native/core/math/cubic_spline.cpp, acquire_stats, demod",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "CPython 3.12+'s sum() uses Neumaier compensation only on its exact-float fast path (PyFloat_CheckExact). Summing np.float64 items takes the plain '+' path, so faithfully copying the compensated sum is wrong; the first draft of demod's combine did that.",
+  "evidence": "inferred from CPython bltinmodule.c builtin_sum_impl; demod.cpp combine() is now a plain sum (demod.calibrate / ldemod._combine sum(1.0/v ...))",
+  "status": "n/a",
+  "where": "native/core/qrss/demod.cpp combine",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "np.maximum(-0.0, 0.0) returns +0.0 and keeps NaN, so std::max and std::fmax are both wrong for render.g_shrink's max0. The port uses isnan(w) ? w : (w > 0 ? w : 0.0).",
+  "evidence": "native/core/qrss/render.cpp; test_render.cpp pins the bit pattern of g_shrink(-0.0)",
+  "status": "n/a",
+  "where": "native/core/qrss/render.cpp g_shrink",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "np.polyfit/np.linalg.lstsq are accurate only normwise, so a small slope beside a large intercept is not elementwise-reproducible across SVD implementations. On ill-conditioned weighted line fits numpy is the less accurate side, so PathFn line tolerances must be sized for numpy's error.",
+  "evidence": "Skeleton port: normwise 3.1e-15, and PathFn evaluation 9.3e-12 Hz worst. Review: with two points 1 s apart and one weight at the 1e-9 floor, numpy's slope is off by 3.9e-8 vs exact rationals and the Jacobi-SVD port's by 6e-12, a 3.9e-6 Hz disagreement extrapolated 100 s (probes p4/p6; trial 41 of p2: 8.6e-9 Hz scalar diff).",
+  "status": "n/a",
+  "where": "native/core/math/npstats polyfit, linalg lstsq; trackbase PathFn",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "OpenBLAS's dscal by 1/NaN leaves exact zeros as zero (it short-circuits on x == 0), so numpy's solve gives a partly finite answer for a NaN pivot. A portable LU gives all NaN, so do not pin NaN patterns from numpy's solve or inv.",
+  "evidence": "np.linalg.solve([[nan,1],[0,1]],[1,1]) -> [nan, 1.]; port -> [nan, nan]",
+  "status": "n/a",
+  "where": "native/core/math/linalg",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "numerics",
+  "what": "np.convolve, np.dot and np.vdot go through numpy's DOUBLE_dot -> cblas (OpenBLAS DYNAMIC_ARCH), so their summation order is the CPU's BLAS kernel and cannot be bit-exact portably. This affects track._smooth, cwid.match and track/ltrack's alpha/delta, and the timing fit's lstsq residual threshold can flip an outlier decision at the boundary. The C++ sums _smooth sequentially (1e-16) and emulates the SkylakeX ddot for match, which is bit-exact only on that dispatch.",
+  "evidence": "np.convolve order by kernel length: plain for n<=8, sequential FMA for n of 12 and 15, SIMD for n>=16; the tracker uses n=32 and 99 (L: 16 and 49). 'same' with 15 taps goes through ddot, not small_correlate (up to 11 taps). SkylakeX ddot: FMA, four 8-lane accumulators in blocks of 32 folded to 4 lanes, four 4-lane accumulators in blocks of 16, combine ((a0+a1)+a2)+a3 then (s0+s2)+(s1+s3), FMA scalar tail; dot_order.py 0 mismatches in 2000 trials at n=176,16,32,40,100,7; match 0 difference over 5000 draws. Call sites inferred from track.py:620-631, 970, 1670; ltrack.py:908, 925, 1109-1120.",
+  "status": "n/a",
+  "where": "track._smooth, cwid.match, track/ltrack vdot",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "numerics",
+  "what": "numpy reductions depend on memory layout, not only values. preamble_scales sums pairwise when the chunk axis is innermost and one term at a time otherwise, and _preamble_sums' einsum output is Fortran-ordered. Likewise s.sum(axis=0) is a row-by-row running sum for C-order stacks but pairwise per column for F-order or transposed ones, so a port that copies to C order (pybind11 c_style|forcecast) matches only the first case.",
+  "evidence": "Real _preamble_sums S (strides (16, 336, 420336)): 10910/8283/6524 of 26271 cells differed for k=1/10/2 and 0 for k=5; np.ascontiguousarray(S) gave 0; up to 42% of cells overall (wave 4 math review). F-order and .T stacks of 9/17/40/200 rows differ from the sequential sum, while every row-major layout is equal (wave 5 A3/cwid review, probe_strides.py).",
+  "status": "n/a",
+  "where": "acquire_stats preamble_scales/preamble_p (SumOrder), cwid _combine",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "On numpy 2.5, np.einsum('fcs,tcs->ftc', optimize=True) is not c_einsum: it routes through bmm_einsum to a BLAS zgemm per chunk. _preamble_sums' S therefore depends on the BLAS build and CPU and comes back Fortran-ordered, so any golden vector built from S is BLAS-dependent.",
+  "evidence": "measured S max-rel 1e-15..2e-15 vs per-cell sequential sum; S.flags F_CONTIGUOUS in the reference; 2-3.5% of S elements bit-equal (review); Lambda rtol < 1e-9 with identical cells",
+  "status": "n/a",
+  "where": "sstvae/qrss/acquire.py _preamble_sums",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "Python 3.13 evaluates -2j*np.pi as complex(+0.0, -2pi), applying the unary minus to the complex literal first. This sets the sign of zero in exp() phasors when matching numpy to the bit.",
+  "evidence": "inferred while porting the A2 templates' phasor construction; pinned by the template digests",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12 templates",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "np.add.reduce starts from the identity +0.0, so np.sum([-0.0]) is +0.0. A C++ sum must be seeded with 0.0, not with the first element.",
+  "evidence": "inferred from numpy source and checked bit-exactly by shape_z / smooth probes (wave 5 A3/cwid review)",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_tbd",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "The reference tracker's Kalman/RTS pass is badly conditioned. Its diffuse initial velocity covariance (0.1 Pu) cancels down to about q*Pu and keeps ~7 digits, so a 1-ulp change in Pu_g (BLAS ddot in _smooth) or one ulp of SIMD exp in templates' sf moves P by up to 2.0e-5 relative. The same Python on another CPU/BLAS disagrees with itself at that level, so u/P can only be held conditionally, and the task's 1e-10 bar was unreachable.",
+  "evidence": "explore_kf2.py: 'Pu_g + 1 ulp: P rel 8.4e-07'. Lead-in TINY gate-V run: P 2.0e-5, u 2.7e-9, pu 8.9e-8. CE TINY gate-V run: P 8.4e-7, u 6.7e-10. FULL pass: u 9.6e-10, P 6e-8. With the C++ _smooth and templates swapped in: 0 on all 7 calls.",
+  "status": "n/a",
+  "where": "sstvae/qrss/track.py kalman_rts / track()",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "Gate V's Z_ref is ill-conditioned in the reference itself: about 1e-8 relative on a signal and 5e-5 on noise, and worse when the Kalman q sits at the grid floor. Every original scenario had q at grid index 1-2, so later ports that compare Z_ref (A3, live gates) need bars of about 1e-5 at the floor.",
+  "evidence": "Port: handed the C++ timing (1e-12 samples away), the reference's Z_ref moves 2.2e-8 (drift), 1.4e-8 (TINY -12) and 6.3e-5 (noise, 0.75926 to 0.75921). Review: at Q_GRID[0] = 8.6e-10, a 1e-13-sample change of tau0 moves Z_ref 5e-7 to 1.1e-6 and P about 1e-4. test_probe_steady_weak_q_floor: own nudge z_ref 7.81e-7, P 8.36e-5; C++ vs reference z_ref 3.65e-7, P 4.62e-5. Weak steady signals land at the floor (sim -15 dB seed 11, -17 dB seed 10).",
+  "status": "n/a",
+  "where": "sstvae/qrss/track.py verify / verify_track (gate V)",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "templates' sf = MF{a^2 (1 - exp(-v))} loses relative accuracy where v is small, turning one ulp of exp(-v) into 1.9e-10 relative in sf. Using np.expm1 would make it well-conditioned; this Python change was not made.",
+  "evidence": "sstvae/qrss/track.py:771; test_templates worst sf 1.93e-10 elementwise, <1e-14 of scale",
+  "status": "open",
+  "where": "sstvae/qrss/track.py templates",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "To get symbol_mf bit for bit, the C++ emulates numpy's x86 einsum SSE2 sum (two lanes, blocks of 8, unfused muladd). numpy's NEON muladd is fused, so on aarch64 the parity tests may see ulp differences in symbol_mf that are not a port bug.",
+  "evidence": "inferred from code: native/core/qrss/track.cpp around line 178 (einsum emulation comment) and numpy's simd muladd definitions; worth re-measuring on linux-aarch64 or macos-arm64",
+  "status": "open",
+  "where": "native/core/qrss/track.cpp symbol_mf",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "np.hanning and libm cos agree bitwise on this x86-64 glibc machine, so _carrier_lines is asserted bitwise. If a macOS or Windows parity run ever fails there, suspect the window before the peak search.",
+  "evidence": "test_carrier_lines bitwise on all scenarios + 16 random captures (x86-64 glibc)",
+  "status": "n/a",
+  "where": "native/core/qrss/track_timing _carrier_lines",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "cwid _ln_i0 agrees with the reference to 1e-14 for x >= 1 but only to about 5e-11 relative near 0, so its parity test needs a split tolerance. The port and the review blame different causes: the port blames scipy's i0e vs the C++ series, the review numpy's SVML float64 log, where log(i0e(x)) + x cancels at small x.",
+  "evidence": "tests/test_qrss_native_cwid.py ln_i0 test, measured worst 5.3e-11 near 0 (port); test_ln_i0_and_combine (review). window_llr stays bit-identical because it is cast to float32.",
+  "status": "n/a",
+  "where": "native/core/qrss/cwid _ln_i0",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "The ctest digests for SHORT with spread depend on std::exp(-0.01728) through data_estimates. The exact value lies 0.118 ulp from its double, so any libm with error under 0.88 ulp rounds the same way: safe, but fragile.",
+  "evidence": "inferred from code: native/tests/qrss/test_demod.cpp test_short_spread, demod::np::py_pow",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_demod.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "ce.phase_at casts NaN or out-of-range tau to int64. numpy does this with a RuntimeWarning, but the C++ static_cast is undefined behaviour; the two agree on x86-64 only because both compile to cvttsd2si (INT64_MIN).",
+  "evidence": "test_probe_mean_template_presets (NaN, +-inf and 1e300 tau): identical non-finite pattern; the cast sits in ce.hpp (transmit lane), not changed later",
+  "status": "open",
+  "where": "native/core/qrss/ce.hpp phase_at",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "numerics",
+  "what": "The CE matched filter multiplies every tap in the window, including zero taps and samples clipped to z's ends, by z[clip(idx)]. A NaN or inf at z[0] or z[-1] therefore spreads as NaN*0 to every position whose window runs off that end, and an optimisation that skipped zero taps would break parity.",
+  "evidence": "native/core/qrss/ce_rx.cpp mf_impl; probe cases 'z with NaN at the clipped edge' and 'z with inf, complex' are byte-equal",
+  "status": "n/a",
+  "where": "native/core/qrss/ce_rx.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "numerics",
+  "what": "For the noise scenario's flat 3-point FreqPath (10 s knots over -10..1800 s), z_d differs by 1.6e-10 relative between the C++ and scipy PathFn fits. The dense paths from refine_path agree bitwise.",
+  "evidence": "noise track z_d 1.61e-10 against track z_d 0 (QRSS_PARITY_WORST run)",
+  "status": "n/a",
+  "where": "trackbase PathFn / track_timing",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "_q_near selects grid points by |log g - log q| <= log 2, so its window edge could depend on the libm. The port agent says the C++ uses the port's numpy-matching log and pins the q_near spans in the ctest. The reviewer's deviation says the C++ uses std::log where numpy may use SVML, which is safe because the grid spacing keeps every point far from the boundary. The two sources disagree on which log the C++ uses.",
+  "evidence": "Port: native/core/qrss/ltrack.cpp q_near_span; gen_ltrack_pins.py q_near pins. Review deviation [3]: 'uses std::log where numpy may use an SVML log ... pins and probes match exactly'.",
+  "status": "n/a",
+  "where": "native/core/qrss/ltrack.cpp _q_near",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "scipy's oaconvolve keeps complex64 in single precision, so pilot_filter on a complex64 capture is single-precision in Python. The C++ is double throughout (a deviation). The tracker passes only complex128 z_d and float64, so the receiver is unaffected.",
+  "evidence": "test_qrss_native_ltrack.py::test_pilot_filter, complex64 worst 9.4e-8 relative (held to 1e-6)",
+  "status": "open",
+  "where": "native/core/qrss/ltrack.cpp pilot_filter",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "CwIdResult.z_match is a sum of float32 soft values computed from round A's track. A track agreeing to 1e-10 relative can still flip one float32 rounding (about 6e-8 per element, about 700 elements), moving z_match by about 1e-9. Comparing cw with == passed only by fixture luck.",
+  "evidence": "receiver._cw_result and cwid.window_soft (.astype(np.float32)); measured dz 0.0 on l-short -12 dB",
+  "status": "n/a",
+  "where": "cwid / receiver _cw_result",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "In ltrack the Python pow-vs-square trap is real. G_REF_ABS ** 2 and other scalar Python floats squared go through pow(), while array ** 2 is a multiply. The port's py_sq and np::mul/np::div (FMA complex multiply, reciprocal division) are each load-bearing for the bitwise swap test.",
+  "evidence": "ltrack.cpp py_sq (line ~93), report_l's 10*log10(p/G_REF_ABS**2); swap tests bit for bit",
+  "status": "n/a",
+  "where": "native/core/qrss/ltrack.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "The sign of zero in np.exp(-2j*np.pi*t) at t=0 depends on the CPython version. Under 3.13, -2j*np.pi = (+0.0, -2pi), giving 1+0j; CPython 3.14 scales both parts, giving 1-0j. The C++ first produced -0.0 and the bitwise phase test caught it. It now follows 3.13 via 0.0 + -TWO_PI*t, so a Python upgrade would flip the reference's own signed zero.",
+  "evidence": "test_mix_phases failure at lag 0.0 (C++ 1-0j vs Python 1+0j); python 3.13.16",
+  "status": "open",
+  "where": "native/core/qrss/ltrack_timing.cpp lag_phase/clock_phase (exp_neg_i)",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "The C++ grid sums the known symbols in k order (track::fit_grid's kernel, four real gathers per clock error). The reference sums in BLAS zgemv order on the direct path and through a transform on the FFT path. The grid agrees to rounding, not bitwise, and no decision moved in any probe.",
+  "evidence": "test_probe_fit_grid_l_random worst 1.27e-15 of scale. Port: grid vs FFT 7.2e-14 (bar 1e-12), vs direct 2.0e-15 (bar 1e-13).",
+  "status": "n/a",
+  "where": "native/core/qrss/ltrack_timing.cpp fit_grid_l",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "The complex128-to-complex64 cast in acquire's prepare() matches numpy's asarray(dtype=complex64) bit for bit (static_cast<float> per component, round to nearest). A1 lines on a raw complex128 capture are exact.",
+  "evidence": "test_acquire_raw_complex128_single (slow); native/core/qrss/acquire.cpp:39-48",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "numerics",
+  "what": "The q-floor scenario for L timing turned out well conditioned, so the earlier wide floor bars were removed and every scenario is held to the signal bars.",
+  "evidence": "A 1e-13-sample nudge of the reference's own timing moved its Z_ref 5.8e-15 and P 1.5e-13 (l-tiny -18 dB, seed 11)",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_ltrack_timing.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "z's elementwise relative error is the tightest margin in the receiver's contract: 5-10 float32 ulps on single small latents after a long chain, under 2.5x of the 1e-6 bar. The scale-relative error is the robust contract. If a compiler or FMA change (for example on aarch64) crosses the elementwise bar, relax it rather than chase it.",
+  "evidence": "Porter: 'worst pass z (elementwise): 5.71e-07' on SHORT -12 vs scale-relative 3.4e-8. Reviewer: L FULL 4.1e-7, CE FULL 1.19e-7, TINY/SHORT tier 1.04e-7; scale-relative 2.4e-8.",
+  "status": "open",
+  "where": "tests/test_qrss_native_receiver.py bars",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "Everything downstream of the trackers that is not a float32 cast (hdr_llr, psi, ch, w, the cw reading) came out bit-equal to the reference. The only drift is z, z_ref and the tracker-internal Kalman/RTS arrays, which the earlier lanes had already measured.",
+  "evidence": "Measured worsts: hdr_llr/psi/ch/w 0, cw.z_match 0; track u 1.7e-10 (review 3.3e-10), P 1.4e-15 (review 2.2e-15)",
+  "status": "n/a",
+  "where": "native/core/qrss/receiver.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "timing.cov's 1e-4 bar is four orders of magnitude looser than anything measured. It inherits the tracker lanes' Kalman conditioning allowance and could be tightened to about 1e-8.",
+  "evidence": "worst pass timing.cov 2.4e-10 (slow tier), 1.2e-11 CE FULL, 1.5e-12 L FULL",
+  "status": "open",
+  "where": "tests/test_qrss_native_receiver.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "Erased passes amplify tracker rounding about 10x. z_ref over an erased stretch is extrapolated through the Kalman covariance P. Bars on erased z_ref need about 1e-5, or they will flake on a summation-order change.",
+  "evidence": "A 1.8e-8 difference in u becomes 4.9e-5 elementwise in P and 1.06e-6 in z_ref (finish_receive A/B); unerased passes stay at 1e-7. _erased_same in tests/test_qrss_native_receiver_slot.py.",
+  "status": "n/a",
+  "where": "receiver_slot / track Kalman",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "numpy's channel mean over a WAV (mean(axis=1), C-contiguous) is a per-row pairwise sum onto 0, which read_wav mirrors to stay bitwise. The NaN payload of a frame holding several NaNs follows the compiler's operand order, so it cannot be matched. numpy's FP-flag RuntimeWarnings are emulated exactly (no warning for a float16 sNaN cast).",
+  "evidence": "Pairwise sum matches for 7, 8, 9, 16, 17, 127, 128, 129 and 300 channels and signed zeros. Fuzz case 121 (float16, 17 channels, two sNaNs): numpy 0xfffe340000000000 vs C++ 0xfffa280000000000. test_wav_values_fuzz: 800 files, 147 with RuntimeWarnings, all equal.",
+  "status": "open",
+  "where": "native/core/qrss/wavread.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "frame::py_format mangled field widths, because every non-alphanumeric byte run became the decimal point ('%9.3f' gave '.1500.017'), and it printed NaN signed. receive.cpp first worked around it locally. Fixed at the 6b merge, with a ctest.",
+  "evidence": "native/core/qrss/frame.cpp:237-258; 2671a6b ('py_format widths and NaN', test_frame.cpp +17 lines)",
+  "status": "fixed",
+  "where": "native/core/qrss/frame.cpp py_format",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "Picture-level parity holds: FULL --image differs from Python's PNG by one level on a few dozen of 921,600 subpixels, all from z rounding in the receiver. Python's render_pass on the C++ pass gives the C++ PNG exactly. The uid hash (SHA-256 of float32 z) is a cheap bitwise-z detector.",
+  "evidence": "Port: 18 (CE) and 22 (L) subpixels. Review: 18 and 23. The uid differed on CE SHORT and both FULL passes and was equal on L SHORT (test_full_image swap check, pngcmp.py).",
+  "status": "n/a",
+  "where": "native/core/qrss/codec/render.cpp, receive --image",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "numerics",
+  "what": "Reading a numpy '<U<n>' width with std::stoul was two bugs in one: it throws out_of_range above 4G on MSVC (32-bit unsigned long), and 4 * width wraps on 64-bit for widths >= 2^62, skipping the short-member check and allocating. It now uses an overflow-checked digit loop bounded by the bytes present.",
+  "evidence": "simfile.cpp str_member; pin frame_huge ('<U4611686018427387904', where 4*w = 2^64 wraps to 0)",
+  "status": "fixed",
+  "where": "native/core/qrss/simfile.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "On the A-7 procedure the C++ A3 statistic is the reference's bit for bit, and the committed Gumbel constants reproduce from the C++. No calibration constant moves.",
+  "evidence": "1,600 captures, 9,600 Z, max|dZ| 0 at every length. Over 400 captures: mu within 0.0007 and beta within 0.0003. A1: 0 of 2,496,260 cells differ. A2 Lambda worst 1.8e-12 relative (k=1); combined p 3.5e-14; Gumbel p_value 1.99e-16 relative. A Python-free ctest is within 1.06 standard errors (means) and 1.24 (sds).",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_calibration.py, native/tests/qrss/test_calibration.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "A calibration check by moments has teeth even without a bitwise oracle: a 1% scale error in the CFAR normalisation moves mean Z by 6-16 standard errors in a 470-capture Python-free sample. A 0.1% error, at about 1.6 standard errors, would need the bitwise comparison.",
+  "evidence": "Mutation of test_calibration.cpp (E*1.01-1): mean Z 10.409 vs 10.250 and 48.442 vs 47.654; it failed at every length",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_calibration.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "The whole receive chain agrees to rounding, end to end over 13 scenarios. Z_ref is the largest relative difference on CE passes (about 1e-13 on L), which suggests a CE-side reduction order. Every acceptance bar is at least 1e7 times wider than this machine needs.",
+  "evidence": "f_hz 2.5e-12 Hz (review 2.3e-12 to 2.5e-12), tau0 6.6e-12 CH samples, latent SNR 2.4e-10 dB, mean W bit for bit, Z_ref 2.1e-8 relative (review 1.75e-8). Bars: 0.01 Hz, 0.5 CH samples, 0.1 dB, plus the tool's own Z_ref 1% and mean W 0.1 dB.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_acceptance.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "At -20 dB the CE and L SHORT scenarios still decode the polar-coded header, but no CW callsign is read. The callsign read gives out about 8 dB before the header does, so cw=None is the expected reference value there.",
+  "evidence": "cwid.read_ml margins 0.05 and 0.11 against READ_LLR_MIN 6. Where a call is read: margins 8.9-20.1; z_match >= 18.3 against Z_ACCEPT 6.",
+  "status": "n/a",
+  "where": "cwid / rx_reference ce-short-20, l-short-20",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "Python's sys.stderr is always 'backslashreplace', whatever PYTHONIOENCODING or the locale say. A non-UTF-8 name therefore prints as '\\udcXX' escapes on stderr but as raw bytes on stdout (under the C locale). The CLI needed a stderr filter (pypath::stderr_text through a streambuf) to match.",
+  "evidence": "python -c 'import sys; print(sys.stderr.errors)' -> backslashreplace; test_cli_receive[not-utf8] failed before the filter",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/main.cpp, pypath",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "Python's sys.stdout error handler depends on the locale: surrogateescape in UTF-8 mode and under C, POSIX or C.UTF-8, strict under en_US.UTF-8. This sandbox runs in the POSIX locale, so local measurements can overstate what a desktop does.",
+  "evidence": "LC_ALL=C.UTF-8 PYTHONUTF8=0 python3 -c 'import sys; print(sys.stdout.errors)' -> surrogateescape; CPython config_get_stdio_errors returns strict otherwise",
+  "status": "n/a",
+  "where": "CLI stdout",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "Windows file names need WTF-8, not UTF-8: a lone surrogate must survive as its 3 bytes, as Python's surrogatepass does. MultiByteToWideChar maps these to U+FFFD, so fileio.hpp carries its own converter, pinned to CPython by digests.",
+  "evidence": "native/tests/qrss/test_paths.cpp; a mutation forbidding ED A0..BF fails the THREE digest",
+  "status": "n/a",
+  "where": "native/core/util/fileio.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "numerics",
+  "what": "One repo-wide UTF-8 convention cannot serve both directions on POSIX. Bindings need surrogatepass (a str's lone surrogate becomes 3 bytes), while argv and file names use surrogateescape (the same 3 bytes are 3 escapes). The fix is per call site: fs_decode for a message's repr, fs_str for a parser handed argv, raw bytes for opening files and verbatim printing.",
+  "evidence": "native/core/qrss/pytext.hpp:11-15 (ED A0..BF exception); native/core/qrss/pypath.hpp fs_decode/fs_str",
+  "status": "n/a",
+  "where": "native/core/qrss/pypath.{hpp,cpp}",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "libsndfile (soundfile) cannot read two kinds of valid FLAC: a stream with 0 frames, and one at 65537 Hz or another rate above 65535 that is not a multiple of 10. dr_flac reads both, so the edge corpus checks those cases through dr_flac only.",
+  "evidence": "probe_sf.py: sf.read raises on the 0-frame and 65537 Hz files; dr_flac returns the input exactly.",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp tests",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "Quantising to int16 must follow NEP 50: float32(x * float32 scale), round half to even, then clip, with NaN mapped to 0. Doing it in double, or with std::round, moves values across a .5 boundary and the .i16 files stop being byte-identical.",
+  "evidence": "Byte-identical .i16 files across random sequences (tests/test_qrss_native_passband.py).",
+  "status": "n/a",
+  "where": "native/core/qrss/passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "numpy's log10 (the AVX-512 SVML version) differs from glibc's in the last place for 5-9% of 10*log10(x) values. That makes a member's mean_w_db the only byte the C++ store writes differently, and the twin rule can tie-break differently on exactly tied weights. compare_trees accepts exactly that difference, and the ctest pins use power-of-ten mean weights.",
+  "evidence": "log10_rate.py: 5.25% on [0.01, 100] and 8.72% on [0.5, 20]; the review measured 7.14%. In the scripted sequence: 2.05436353280837 against 2.0543635328083694, and 2.0382447587105825 against 2.038244758710582.",
+  "status": "open",
+  "where": "native/core/qrss/store.cpp mean_w_db",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "header_agrees sums pairwise where the reference uses np.dot (BLAS kernel order), so the decision could part only at an exact tie.",
+  "evidence": "0 of 3000 random LLR sets differed; never seen to flip a result.",
+  "status": "n/a",
+  "where": "native/core/qrss/associate.cpp header_agrees",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "pyjson holds int64 while json.loads holds any int, so a big integer in the dial file (in t or any extra key) made the whole line unparseable in C++. The fix re-reads an out-of-range integer token outside strings as a float literal of the same digits, correctly rounded to the double float() gives.",
+  "evidence": "native/core/qrss/live.cpp widen_big_ints; the DIAL_FILES 'lines' case with 123456789012345678901234567890.",
+  "status": "fixed",
+  "where": "native/core/qrss/live.cpp parse_dial_text",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "float(9223372036854775807) rounds to 2^63, so a dial of exactly INT64_MAX is past int64 after round(). Only dials up to 9223372036854774784, the largest double below 2^63, survive.",
+  "evidence": "test_live.cpp parse_dial_text pins.",
+  "status": "n/a",
+  "where": "native/core/qrss/live.cpp DialLog",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "Tolerances for finish_receive on the real receivers, typed C++ against Python, worst measured: z_ref 7.93e-08 (ce-tiny whole) and 2.39e-09 (ce-short); z elementwise 6.13e-08; f_hz 2.27e-13 Hz; tau0 2.77e-13 CH samples; heard in part, z_ref 0 and f_hz 6.82e-13 Hz. w, ch, psi, hdr_llr and the share heard are exact.",
+  "evidence": "Live build parity (QRSS_PARITY_WORST=1, slow tier).",
+  "status": "n/a",
+  "where": "native/core/qrss/live.cpp finish_receive",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "numerics",
+  "what": "The C++ default noise (xoshiro256** with Box-Muller) has numpy's circular Gaussian distribution but different draws. The rows hand in numpy's noise by default; under QRSS_LIVE_NOISE=cpp, test_the_end_of_slot_receive_runs_in_its_own_process failed because the child fills holes from numpy.",
+  "evidence": "Distribution checked by KS, moments and median on 400k samples, and E|n|^2 = 1/ln2 in the ctest. Under the cpp noise, 64 of 1024 latents differed by up to 1.6e-4 (rtol 1e-4). The test was changed at the 136c208 integration to compare pass counts only.",
+  "status": "fixed",
+  "where": "native/core/qrss/live.cpp default_noise, tests/test_qrss_live.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "numerics",
+  "what": "The listener ctest pins carry audio in a closed form that is exact in float64 on both sides, so the pins cross with no RNG dependence. The fake codec's weight plane is all ones (50600 = 253*200), so pairwise and sequential sums agree exactly.",
+  "evidence": "tools/gen_qrss_listener_pins.py audio(): 1e-3*((k+7919 s)*2654435761 mod 2^32 / 2^32 - 0.5); test_listener.cpp FakeRenderer.",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "numerics",
+  "what": "decode's acc_lines takes mean W as numpy's mean of the heard float32 W widened to float64, then log10, and the per-segment median is a float32 median. The --pass line takes np.mean of float32 w (a pairwise float32 sum) before max(., 1e-30), and NaN survives max(nan, 1e-30), printing '+nan'. The C++ reproduces this and pins it.",
+  "evidence": "native/tests/qrss/decode_pins.hpp PASSES (nan, inf and -1.0 cases).",
+  "status": "n/a",
+  "where": "native/core/qrss/decode.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "numerics",
+  "what": "np.mean of an empty slice is NaN with a RuntimeWarning. It reached finish_receive's 'heard' share when origin < 0 made ok[origin:k1] empty, and the C++ mean_of had copied the NaN for parity. Both now give 0.0, also under np.errstate(all='raise').",
+  "evidence": "live.py _share_heard; test_the_share_heard_of_an_empty_slice_is_zero; native/core/qrss/live.cpp mean_of (9a item z).",
+  "status": "fixed",
+  "where": "sstvae/qrss/live.py, native/core/qrss/live.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "numerics",
+  "what": "A cache signature of (mtime_ns, size) is only as fine as the filesystem's timestamp; the lane's own test had to advance mtime by a whole second, which was the tell. Writes go through rename, so the inode changes on every rewrite, and st_ino closes most of the gap.",
+  "evidence": "store.py _signature (9a reference-fixes review). Fixed in 9b leftovers item 6: (mtime_ns, size, ino, ctime_ns), and on Windows the file index and ChangeTime.",
+  "status": "fixed",
+  "where": "sstvae/qrss/store.py, native/core/qrss/rawfile.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "numerics",
+  "what": "Listener on the real receiver (TINY CE and L, heard half and then whole): the tiles differ by about 1e-12 Hz and 7e-13 dB, against a bar of 0.1 Hz and 0.3 dB.",
+  "evidence": "CE 1500.008956004102 against ...101; L 1509.5343824484357 against ...436.",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "numerics",
+  "what": "To rank predictors from windows of different support by their Levinson errors, those errors must be scaled by the window energy. Unscaled, the partial windows look better than they are, and the typ_0.01 hour got larger.",
+  "evidence": "Scaled by E0/Ek: strong hour -1.68%, typ_0.01 unchanged (18638114 -> 18638041 bytes).",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "numerics",
+  "what": "The Levinson-error estimate ranks orders worse than the residual's own one-partition Rice estimate. Computing three residuals and keeping the best by residual estimate gets most of what exhaustive exact costing finds.",
+  "evidence": "Exhaustive exact costing over 12 orders gained about 0.2% on the strong hour at 2.5x the time; tries=3 against tries=1 gains 0.01-0.1%.",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "numerics",
+  "what": "Listen tolerances across implementations, worst measured. TINY CE+L, 2 tiles: |d f_hz| 5.9e-7 Hz (tolerance 0.1), |d snr_db| 8.2e-6 dB (0.3), mean_w_db 6.0e-6 dB, z_ref 1.2e-4 relative (1e-3), confidence 0. SHORT: f_hz 2.3e-9 Hz, snr 3.7e-8 dB, mean_w_db 1.2e-7 dB, z_ref 5.0e-6 relative. Recovery across implementations: f_hz 6.3e-7 Hz, snr 8.3e-6 dB.",
+  "evidence": "tests/test_qrss_native_listen.py (9b listen build and review).",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/listen.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "numerics",
+  "what": "On Windows FAT/exFAT, the file index in the {mtime_ns, size, ino, ctime_ns} signature comes from the directory-entry position and can be reused, and mtime has a 2 s tick. A same-size rewrite inside one tick can therefore keep its signature, in both implementations. On NTFS, ext4 and APFS the ino/ctime pair closes the hole.",
+  "evidence": "Inferred from code: native/core/qrss/rawfile.cpp Windows signature branch (9b leftovers review).",
+  "status": "open",
+  "where": "native/core/qrss/rawfile.cpp, sstvae/qrss/store.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "numerics",
+  "what": "stbi_write_png_to_func and stbi_write_png produce identical bytes. A PNG writer that opens its own file, for UTF-8 paths on Windows, therefore stays byte-identical to images::save_png without editing native/core/images.",
+  "evidence": "native/tests/qrss/test_png.cpp: 6 pictures byte-compared.",
+  "status": "n/a",
+  "where": "native/core/qrss/png.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "numerics",
+  "what": "CPython's math.lgamma is its own Lanczos approximation (Modules/mathmodule.c m_lgamma), not the C library's lgamma, and the two differ in the last place for roughly half of all arguments. Porting it as math::py_lgamma made template_z's far-tail fallback bit-exact.",
+  "evidence": "scratch sweep: 0 mismatches against math.lgamma over about 70k arguments after the port; LGAMMA_DIGEST in em_pins.hpp",
+  "status": "fixed",
+  "where": "native/core/math/special (py_lgamma)",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "numerics",
+  "what": "scipy 1.18.1's gamma.logsf is not plain log(sf): rv_continuous._logsf splits at the median (x > gammaincinv(a, 0.5) -> log(gammaincc), else log1p(-gammainc)); the port reproduces the split (plain log(gammaincc) loses digits below the median, and the plan's 'closed form for integer a' would not have been bit-parity either). It cannot be bit-exact without reimplementing numpy's SIMD log/log1p, which differ from libm by an ulp at some points, so the C++ takes libm's and this is a recorded deviation.",
+  "evidence": "build: 11 of 40060 points not bitwise, worst 2.05e-16 rel; 110-value pinned table worst 2.14e-16; parity file 2.12e-16 (gate 1e-12). Review: worst rel error 2.2e-16 against scipy over the pin grid; scipy/stats/_distn_infrastructure.py logsf/_logsf",
+  "status": "n/a",
+  "where": "native/core/math/special gamma_logsf",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "numerics",
+  "what": "norm.isf(q) is -ndtri(q)*1.0+0.0, so isf(0.5) is +0.0, not -0.0. scipy's cephes ndtri calls only libm's log and sqrt, so it ports bit for bit (the reviewer added the subnormal pins the build had omitted).",
+  "evidence": "test_special.cpp norm_isf(0.5) signbit check; NDTRI_DIGEST over 736 values; 0 mismatches over about 30k points; NDTRI_SUBNORMAL (5e-324, 1e-320, 1e-310, DBL_MIN, 0.5)",
+  "status": "n/a",
+  "where": "native/core/math/special ndtri/norm_isf",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "numerics",
+  "what": "template_z and _gauss_z agree bit for bit with Python, including the far tails where ndtri switches branches, so no tolerance is needed there.",
+  "evidence": "scratchpad/rv10/fuzz_tz.py, 20000 random points, 0 differing; parity file _gauss_z rel 0, template_z rel 0",
+  "status": "n/a",
+  "where": "native/core/qrss/em.cpp template_z",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "numerics",
+  "what": "acc_mean_w_db uses libm's log10 where numpy may use a SIMD one; they can differ in the last place, so the parity allows 1 ulp (numpy pairwise sum / SIMD log10). None was seen.",
+  "evidence": "parity: acc_mean_w_db 1 ulp allowed, measured 0 ulp",
+  "status": "n/a",
+  "where": "native/core/qrss/em.cpp acc_mean_w_db",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "numerics",
+  "what": "Single rereceives give float32 z and w bit-identical to Python on every TINY variant (double-level agreement ~1e-12 is absorbed by float32 rounding); SHORT differs in a few elements by one or two float32 ulps. Whole em_refine A/B on SHORT gave identical history, stores and accumulators; on TINY an ulp flip feeds the next round's prior. The only cross-implementation error reaching stored passes is the primitives' rounding carried through re-receive, three orders under STORE_BAR; pass_path's Z_ref at the q floor is the loosest figure, where a `>` tie between line and refined paths could in principle flip.",
+  "evidence": "tests/test_qrss_native_em_refine.py WORST: rereceive z 0 (TINY) / 7.33e-10 (SHORT, 1.7e-7 elementwise), em_refine stored z 1.04e-08 (TINY) / 0 (SHORT), accumulator S 4.4e-09, history 1.8e-15 dB, pass_path Z_ref 9.7e-12 (5.03e-07 at the tiny-15 q floor against its own 1e-5 bar), f_hz 9.1e-12 Hz; ctest pins worst 1.48e-8 against a 1e-5 bar; review probes (version-1 and off-frequency SHORT) z rel 3.3e-8, path 2.7e-11 Hz",
+  "status": "n/a",
+  "where": "native/core/qrss/em_refine.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "numerics",
+  "what": "pocketfft's multi-row c2c (rows in SIMD lanes) gives exactly the bits of one-row-at-a-time exec, so batching is free for parity; numpy's np.abs on complex128 is a SIMD hypot (larger*sqrt(fma(r,r,1)) with explicit inf/NaN selection) whose branch-free AVX2 form reproduces np::abs lane for lane. _search_chan's (lag, m) and Lambda are bit-exact on every random case.",
+  "evidence": "bench_batch: 'identical 1'; bench_abs: 'identical 1, value diffs 0' including inf/NaN/zero inputs; ctest qrss_core_em_search 1217 checks, search_chan lam 0",
+  "status": "n/a",
+  "where": "native/core/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "numerics",
+  "what": "chunk_template is within 1 ulp rather than bit-exact because ce_rx::mean_template uses libm's exp where numpy uses a SIMD exp (1 ulp on a few percent of arguments).",
+  "evidence": "chunk_template energies 8.2e-16 rel and templates 1.6e-16 of scale (parity); ctest chunk_template 1.97e-16",
+  "status": "n/a",
+  "where": "native/core/qrss/em_search.cpp chunk_template / ce_rx mean_template",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "numerics",
+  "what": "False-alarm recheck on noise-only captures against a picture's accumulator: the Bonferroni-corrected Z sits mostly at its floor, far under the Z > 6 gate, no detection on either side, and C++ and Python pick the same winning cell on all 82 captures. Lambda/K on noise is the max over 118,845 cells, so Z is 0 most of the time.",
+  "evidence": "scratchpad/w10r/fa_recheck.py + fa_report.py (fa_tiny.jsonl, fa_short.jsonl): TINY n=40 Z max 1.114, mean 0.030, sd 0.174, median 0, 38 of 40 exactly 0, >3/>4/>5 = 0/0/0; SHORT n=42 Z max 1.640, mean 0.170, sd 0.383, 32 of 42 zero, >3/>4/>5 = 0/0/0; |dZ| at most 1.68e-14 (TINY) / 5.54e-14 (SHORT); Lambda rel 4.2e-16; Lambda/K averages 1.91 (TINY, K=26) and 1.39 (SHORT, K=128); ctest adds 8 pin-free TINY noise captures (largest Z 0.000) and pins 7 noise cases' Lambda",
+  "status": "n/a",
+  "where": "native/core/qrss/em_search.cpp template_search",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "numerics",
+  "what": "Detections built in the pins land exactly on the planted cell. TINY's clock step is huge (149.95 ppm) because TS_SLIP_SAMPLES/(dur*CH_FS) uses TINY's 53 s span.",
+  "evidence": "gen_em_search_pins.py --probe; em_search_pins.hpp TEMPLATE_SEARCH: a template-of-segment-1 signal from candidate (1500.5 Hz, 0.3 Hz/min, 2 ppm), 37 samples late, one clock step and 3 bins up comes back as segment 1, f 1500.866 Hz, ppm 151.95, tau0 37, Z 28.5; SHORT at amp 0.035, Z 16.3",
+  "status": "n/a",
+  "where": "native/tests/qrss/gen_em_search_pins.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "numerics",
+  "what": "receive_template on SHORT with a CW-known member is the only place the retro lane misses the 1e-6 pass bar: track.refine_timing is a finite-difference Newton with h = 0.3 samples that turns last-ulp input differences into ~3e-5 of the ppm. template_search's detection is bit-identical going in, so this is the track lane's sensitivity; a pass found at the detection gate inherits it. Not fixable in the lane; the slow test holds it to 1e-4.",
+  "evidence": "test_template_search_cw_and_drift_short worst: cw pass ppm 2.68e-05, z 4.11e-06, f_hz 2.2e-08 Hz; the TINY counterpart is 0 / 1.8e-12; receive_template elsewhere within receiver bars (z 3.2e-08, hdr_llr 2.65e-08, w 1.7e-09, timing.ppm 5.1e-10)",
+  "status": "open",
+  "where": "native/core/qrss/track (refine_timing) via em_search receive_template",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "numerics",
+  "what": "decode --em/--retro side by side print exactly the same text and render pixel-identical PNGs, on stores of real received passes written by either implementation, and the reverse run (Python --em on a C++-refined store) is identical too: em_refine's 1e-8-of-scale z differences never reach a printed digit or a pixel.",
+  "evidence": "test_qrss_native_decode.py worst line: 'picture mean squared error 0, printed number (units of the last digit) 0'; identical pictures (MSE 0, PSNR inf) in all 10 cases against a 30 dB bar and a 1.1-unit print bar",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/decode.cpp",
+  "group": "stage4-wave10"
+ }
+]

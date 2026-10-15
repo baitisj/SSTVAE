@@ -1,0 +1,13 @@
+round 1 pass 1990584_1500085_89c5c160: mean W +8.15 -> +8.24 dB
+round 1 pass 1990585_1499932_c637560c: mean W +1.36 -> +1.45 dB
+round 1 pass 1990586_1500638_364a7fac: mean W -2.99 -> -2.99 dB
+round 2 pass 1990584_1500085_89c5c160: mean W +8.24 -> +8.25 dB
+round 2 pass 1990585_1499932_c637560c: mean W +1.45 -> +1.45 dB
+round 2 pass 1990586_1500638_364a7fac: mean W -2.99 -> -3.02 dB
+EM: mean W +9.24 -> +9.33 -> +9.33 dB (+0.09 dB); W is the receiver's own estimate, and a re-receive can raise it by more than the picture gains
+picture K1ABC 7b202aad  mode A  codec d1d8  3 passes  mean W +9.33 dB
+  segment 0: no data
+    1990584_1500085_89c5c160  CE short  segment 0  by header  Z_ref 79.4  mean W +8.25 dB  EM round 2
+    1990585_1499932_c637560c  CE short  segment 0  by header  Z_ref 29.4  mean W +1.45 dB  EM round 2
+    1990586_1500638_364a7fac  CE short  segment 0  by header  Z_ref 9.1  mean W -3.02 dB  EM round 2
+wrote out.png

@@ -1,0 +1,9 @@
+retro: slot q=1990587: Z 26.3 at 1500.052 Hz, segment 0, attached to K1ABC 7b202aad by header
+retro: 1 pass found
+picture K1ABC 7b202aad  mode A  codec d1d8  4 passes  mean W +9.27 dB
+  segment 0: no data
+    1990584_1500085_89c5c160  CE short  segment 0  by header  Z_ref 79.4  mean W +8.15 dB  EM round 0
+    1990585_1499932_c637560c  CE short  segment 0  by header  Z_ref 29.4  mean W +1.36 dB  EM round 0
+    1990586_1500638_364a7fac  CE short  segment 0  by header  Z_ref 9.1  mean W -2.99 dB  EM round 0
+    1990587_1500052_cfccc05d  CE short  segment 0  by header  Z_ref 26.3  mean W -13.16 dB  EM round 0
+wrote out.png

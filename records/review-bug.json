@@ -1,0 +1,1298 @@
+[
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "The morse binding's refusal text used the pytext repr rather than the caller's own object repr.",
+  "evidence": "review:precoder_morse, e.g. for an np.str_ argument.",
+  "status": "fixed",
+  "where": "native/core/qrss morse binding",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "block_mean was not bit-exact on non-C-contiguous layouts, because numpy's reduction order depends on strides.",
+  "evidence": "review:precoder_morse; numpy puts the smallest-|stride| axis innermost.",
+  "status": "fixed",
+  "where": "native/core/qrss/precoder",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "A huge block_sizes raised MemoryError('std::bad_alloc') instead of Python's error.",
+  "evidence": "review:precoder_morse.",
+  "status": "fixed",
+  "where": "native/core/qrss/precoder",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "Under --native-qrss the parity files compared native against native, so they tested nothing. They now skip in that mode.",
+  "evidence": "review:precoder_morse; parity skip in follow-up f95c14f.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_*.py",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "The polar/header bindings mishandled arguments.",
+  "evidence": "review:polar_header (6 fixed, none arithmetic): polar_transform refused empty (0,5) arrays; list_size was converted before the LLR checks (True accepted, wrong texts, 2**70 raised RuntimeError); versions tuple-materialised (generator/str differences); pack/encode refused float/str fields Python accepts; crc16 refused non-0/1 input; polar_decode returned a copy, not accept's row.",
+  "status": "fixed",
+  "where": "native/core/qrss/polar, header",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "The frame binding diverged from Python in 13 argument-handling and concurrency cases.",
+  "evidence": "review:frame: data_latents copy vs identity; hdr_bits validated after forcecast; len vs shape[0]; forcecast error texts; twin waveform as_index; twin sliced UTF-8 bytes not code points; unhashable name ValueError vs TypeError; repr >= U+0100; disassemble refused object dtypes; long double double-rounding; lone surrogates raised RuntimeError; layout cache could store duplicate entries under concurrency; unspecified evaluation order of conversions.",
+  "status": "fixed",
+  "where": "native/core/qrss/frame",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "_output_len crashed the process for edge-case arguments, through undefined behaviour.",
+  "evidence": "review:filters: down==0 or INT64_MIN//-1 raised SIGFPE.",
+  "status": "fixed",
+  "where": "native/core/qrss/filters",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "A function-local static py::object in the filters binding was destroyed after interpreter finalization, with a GIL deadlock risk.",
+  "evidence": "review:filters; replaced by gil_safe_call_once_and_store.",
+  "status": "fixed",
+  "where": "native/core/qrss filters binding",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "The filters bindings diverged from scipy in argument handling.",
+  "evidence": "review:filters (8 fixed in all): cval conversion texts; window length M handling; Kaiser beta read eagerly; pass_zero isinstance; firwin numtaps order and texts; i0 output layout. The porter also self-found that a bool numtaps returned [1.0].",
+  "status": "fixed",
+  "where": "native/core/qrss/filters",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "npsum's sum_as chunked same-dtype sums at 8192, so results were wrong from n >= 8193.",
+  "evidence": "review:infra: 7936 vs 7808.",
+  "status": "fixed",
+  "where": "native/core/qrss/npsum",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "parse_npz trusted the zip64 end record and accepted prepended data. Both failed open.",
+  "evidence": "review:infra: a fail-open empty archive and signed-overflow UB; also zipfile parity gaps, member key decoding and duplicates.",
+  "status": "fixed",
+  "where": "native/core/qrss/npz",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "The npy header tokenizer and shape parser accepted or refused the wrong inputs.",
+  "evidence": "review:infra: to_int64 diverged from int() in 4 ways; tokenizer fail-open cases; shape handling of -0, bools and >64 dims; descr spellings refused.",
+  "status": "fixed",
+  "where": "native/core/qrss/npz",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "npz error messages embedded raw bytes and raised UnicodeDecodeError instead of the intended error.",
+  "evidence": "review:infra: on ~17% of fuzz inputs.",
+  "status": "fixed",
+  "where": "native/core/qrss/npz",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "Rational arithmetic overflowed in intermediates and had no digit limit.",
+  "evidence": "review:infra: +/- intermediate overflow; 4300-digit limit.",
+  "status": "fixed",
+  "where": "native/core/qrss/rational",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "review-bug",
+  "what": "Npz member lookup was quadratic in the number of members.",
+  "evidence": "review:infra: 65536 members took 8 s, 0.35 s after the fix.",
+  "status": "fixed",
+  "where": "native/core/qrss/npz",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "review-bug",
+  "what": "The picture chain bindings mishandled edge inputs.",
+  "evidence": "review:picture_chain: from_bytes used PyBytes_FromObject; file_size int64 overflow UB; segment_arg INT64_MAX+1; complex keying in bits_of. Also a test gap: no RMS last-bit test.",
+  "status": "fixed",
+  "where": "native/core/qrss/picture, beaconfile",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "review-bug",
+  "what": "CE transmit had signed int64 overflow undefined behaviour and refused inputs Python accepts.",
+  "evidence": "review:ce_tx: baseband refused round(start_s*fs) past int64 up front; UB in (n0+i0+i)*L and L*n0; carrier_fraction(-2**63); _mulmod divide by zero (SIGFPE); to_audio raised a C++-only overflow text.",
+  "status": "fixed",
+  "where": "native/core/qrss/ce",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "review-bug",
+  "what": "lwave's window_keying checked mask values on a frame with no windows.",
+  "evidence": "review:l_tx: the l-tiny frame.",
+  "status": "fixed",
+  "where": "native/core/qrss/lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "review-bug",
+  "what": "lwave used std::pow(x,2.0) for format constants, and glibc's pow(x,2) is not always x*x.",
+  "evidence": "review:l_tx: they differ on 1642 of 2,000,000 doubles.",
+  "status": "fixed",
+  "where": "native/core/qrss/lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "A parity test used math.fma at import, which exists only on Python 3.13 while CI runs 3.12.",
+  "evidence": "review:pass_audio; the same bug in test_qrss_native_ce.py fixed in 7268bc6.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_*",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "PassAudio.render allocated the requested samples before checking the range.",
+  "evidence": "review:pass_audio: 'Unable to allocate 7.11 PiB'.",
+  "status": "fixed",
+  "where": "native/core/qrss PassAudio",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "The sstvae-qrss argument parser always dropped a trailing '--', so the beacon file was written and the command exited 0.",
+  "evidence": "review:codec_cli. Same review: '-=' ambiguity; '-1\\n' matched the negative-number pattern.",
+  "status": "fixed",
+  "where": "native sstvae-qrss CLI",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "A directory given as the encoder made the CLI call std::terminate.",
+  "evidence": "review:codec_cli: exit -6.",
+  "status": "fixed",
+  "where": "native sstvae-qrss CLI / sstvae_qrss_codec",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "QCoreApplication's setlocale(LC_ALL,\"\") made number parsing locale-dependent.",
+  "evidence": "review:codec_cli: under de_DE, 1500.3 read as 1500.0.",
+  "status": "fixed",
+  "where": "native sstvae-qrss CLI main.cpp",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "load_qrsp mapped errors to the wrong exception classes.",
+  "evidence": "review:codec_cli. The porter also self-found that int()/float() stripping of \\x1c-\\x1f differed.",
+  "status": "fixed",
+  "where": "native/core/qrss/codec",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "Refusal texts formatted with snprintf were locale-dependent.",
+  "evidence": "Final review: '287,9 Hz' under a comma-decimal locale; fixed via frame::py_format, with a de_DE test added.",
+  "status": "fixed",
+  "where": "native/core/qrss api / tx",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "read_source surfaced raw C++ stream errors.",
+  "evidence": "Final review: 'basic_filebuf::underflow error'. Now api::ReadError with Python's OSError text, e.g. \"[Errno 2] No such file or directory: 'x.qrsp'\".",
+  "status": "fixed",
+  "where": "native/core/qrss/codec/api.hpp",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "encode_picture read out of bounds for a malformed Picture.",
+  "evidence": "Final review. It now throws 'encode_picture: a WxH picture needs N bytes of RGB, not M'.",
+  "status": "fixed",
+  "where": "native/core/qrss/codec/api.hpp",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "quarter_hour_start had overflow refusal texts that differed from Python's.",
+  "evidence": "Final review.",
+  "status": "fixed",
+  "where": "native/core/qrss tx slot functions",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "review-bug",
+  "what": "The CLI and API duplicated literal defaults instead of taking them from config.",
+  "evidence": "Final review: 12/3/1500/0.5/120. Now from the generated qrss/config.hpp.",
+  "status": "fixed",
+  "where": "native sstvae-qrss CLI, api.hpp",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "math::TypeError derived from std::invalid_argument, so the C++ spelling of `except ValueError`, such as PathFn's spline fallback, also caught TypeErrors that Python lets propagate. It now derives from std::logic_error.",
+  "evidence": "native/core/math/errors.hpp; a ctest pins that it is not an invalid_argument (test_npstats.cpp test_average)",
+  "status": "fixed",
+  "where": "native/core/math/errors.hpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "lstsq's LAPACK fallback for rcond <= 0 or >= 1 used DBL_EPSILON (2^-52), but dgelsd/dlalsd use DLAMCH('Epsilon') = 2^-53, which changes the rank for a singular value between 1.11e-16 and 2.22e-16 of the largest.",
+  "evidence": "diag(1, 1.5e-16), rcond=-1: numpy rank 2, port rank 1; native/core/math/linalg.cpp:260; tests/test_qrss_native_math.py::test_lstsq_edges",
+  "status": "fixed",
+  "where": "native/core/math/linalg.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "BSpline::derivative's errstate emulation raised 'not differentiable' for inf/0, where scipy's splder returns +-inf. Under IEEE, inf/0 is an exact inf and raises no flag; only finite-nonzero/0 raises divide-by-zero, and inf-inf or 0/0 raise invalid.",
+  "evidence": "native/core/math/bspline.cpp:183-191; parity cases in test_bspline_eval_and_derivative (inf/0 in both positions, NaN, zero numerator, inf-inf)",
+  "status": "fixed",
+  "where": "native/core/math/bspline.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "pass_uid threw OverflowError for a millihertz count past int64, with a message built by locale-dependent std::to_string(double), where Python's round() is unbounded. It is now exact, with Python's own NaN/inf errors.",
+  "evidence": "ctest and parity cover 1e17, 1e300, -1e300 and +-2^63/1000",
+  "status": "fixed",
+  "where": "native/core/qrss/types pass_uid",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "The skeleton's contract lacked np.average(weights=) although three later lanes needed it, and test_pathfn_refusals skipped checking the OverflowError text on the false claim that the C++ text names int64.",
+  "evidence": "Both sides say 'cannot convert float infinity to integer'; math::average was added with a binding, a ctest and a parity test (skeleton review)",
+  "status": "fixed",
+  "where": "native/core/math/npstats, native/tests/qrss/test_trackbase.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "npz.cpp, from an earlier wave, opened files with std::ifstream/ofstream from a narrow UTF-8 std::string. MSVC reads that in the ANSI code page, so non-ASCII paths break on Windows, and PassResult save/load inherited it.",
+  "evidence": "Example: a user profile like C:\\Users\\Jos\u00e9. Reported unfixed in the skeleton review's shared_changes_needed. Fixed in wave 7 (commit a31240f 'UTF-8 paths through one file helper').",
+  "status": "fixed",
+  "where": "native/core/qrss/npz.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "chan.cpp counted a NaN sample as signal in the noise table's padding fraction, where Python's np.abs(ch) > 0 is false for NaN. This changed the good-window set and the noise floor on captures with NaN.",
+  "evidence": "old C++ gave 2.0 where Python gives 3.5 (test_padding_fraction_counts_nan_as_the_reference_does); native/core/qrss/chan.cpp:147",
+  "status": "fixed",
+  "where": "native/core/qrss/chan.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "StreamFE::push erased the consumed prefix once per block, so one long push was quadratic, and the gap grows with recording length. Live chunks are small, which is why existing tests never showed it; it now consumes from an offset.",
+  "evidence": "A 900 s WAV replay pushed whole (7.2M samples, 900 blocks of 8000): 2.85 s in C++ vs Python 0.90 s before, 0.45 s after (Python 0.90-1.03 s). Same output, with 2 of 3.6M samples 1 ulp apart. Commit 1a52e50.",
+  "status": "fixed",
+  "where": "native/core/qrss/frontend StreamFE",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "preamble_scales/preamble_p were bit-exact only for a C-ordered S. On the real call path _preamble_sums yields a Fortran-ordered S that numpy sums one term at a time, so Lambda and p differed in the last bit and the difference reached PreambleHit.cell_lam.",
+  "evidence": "Up to 42% of cells differed. Fixed with aq::SumOrder plus a numpy layout probe in the binding; pinned by test_preamble_p_follows_numpys_layout and a sequential-order ctest digest.",
+  "status": "fixed",
+  "where": "native/core/qrss/acquire_stats preamble_p/preamble_scales",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "spectrogram windowed complex input as (re*w, im*w) instead of numpy's complex product with w+0j, so a non-finite sample gave inf frames where numpy gives NaN frames. Real input also lacked its own overload.",
+  "evidence": "Probe: C++ had 1825 inf cells where Python had 0, for complex64 and complex128; pinned in test_spectrogram_nonfinite_samples_and_real_dtypes and the ctest",
+  "status": "fixed",
+  "where": "native/core/qrss/acquire_stats spectrogram",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "Three integer UBs in acquire_stats: st + k could overflow int64 in spectrogram, py_round cast NaN/inf/out-of-range values to int64 where Python raises round()'s ValueError/OverflowError, and a1_gamma's M*M overflowed for M > 3037000499.",
+  "evidence": "py_round is used by frame_len, band_cov and a1_gamma; the ctest pins a1_gamma(3037000500) and round()'s errors (math review commits 9c3d2d5, f906ef0)",
+  "status": "fixed",
+  "where": "native/core/qrss/acquire_stats",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "band_cov's cache keyed on a NaN fs returned another fs's tables, because NaN is equivalent to every std::map key under operator<. It now validates fs before the lookup; validate a float before using it as a cache key.",
+  "evidence": "pinned by the ctest 'band_cov(5, NaN) with a table cached' and test_non_finite_fs_is_rounds_error",
+  "status": "fixed",
+  "where": "native/core/qrss/acquire_stats band_cov",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "The acquire_stats bindings mishandled several argument forms: refusal texts and check order differed from the reference, values were wrapped or read with the wrong truthiness, and the spectrogram binding ignored chunk.",
+  "evidence": "spectral_shape with a negative local_bins used its own text instead of numpy's 'negative dimensions are not allowed'; local_bins past int's range wrapped; a true value whose int() is 0 (0.5) read as false. The spectrogram binding ignored chunk (Python raises for 0), checked len(bins) through numpy, used the wrong 0-d starts text, and checked starts before bins.",
+  "status": "fixed",
+  "where": "native/bindings acquire_stats",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "The matched filter bindings (CE and L) handled argument forms wrongly. A float n0 was truncated by int() instead of raising IndexError, a 0-d pos returned values instead of TypeError, n0 and z were validated even when the loop never runs, and a 2-D pos was flattened.",
+  "evidence": "n0 = 1.5 gave values shifted by half a sample; the reference raises 'arrays used as indices must be of integer (or boolean) type' (demod review commit 7ff77c6, mf_rx.hpp)",
+  "status": "fixed",
+  "where": "native/bindings mf_rx.hpp (ce_rx, lwave_rx)",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "ce_rx mean_template and _mean_template_grid given an L FrameSpec laid the frame out as L and returned values, where the reference raises frame.layout's AssertionError.",
+  "evidence": "\"1237 header slots for 2474 bits\", or \"512 data slots for 1024 latents\" for l-tiny; fixed with ce_rx::require_ce_layout",
+  "status": "fixed",
+  "where": "native/core/qrss/ce_rx",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "For L tracks the demod binding flattened 2-D hdr_bits, pushed non-0/1 values through a uint8 cast, and treated an empty meas array as None. Each of these silently gave different numbers where the reference raises.",
+  "evidence": "-1 became 255; 0.5 and NaN became 0. An empty meas raises IndexError in the reference via np.asarray(meas, bool)[gi]. Fixed with demod_rx::hdr_bits_of and TrackView::meas_given.",
+  "status": "fixed",
+  "where": "native/bindings demod_rx.hpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "review-bug",
+  "what": "CE calibrate read a stub without tr.c, or with c None or a list, as an empty template and failed with IndexError where the reference raises AttributeError/TypeError. extract(calibrate_kappa=False) also read tr.c, which the reference never does.",
+  "evidence": "demod review commit 8e2c4d1",
+  "status": "fixed",
+  "where": "native/bindings demod_rx.hpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "review-bug",
+  "what": "The track ctest used M_PI, which MSVC defines only under _USE_MATH_DEFINES, so the Windows build would not compile; it now uses std::numbers::pi. Its two-thread check also ran after the capture's NoisePsdSlot was filled, so the lazy-fill race was never exercised.",
+  "evidence": "std::numbers::pi is bit-identical to np.pi, so the pinned digest holds; the check now races on a fresh capture and requires identical N and a filled slot (track core review commit 8bb2508)",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_track.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "review-bug",
+  "what": "The track parity test's docstring blamed np.convolve's BLAS sum alone for the u/P departure from Python. On a drifting lead-in pass numpy's SIMD exp in sf also seeds it, giving P 2.0e-5, above the test's 1e-5 bound.",
+  "evidence": "swap test added pinning both seeds (track core review)",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_track.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "review-bug",
+  "what": "lead_in_span computed |sum(m[w])| with the np.abs ufunc formula, but the reference applies Python's builtin abs (libm hypot) to the np.sum scalar. The two differ by 1 ulp in about 21% of windows, which could flip the span at z == z_min; this was the one real C++ bug in the A1/A2 lane.",
+  "evidence": "changed to std::hypot in native/core/qrss/acquire_a12.cpp lead_in_impl (review commit 3a4efca)",
+  "status": "fixed",
+  "where": "native/core/qrss/acquire_a12.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "review-bug",
+  "what": "The cwid binding summed every 2-D unit stack row by row after a C-order copy. For a column-major stack numpy sums pairwise per column, so _combine/read_ml/read/match gave different bits from 8 rows up; such stacks are now refused.",
+  "evidence": "No caller makes such a stack; row-major layouts including reversed, strided and broadcast are exact (A3/cwid review commit 8feef3e)",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/cwid.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "review-bug",
+  "what": "A cwid test comment claimed match was measured at 4.6e-16 when it is bit-exact. The track timing tests also lacked a q-floor scenario and randomised edge probes; these were added, and no C++ bug was found in track_timing.",
+  "evidence": "match 0 difference over 5000 draws; the q-floor probe is TINY at -15 dB (test_probe_steady_weak_q_floor); 16 random fit_timing trials, 16 path captures, 14 _segment_timing trials",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_cwid.py, test_qrss_native_track_timing.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "6a",
+  "kind": "review-bug",
+  "what": "_receive_agrees compared CwIdResult with ==, which includes the float32-derived z_match. It passed only by fixture luck. Now text, keying and agrees are exact and z_match is within 1e-6 relative.",
+  "evidence": "review:ltrack-core finding 0 (fixed)",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_ltrack.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "review-bug",
+  "what": "Coverage gaps in the ltrack port's tests. No fixture blanked a symbol (erase branches never compared). No whole-caller A/B covered the joint gate path (_gate -> verify_l -> withheld track_l). The refusal of a claimed lead-in was unproven. _Model, _fit_delta, _pu_local, _hold_ends and data_mf/data_mix were compared only on the receivers' inputs. There was no concurrent GIL-release check. Probes were added for all of these; the C++ agreed everywhere.",
+  "evidence": "review:ltrack-core findings 1-5 (fixed)",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_ltrack.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "review-bug",
+  "what": "The verify_track_l binding's same_timing used float == to decide whether the candidate's timing was unchanged. A NaN z or cov therefore counted as changed, and fit=False returned a fresh Timing where the reference returns the candidate's own object. Fixed with a bitwise comparison (memcmp per double, plus the cov shape). The scenario rows never fed a NaN timing, so the whole-caller A/B could not see it; a targeted probe found it at once.",
+  "evidence": "test_probe_nan_timing_keeps_its_identity failed before the fix (r.timing is not tm)",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/ltrack_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "review-bug",
+  "what": "The same NaN-identity bug was in CE's verify_track binding (wave 5 code). It was a shared file, so it was listed and fixed in the 6a follow-ups.",
+  "evidence": "review:ltrack-timing finding 2, shared_changes_needed [0]; 40c3910 'CE verify_track keeps a NaN timing's identity'",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/track_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "review-bug",
+  "what": "The ltrack_timing.hpp header said only the end of x straddles. The reference's FFT path also keeps half of the pair x[-1],x[0] at the start. Comment corrected, and the receiver's padding is now pinned by test_receiver_channel_holds_every_lag. The review also added a fast-tier probe for a CE signal heard under an L hypothesis (the resid_ratio cut).",
+  "evidence": "review:ltrack-timing findings 1 and 3 (fixed); test_probe_ce_signal_under_l about 1.5 s",
+  "status": "fixed",
+  "where": "native/core/qrss/ltrack_timing.hpp, tests/test_qrss_native_ltrack_timing.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "review-bug",
+  "what": "The acquire-arbitration review found no C++ bug, only a coverage gap. The fast tier never reached the joint path's L hint-offset branch or the single path's near[0] branch. Nothing tested the raw complex128 single path, odd hints, or GIL handling with Python seams.",
+  "evidence": "review:acquire-arbitration findings 0-1; added test_acquire_orchestration_stubbed, test_acquire_threads_with_python_seams, test_acquire_odd_hints, (slow) test_acquire_raw_complex128_single",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_acquire.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "The WAV reader matched scipy.io.wavfile only on well-formed files. It ignored the RIFF size field and stopped at the first data chunk (scipy reads while tell() < size+8 and returns the last data and fmt chunks). It had no PCM byte-rate check. It refused containers scipy reads (5-8 byte PCM, 1-byte >8-bit, 8-bit in wider containers) and chose float types by bit depth rather than container. It read EXTENSIBLE's subformat as a u16 without the GUID tail check. It refused RIFX and RF64. Rewritten as a model of scipy's walk.",
+  "evidence": "review:receiver-slot findings 0-4 (fixed); test_wav_scipy_fuzz 3000/3000, about 100 corner files, 800 value-fuzz files",
+  "status": "fixed",
+  "where": "native/core/qrss/wavread.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "WAV refusals were std::invalid_argument('unsupported WAV: ...'), surfacing as ValueError with the C++'s own text. The reference raises struct.error, ZeroDivisionError, TypeError, UnboundLocalError and ValueError with scipy's texts. scipy's WavFileWarnings and numpy's RuntimeWarnings were never emitted. Now wav::FormatError carries the class, and warnings are collected in order.",
+  "evidence": "review:receiver-slot findings 5-6 (fixed)",
+  "status": "fixed",
+  "where": "native/core/qrss/wavread.cpp, bindings/module/qrss/receiver_slot.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "A path containing a NUL byte was truncated by fopen, which opened the prefix file; Python raises ValueError('embedded null byte'). Separately, the receive_wav binding converted q, start_unix, spec and estimator before reading the file, so a missing file plus a bad q raised TypeError/ValueError instead of FileNotFoundError.",
+  "evidence": "review:receiver-slot findings 7-8 (fixed)",
+  "status": "fixed",
+  "where": "native/core/qrss/wavread.cpp, bindings/module/qrss/receiver_slot.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "The _owned binding unpacked and converted every a3 entry eagerly. The reference unpacks lazily, once per owner, so a generator a3 is spent by the first owner. The eager version raised where the reference returns False, gave wrong 'not iterable' texts, and would hang on an infinite iterator entry.",
+  "evidence": "review:receiver-slot finding 9 (fixed); test_owned_walks_a3_lazily",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/receiver_slot.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "The typed scenario tests asserted only the 'typed' flag handed to the binding, so a silent fallback to the Python objects would have passed unnoticed. A spy on the per-pass bindings now proves typed runs never reach Python stages (0 calls). The ctest Stub's aggregate initialisations also produced about 30 -Wmissing-field-initializers warnings, now fixed.",
+  "evidence": "review:receiver-slot findings 10-11 (fixed); _run asserts ('prepare' in below) if python_mode else not below",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_receiver_slot.py, native/tests/qrss/test_receiver_slot.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "A slot before 1970 (q < 0) made the C++ CLI print a pass, because the native demodulators cast q to uint64 and wrapped it; qrss_receive.py exits 1 with a ValueError. The CLI was fixed in review (mutation-checked); the core receive_pass throw followed in the 6b follow-ups, since api::receive_slot (and so listen) still wrapped q.",
+  "evidence": "review:cli-receive finding 0, shared [3]; refusal cases slot-before-1970 and npz-q-negative; 2671a6b receiver.cpp +2 lines",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/receive.cpp, native/core/qrss/receiver.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "simfile's str_member read the '<U<n>' width with std::stoul and formed 4 * width unchecked. A short member's text also differed from numpy's. The new simfile pin generator cases used zipfile.writestr, which made the pins nondeterministic.",
+  "evidence": "review:cli-receive findings 1-2 (fixed); pins frame_wide, frame_one_over, frame_huge",
+  "status": "fixed",
+  "where": "native/core/qrss/simfile.cpp, native/tests/qrss/gen_simfile_pins.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "review-bug",
+  "what": "Integration issue across the two 6b lanes: after the slot review's wav::FormatError landed, receive.cpp's catch of std::invalid_argument would map every malformed-WAV class to ValueError. Fixed at the merge with a FormatError catch mapping kind to struct.error, ZeroDivisionError, TypeError or UnboundLocalError.",
+  "evidence": "review:cli-receive finding 5, shared [4]; 2671a6b wav_error_class()",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/receive.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "Item 1's test_pass_fields_are_plain_json could not fail, because cwid.match already returns a float; the mutant without bool() survived twice. Rewritten to stub match with np.float64 on an unread-window pass. The same test received its own SHORT pass at -15 dB in the fast tier (5.5 s), against the slow-SHORT rule; it now reuses test_qrss_smoke's cached -6 dB pass.",
+  "evidence": "review:reference-fixes findings 0 and 2 (fixed)",
+  "status": "fixed",
+  "where": "tests/test_qrss_receiver.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "Item 5's runners-up tests checked the number of tracked candidates but not which timings were tracked, so a mutant using tms[0] survived. They now pin cands[2:] bitwise to fit_timing(n_best=1) followed by fit_timing(n_best=V)[1:] for CE and L.",
+  "evidence": "review:reference-fixes finding 1 (fixed)",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_track_timing.py, test_qrss_native_ltrack_timing.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "Item 7 had gaps in both implementations. In C++, the Windows --image directory check split on '/' only, so C:\\no\\pic.png got '.' as its parent and passed. In Python, check_image accepted extensions of formats Pillow can read but not write (.psd, .xpm, .gbr), which then failed in Image.save after the receive.",
+  "evidence": "review:reference-fixes findings 3-4 (fixed); Image.registered_extensions()['.psd'] == 'PSD', 'PSD' not in Image.SAVE",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/receive.cpp, qrss_receive.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "Item 8's load_npz check fe.dtype != np.complex64 refused '>c8' (complex64 in the other byte order) with a self-contradictory message ('fe is >c8 ... not complex64'), a regression against 2671a6b. It now reads either byte order and normalises to native; mutation-checked twice.",
+  "evidence": "review:reference-fixes finding 5 (fixed); np.dtype('>c8').name == 'complex64'",
+  "status": "fixed",
+  "where": "sstvae/qrss/channel.py load_npz",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "The new is_directory call in receive.cpp built a narrow std::filesystem::path, which MSVC decodes in the ANSI code page, so a non-ASCII directory would read as missing. Routed through util::is_dir at the merge.",
+  "evidence": "review:reference-fixes finding 6, shared [0]; c0c830f",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/receive.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "On POSIX, str(OSError)'s file name (common.cpp) and argparse's invalid int/float/choice and ignored-explicit-argument values took their repr via pytext::decode, which reads ED A0..BF xx as one surrogate. They printed 'x\\ud800.qrsp' where the scripts print 'x\\udced\\udca0\\udc80.qrsp'. Both now use repr(pypath::fs_decode(...)).",
+  "evidence": "review:paths-a7 finding 0 (fixed); test_cli_encoded_surrogate_argv",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/common.cpp, argparse.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "sstvae-qrss transmit accepted a --slot that qrss_transmit.py refuses. With ED A0 80 between date and time, the C++ decoded a single surrogate, which datetime.fromisoformat accepts as the date/time separator; Python holds three escapes and refuses. Fixed by parsing pypath::fs_str(slot_text). The same split in receive.cpp's --slot/--start was fixed in the wave 7 follow-ups.",
+  "evidence": "fromisoformat('2026-10-09\\ud80006:00+00:00') -> 2026-10-09 06:00+00:00; review:paths-a7 findings 1-2; c0c830f",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/transmit.cpp, receive.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "Smaller paths/codec issues found by the paths review. pypath::with_name's ValueError text was '/ has an empty name' instead of \"PosixPath('/') has an empty name\". The codec bindings' translated() caught std::runtime_error, which would have turned pybind11's value_error/type_error into RuntimeError (hardened). main.cpp's comment wrongly said Python's stdout is surrogateescape 'under a UTF-8 locale'.",
+  "evidence": "review:paths-a7 findings 3-5 (fixed)",
+  "status": "fixed",
+  "where": "native/core/qrss/pypath.cpp, bindings/module/qrss/codec/*.cpp, apps/sstvae_qrss/main.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "The acceptance file would have failed only on Windows, where native-build CI runs it. _module_path used str(Path.relative_to(ROOT)), which gives backslashes there and matches nothing in PINNED. test_stale_pins_name_what_moved asserted no CRLF in rules.py, while Git for Windows checks out CRLF. The tool also wrote references and pins in text mode (CRLF on Windows). Paths are now built '/'-separated and files written with newline='\\n'.",
+  "evidence": "review:acceptance findings 0 and 4 (fixed)",
+  "status": "fixed",
+  "where": "tools/gen_qrss_rx_reference.py, tests/test_qrss_native_acceptance.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "The original CRLF check could not fail: it replaced LF with CRLF and back inside the test, never calling source_hashes. It was replaced by test_line_endings_are_not_a_change, which runs source_hashes and scenario_hash on a CRLF copy of the tree; dropping either normalisation fails it.",
+  "evidence": "review:acceptance finding 1 (fixed); mutation: deleting .replace(b'\\r\\n', b'\\n') passes the old test and fails the new one",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_acceptance.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "review-bug",
+  "what": "The pins left out sources the C++ mirrors: live.py (frontend.cpp mirrors live.StreamFE and uses rxconfig::live ALIGN/HALO), wavio.py (wavread.cpp mirrors read_wav) and qrss_receive.py (receive.cpp). The import closure also missed importlib.import_module. All were added and rx_pins.json regenerated; the references came out byte-identical. Comment inaccuracies were fixed too: NOT_PINNED said 'only dsp and beacon', and the timing conclusion did not follow from the numbers.",
+  "evidence": "review:acceptance findings 2, 3 and 5 (fixed)",
+  "status": "fixed",
+  "where": "tools/gen_qrss_rx_reference.py, native/tests/golden_qrss/rx_pins.json",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "A raw hour shorter than an hour (0 bytes after a crash) made every C++ write into it fail with a FileError for the life of the listener, where numpy's memmap 'r+' grows the file. The read error also carried a path prefix the reference does not have.",
+  "evidence": "Fixed in 0335932: a write grows the file sparse to full size, and a read raises exactly 'mmap length is greater than file size'; test_a_short_raw_hour and test_short_raw_hour.",
+  "status": "fixed",
+  "where": "native/core/qrss/passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "The packed FLAC was not synced before it replaced the raw hour, which is then deleted, so on ext4 a power cut could leave an empty FLAC and no raw file.",
+  "evidence": "Fixed: FileSink::finish fsyncs (FlushFileBuffers on Windows) before close.",
+  "status": "fixed",
+  "where": "native/core/qrss/flac.cpp FileSink",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "unpack_locked removed the FLAC while its dr_flac Reader still held the file open. On Windows the file is then undeletable or delete-pending, and a later pack to that name could fail.",
+  "evidence": "Fixed by resetting the reader before util::remove_file.",
+  "status": "fixed",
+  "where": "native/core/qrss/passband.cpp unpack_locked",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "The write-during-pack protection had no test that could fail: with both swap checks removed the suite still passed. Decode-and-verify caught most races first, and a random burst of about 3600 writes in 1.5 s never hit the window before the swap.",
+  "evidence": "Fixed with a StoreOptions::before_swap seam and deterministic tests. With them, removing the gen_ check fails 7 checks and removing the mtime check fails 5.",
+  "status": "fixed",
+  "where": "native/core/qrss/passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "maybe_pack set packer_running_ and packer_started_ before constructing std::thread. A thread-creation failure left 'running' set forever, which stopped all later packing and hung join_packer() with no timeout.",
+  "evidence": "Fixed: the flags are set after construction, under the same lock.",
+  "status": "fixed",
+  "where": "native/core/qrss/passband.cpp maybe_pack",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "Concurrent dr_flac opens (packer verify, unpack, capture reads) raced on dr_flac's CPU-feature globals, which drflac__init_cpu_caps writes on every open on ARM/Android and on the first open on x86.",
+  "evidence": "Fixed with a process-wide mutex around drflac_open_with_metadata (upstream marks the function no_sanitize('thread')).",
+  "status": "fixed",
+  "where": "native/core/qrss/flac.cpp Reader",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "Two C++ Store objects open on one directory in one process, used from two threads, wrote the same .<name>.<pid>.tmp at once, because the mutex was per object. The result was 'cannot replace' / FileNotFoundError or torn writes, and lost updates: 3 of 6 attaches survived.",
+  "evidence": "Fixed in 8fff495: one mutex per root, keyed by canonical path in a leaked registry of weak_ptrs. test_two_stores_one_root (ctest and pytest) fails on the per-object mutant.",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "expire()'s three cutoff comparisons were never exercised at the boundary, and a '<' -> '<=' mutant survived every ctest and parity test: the expiry checks all sat at least a day from the cutoff.",
+  "evidence": "Added test_expire_cutoff and test_expire_at_the_cutoff (kept at the cutoff, dropped a ulp past it); all 3 mutants are now killed.",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp expire",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "store.cpp parsed text numbers with std::stod, which accepted hex ('0x10' -> 16.0, where Python raises), mapped an underflow such as '1e-500' to +inf (Python gives 0.0), and took the decimal point from LC_NUMERIC, which a Qt app sets from the environment. py_int used locale-dependent isspace and isdigit.",
+  "evidence": "scratchpad/w8r/stod.cpp. Now routed through pynum; the strmeta.py probe agrees on 28 of 30 text values.",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "default_root() fell back to ::getpwuid, which is not reentrant, although Stores may be opened on several threads.",
+  "evidence": "Fixed: getpwuid_r with a growing buffer, keeping the reference's handling of an empty pw_dir and of no entry.",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp default_root",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "On Windows, FileError's err was std::filesystem's ec.value(), a Win32 code rather than an errno, so ERROR_ACCESS_DENIED (5) surfaced as EIO's number and ERROR_PATH_NOT_FOUND (3) as ESRCH.",
+  "evidence": "store.cpp's code_of mapped it through default_error_condition. The shared util::errno_of came in 9a, and the remaining call sites (store, passband and its binding) switched in 9b leftovers item 1.",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp, passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "finish_receive took max_candidates and budget_s from the caller's ReceiveConfig, while the reference always applies FINISH_MAX_CANDIDATES and FINISH_BUDGET_S. A wave 9 caller passing its own config would have run an unbounded whole-slot search. The parity tests built their config with finish_config, so mutants dropping the budgets survived.",
+  "evidence": "Fixed in 7b35fd8: the budgets are FinishOptions fields defaulting to the constants. test_finish_receive_typed_budgets monkeypatches FINISH_MAX_CANDIDATES to 0 (mutants M11/M12 killed).",
+  "status": "fixed",
+  "where": "native/core/qrss/live.cpp finish_receive",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "No parity case sat exactly on the min_heard gate, so a '>=' -> '>' mutant in finish_gate/finish_branch survived pytest.",
+  "evidence": "Added exact-threshold cases ok[:2000] and ok[:1999] of 4000 (_finish_cases k=300, 301); mutant M7 killed.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_live.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "review-bug",
+  "what": "DialLog's two-mutex concurrency (refresh_mu_ plus mu_, with refresh called with the GIL released) had no thread test at all.",
+  "evidence": "Added test_dial_log_threads (3 threads, partial lines appended); it fails when the lock publishing refresh's points is removed.",
+  "status": "fixed",
+  "where": "native/core/qrss/live.cpp DialLog",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "The listener waited on the store's lock while holding its own: hints_locked called store_->due(q) with mu_ held, from candidates_for, finish() and hints(), while associate() holds the store's root mutex through npz writes and fsync. So feed(), step() and tiles() blocked behind the end-of-slot worker's association, which the header said could not happen.",
+  "evidence": "Fixed in 10d22c0: read_due() runs outside mu_. Regression ctest test_the_store_is_never_waited_on_under_the_lock; the mutation measured feed() blocked 7.68 s against under 1 ms fixed.",
+  "status": "fixed",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "refresh() read elapsed and progress after the unlocked capture_read, so audio fed in between counted toward the tile's progress without being in its receive. Also, listener.hpp falsely claimed that two passes applied to one tile draw it once.",
+  "evidence": "Both read before the capture read now; the false departure bullet was removed (10d22c0).",
+  "status": "fixed",
+  "where": "native/core/qrss/listener.cpp, listener.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "Python's f'{e}' on a KeyError prints only the key's repr, while the port's pyjson::KeyError what() includes a 'KeyError: ' prefix. Four sites ('hints:', 'store failed:', and the renderer's load/check/render notes) used what() directly.",
+  "evidence": "test_a_store_that_fails_keeps_the_tile: the reference wrote \"store failed: 'callsign'\" against the pre-review C++'s \"store failed: KeyError: 'callsign'\". Fixed with py_str_of().",
+  "status": "fixed",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "A user-visible log line, 'a later pass is due at ...', had no oracle: the pins and all 16 parity tests passed with its text changed, because every hints scenario called _hints directly or joined late.",
+  "evidence": "The mutation survived the ctest and the parity file. New pin scenarios due_hint_ce and due_hint_joint and test_a_later_pass_due_through_the_refresh now fail on it.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_listener.py, listener pins",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "The codec-renderer parity test let the C++ resolve its own model cache while Python used huggingface_hub's, so it failed rather than skipped wherever only the HF cache held the model.",
+  "evidence": "It failed with 'no v5-decoder-fp32.onnx in /root/.cache/sstvae/models'. It now hands the C++ the exact decoder file the reference loaded.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_listener.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "The new stale-temporary sweep (item o) introduced a crash path. Python caught only FileNotFoundError, and the C++ threw on any stat/remove error, so a temp-named directory or, on Windows, a temporary another process holds open raised out of expire(), and so out of every write: the live capture would stop on housekeeping.",
+  "evidence": "Fixed in 02500ac in both implementations (best effort, catching OSError). test_expire_leaves_a_temporary_it_cannot_remove fails with IsADirectoryError on the old code.",
+  "status": "fixed",
+  "where": "sstvae/qrss/frontend.py, native/core/qrss/passband.cpp expire",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "test_stale_temporaries assigned ages by i % 4, so every JSON-kind temporary got a fresh age and none was ever swept. A C++ is_temporary with '.json' dropped from its extension list still passed.",
+  "evidence": "Rewritten so every kind appears both stale and fresh, with refused names and stale temp-named directories added. It now fails for both the '.json' and the meta.json mutation.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_passband.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "sources.cpp included <windows.h> without NOMINMAX, so on MSVC every std::min( in the file would be a C2589 syntax error. MinGW could not see it.",
+  "evidence": "Fixed in 17b3e50; the wrapper-windows.h probe fails on base d501f75 and passes on the fix.",
+  "status": "fixed",
+  "where": "native/core/qrss/sources.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "The Stamper resync-boundary tests (the parity test and the pins generator) placed the push 55900+d samples past 'next' instead of RESYNC_S*FS+d. They never reached the boundary, and a '>' -> '>=' mutant survived both.",
+  "evidence": "The times are now derived from the first stamp. The mutant fails both: 'FAIL resync+0 chunk 1: len: got 105, want 100'.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_sources.py, gen_sources_pins.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "StreamSource::next(timeout) overflowed the steady_clock deadline for very large finite timeouts: past about 292 years in int64 nanoseconds, and a double-to-duration cast past about 9.2e9 s is UB. In practice the call returned at once, so a caller waiting 'forever' would spin.",
+  "evidence": "From 1e9 s up it now waits without a deadline; a new ctest check uses a 1e12 s timeout.",
+  "status": "fixed",
+  "where": "native/core/qrss/sources.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "On MSVC, _get_osfhandle of a descriptor that is not open runs the CRT invalid-parameter handler, which ends the process, where Python raises EBADF. Any C++ path taking a descriptor from Python needs the suppression Python's _Py_BEGIN_SUPPRESS_IPH applies.",
+  "evidence": "Fixed in a2aed2d with a thread-local no-op handler for that one call; checked only by a syntax probe with UCRT's declaration supplied.",
+  "status": "fixed",
+  "where": "native/core/qrss/sources.cpp InputHandle::from_fd",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "review-bug",
+  "what": "On macOS, poll() on a tty returns POLLNVAL, so close() of a StreamSource reading an interactive terminal could block until input arrived.",
+  "evidence": "Left unfixed by the 9a sources review. Fixed in 9b leftovers item 5 with a POSIX self-pipe plus select(); a terminal fd >= FD_SETSIZE still takes the poll() fallback.",
+  "status": "fixed",
+  "where": "native/core/qrss/sources.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "argparse printed an empty 'positional arguments:' section for listen's help, which has no positionals. Wave 9a had added optional_positional outside its task; the 9b listen lane, asked to review it, found this.",
+  "evidence": "Fixed in argparse.cpp (f7587b8); the listen review confirmed an empty positional section is omitted.",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/argparse.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "plan_residual stored each partition's planned coding, but no test could see the stored plan diverge from the costed one, because any Rice parameter decodes any value: a divergence shows only as size. A mutation leaving the plan stale whenever 5-bit parameters won survived all 311486 + 18441 checks.",
+  "evidence": "Fixed in 647a96e/7369da9: encode_stream asserts each frame's size equals header + ceil(costed bits / 8), and the mutation now fails at frame 0. It never fired on 31000 valid streams.",
+  "status": "fixed",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "The int16 copy of the mid channel read by the new LPC kernel was barely covered: corrupting it (ch16[2] = a >> 1) was caught by only one fuzz case. A corrupt residual usually loses to FIXED and is never written, so it becomes a compression loss rather than a decode failure.",
+  "evidence": "Mutation caught by 13 of 311486 checks before. Added test_mid_side, which asserts LPC subframes are taken (subframes[7] >= frames).",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_flac_lpc.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "lpc_residual_t declared 'std::int32_t ... far[8]'. <windows.h> defines 'far' as an empty macro, so any translation unit including windows.h first would fail to compile; this was latent, since flac.cpp does not include it today.",
+  "evidence": "A mingw probe including <windows.h> first failed at flac.cpp:619. Renamed to 'wide'.",
+  "status": "fixed",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "The task asked for 'flac -t' on every test file, but the flac CLI is not installed, so test_flac_cli always skipped. Separately, flac.hpp understated the worst-case blocking ('up to about 1.5 s' per hour).",
+  "evidence": "Added test_libflac (libFLAC by ctypes, MD5 on, 41 streams, with a self-check that it can fail). The note now says about 1.9 s on white noise, with about 0.5 ms per frame between cancel polls.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_flac.py, native/core/qrss/flac.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "The passband binding's _flac_encode reported only 7 of the encoder's 8 subframe counts, dropping LPC, and defaulted max_partition_order to 8 where EncodeOptions now defaults to 6.",
+  "evidence": "Listed by both the FLAC build and its review as a shared change; fixed at the 9b integration (033e7a5).",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "Wave 8's FLAC encoder accepted partition orders up to 15, but dr_flac, the store's own reader, refuses anything above 8, so such a file was unreadable by the C++ store. This was found by the 9b FLAC build lane, not a reviewer, while writing a strict decoder and checking every limit against dr_flac's source.",
+  "evidence": "native/third_party/dr_libs/dr_flac.h:4959 (partitionOrder > 8 returns false). Fixed in 264d692: EncodeOptions validation is now 0..8.",
+  "status": "fixed",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "state.json went stale after a receive completed within the bounded close. The session's thread had already written listening=false with no tiles, the store and listener.log then got the receive's passes, and the next start neither listed the tiles nor received the slot again.",
+  "evidence": "Fixed in 2f36a93 with an extra write_state(false) in Session::Core::shutdown; test_a_receive_that_finishes_within_the_bound fails without it.",
+  "status": "fixed",
+  "where": "native/core/qrss/listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "The listen_api ctest's 'held' and 'push' checks were flaky under slowdown: the pusher raced ahead of the listener and then stopped advancing the clock. The test's Latch::entered was also read without its lock, a data race TSan reported.",
+  "evidence": "4 'held' failures under TSan before; 113/113 with 0 warnings, twice, after pacing on the new Session::backlog() == 0.",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "test_eof_with_a_receive_in_flight could pass vacuously with no receive in flight (exit about 0.1 s), because it had no lower bound on the exit time.",
+  "evidence": "It now asserts 1.0 < took < 2.0.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_listen.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "A renderer factory that returned no renderer left config().render true and gave no notice, so the session claimed to draw pictures when it did not.",
+  "evidence": "Fixed in 2f36a93: render is turned off.",
+  "status": "fixed",
+  "where": "native/core/qrss/listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "The replay parity test's peak RSS figures were pytest's, not the programs'. On Linux, exec carries the parent's RSS high-water mark into the child's ru_maxrss, so the C++ TINY run read 355 MB.",
+  "evidence": "/bin/true measured 26.7 MB from a small parent, 326.8 MB from a 300 MB parent, and 5.3 MB forked from a 'python -I -S' launcher. Real figures: TINY C++ 73-78 MB.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_listen.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "The fast tier of tests/test_qrss_native_listen.py took 70.85 s, over the ~40 s budget.",
+  "evidence": "recover_across (about 25 s) and the SIGTERM variant moved to slow; the fast tier is now about 40 s.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_listen.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "A stop() that arrived before backfill and recover() still ran them, starting recovery receives that the same stop would only abandon. That left a ListenerStopped line in listener.log and could run past the bound inside a long read-back.",
+  "evidence": "Fixed in 983933f: an early stop() skips backfill and recover().",
+  "status": "fixed",
+  "where": "native/core/qrss/listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "An abandoning stop() takes the sink's mutex, so a sink that blocks on the stopping thread (such as a blocking queued call into a GUI thread) deadlocks. This cannot be fixed without dropping the guarantee that nothing reaches the sink after stop().",
+  "evidence": "Documented in listen_api.hpp (983933f): the sink must not call stop().",
+  "status": "open",
+  "where": "native/core/qrss/listen_api.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "An abandoned receive left three residues: its 'failed'/ListenerStopped line still reached listener.log; the packer finished its hour; and, if the deadline found the session's thread mid-step, one state.json write (listening=true) landed after the locks were released.",
+  "evidence": "Documented by the 9b listen build and review. Fixed in the follow-up by LiveListener::abandon() and PassbandStore::stop_packing() (c80c93b, 867c335).",
+  "status": "fixed",
+  "where": "native/core/qrss/listener.cpp, listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "Refusal texts differ from Python when tiles/ is a file and when state.json is a directory (from wave 9a's listener code), and the C++ argparse never wraps usage lines. Of 41 probe cases, 37 were byte-identical.",
+  "evidence": "9b listen review, findings 11 and parity.",
+  "status": "open",
+  "where": "native/core/qrss/listener.cpp, native/apps/sstvae_qrss/argparse.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "Item 4's fix to store.due (catching TypeError) was incomplete in both languages. OverflowError from an infinite segment, mode or picture_id (or std::overflow_error for an integer past int64 in C++) still broke due() for every picture, and Python returned rows keyed by a callsign that was not a str.",
+  "evidence": "due_fuzz.py over 290 malformed shapes. Fixed in 0c313e1 with new cases segment=inf, mode=inf, picture_id=-inf, callsign=int and callsign=null; the mutation dropping the overflow_error catch fails 4 checks.",
+  "status": "fixed",
+  "where": "sstvae/qrss/store.py, native/core/qrss/store.cpp due",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "review-bug",
+  "what": "test_png.cpp's check of the temporary's name assumed '/' separators, so it would fail on Windows with nothing wrong; Linux CI could not see it.",
+  "evidence": "native/tests/qrss/test_png.cpp:132-135 now accepts either separator.",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_png.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "review-bug",
+  "what": "Session::Core::abandon's render-settle loop waited up to SETTLE_S for a picture drawn just before stop to reach its file. During that window the listener could still write a tile or state.json after the session's flag was set. Found by the follow-up build lane in wave 9b's code.",
+  "evidence": "Fixed by abandoning the listener first, under every lock; the loop was removed (c80c93b).",
+  "status": "fixed",
+  "where": "native/core/qrss/listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "review-bug",
+  "what": "abandon() called passband_->stop_packing() only after waiting for writing_ == 0, so the packer could start another hour in the meantime.",
+  "evidence": "Fixed in 4936f0c/867c335: stop_packing() is a single atomic store and now runs under mu_ when the flag is set.",
+  "status": "fixed",
+  "where": "native/core/qrss/listener.cpp abandon",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "review-bug",
+  "what": "Four of abandon()'s checks were caught by no test: deliver()'s per-line check, feed()'s check, the stop_packing call, and finish()'s drop before seams_.associate.",
+  "evidence": "test_abandon_from_the_log_seam kills each of them: M1 2 failures, M2 2, M3 1, M4 1.",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "review-bug",
+  "what": "PyHooks::cancel_owner was a bare py::object, so destroying a PyHooks off the GIL (which the header promises is allowed) would decref without the GIL; latent because only _run_hooks constructs one. Now a std::shared_ptr<py::object> from held_object, released with the GIL taken like the hook callables.",
+  "evidence": "skeleton review finding 1; scratch probe rv10/hooks_probe.py: no decref without GIL after the fix",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/em_hooks.hpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "review-bug",
+  "what": "Parity test gap: a C++ known_header that skipped the LLRs of members whose decoded header mismatched passed the parity file, because make_pass_result with decoded=True and no hdr_es_n0_db yields all-zero LLRs, so such a member contributed nothing either way. Fixture defaults silently hid a whole branch; a 'foreign-decoded-llr+soft' scenario with hdr_es_n0_db=-3.0 now catches it.",
+  "evidence": "tests/test_qrss_native_em.py test_known_header 'foreign-decoded-llr+soft'; mutation survived before, caught after",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_em.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "review-bug",
+  "what": "test_em.cpp built the store root with path::string(), which goes through the ANSI code page on Windows/MSVC; switched to util::path_text (the UTF-8 form, which should be the default in any new ctest building a store root from a temp dir) and an RAII Cleanup that removes the temp dir.",
+  "evidence": "native/tests/qrss/test_em.cpp fresh_dir/Cleanup change",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_em.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "review-bug",
+  "what": "The ctest ndtri/norm_isf pins had no subnormal inputs although the task listed them; the generator now emits NDTRI_SUBNORMAL and test_special.cpp runs them.",
+  "evidence": "gen_em_pins.py NDTRI_SUBNORMAL (5e-324, 1e-320, 1e-310, DBL_MIN, 0.5); em_pins.hpp regenerated",
+  "status": "fixed",
+  "where": "native/tests/qrss/gen_em_pins.py, test_special.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "review-bug",
+  "what": "em.hpp's THREADS comment gave wrong blocking figures; re-measured and corrected.",
+  "evidence": "claimed ~10 ms per header decode and ~1 MB per FULL pass; measured header decode ~1.3 ms, FULL pass ~3.6 MB / ~5 ms, em_prior ~3 ms, known_header ~1.5 ms, known_keying ~30 ms",
+  "status": "fixed",
+  "where": "native/core/qrss/em.hpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "review-bug",
+  "what": "em_refine's progress total was counted once before round 1, but each round re-reads list(acc.uids), so a member a listener attached mid-run was re-received from the next round and `done` ran past `total`. Now recounted at each round's start and never lowered; a ctest attaches a member through the seam and checks done <= total.",
+  "evidence": "EM review finding 1; the old logic fails the new attach check",
+  "status": "fixed",
+  "where": "native/core/qrss/em_refine.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "review-bug",
+  "what": "The rows' seams() treated any em.rereceive carrying __qrss_native__ as the row itself, but functools.wraps copies the wrapped function's __dict__, so a spy wrapping the row was silently bypassed (the C++ ran its own rereceive, the spy was never called, the test still passed). Fixed by also requiring no __wrapped__.",
+  "evidence": "tests/qrss_native/em_refine.py:39-42; test_em_refine_seam[wrapped] fails without the fix (mutation-checked)",
+  "status": "fixed",
+  "where": "tests/qrss_native/em_refine.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "review-bug",
+  "what": "rereceive did not poll cancel before measuring its own path (pass_path is about 1 s on a FULL pass), and the header claimed a poll 'before each tracker run' on both branches when the receive_pass branch is polled only before it starts. A poll was added and the comments corrected.",
+  "evidence": "EM review finding 3",
+  "status": "fixed",
+  "where": "native/core/qrss/em_refine.cpp/.hpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "review-bug",
+  "what": "Two reference branches had no test that could fail: rereceive's re-label of the given header with the pass's own version (em.py:289-290; every fixture used version-2 headers) and 'an L member is logged in round 1 only' (every L case stopped after one round). Mutants of both survived the lane's ctest and parity file; RR_SHORT_V1 pins, a slow test_rereceive_version1, a three-round ctest check and a tol_db=-inf row now catch them.",
+  "evidence": "mutants M1 (drop the re-label) and M2 (log the L line every round) survived, both now fail test_qrss_core_em_refine",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_em_refine.cpp, tests/test_qrss_native_em_refine.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "review-bug",
+  "what": "Test gap: em_refine's per-member known-header selection (each member's own segment) was untested because every fixture sat in segment 0. A 'segments' seam case (a mode-2 picture with members in three segments, decoded, soft and too-weak headers) was added; no bug was found.",
+  "evidence": "EM review finding 6: 15 spy calls compared one for one against the reference",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_em_refine.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "review-bug",
+  "what": "template_search on a 250 Hz capture took the noise floor at the first candidate, before the CH-reach test, so a 0- or 1-sample capture with every candidate out of reach raised ZeroDivisionError/ValueError where the reference returns (None, 0.0, {}) (elsewhere a wasted floor computation). The floor is now optional and taken at the first in-reach candidate.",
+  "evidence": "retro review finding 1; mutation: eager floor caught by the new refusals case",
+  "status": "fixed",
+  "where": "native/core/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "review-bug",
+  "what": "With the associate step as a Python seam, retro_detect returned rx::to_str(rule), so a seam returning (None, None) came back as (None, \"\"), and the key was rebuilt instead of being the seam's own object. The binding now keeps the seam's own key and rule objects per find.",
+  "evidence": "retro review finding 2; extended hooks_and_seams test: (None, '') != (None, None)",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "review-bug",
+  "what": "Test gap: no fast-tier case put a drifting candidate or a CW-voted (OOK/FSK) accumulator through template_search; flipping the drift's sign in derotated() passed all 10 existing template_search_tiny cases. Added test_template_search_cw_and_drift_tiny (fast) and _short (slow), both mutation-checked.",
+  "evidence": "mutation drift sign caught by both new TINY tests (dZ 0.22); ook=false caught by the SHORT test (dZ 1.17)",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_em_search.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "review-bug",
+  "what": "em_api::retro skipped the estimator check for \"\" because it reused refine's helper, where \"\" means each pass's own; retro(estimator=\"\") ran and was refused only at the first find, or never. A helper shared between two entry points with different meanings of \"\" silently weakened the stricter one; now checked unconditionally in retro.",
+  "evidence": "native/core/qrss/em_api.cpp:46 vs :172; mutation: 'FAIL retro: an empty estimator: did not throw (1 of 173)'",
+  "status": "fixed",
+  "where": "native/core/qrss/em_api.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "review-bug",
+  "what": "A hand-edited accumulator member whose uid is not a str ended decode --em/--retro with pyjson's 'ValueError: uid: expected str, got int' where qrss_decode.py ends 'ValueError: bad pass uid 5'. Fixed with store::member_uid at all six sites (store.cpp x4, em.cpp, em_search.cpp) and pyjson::repr.",
+  "evidence": "integrate review finding 2; side-by-side cases for int, null, list, dict added to test_decode_edited_accumulators",
+  "status": "fixed",
+  "where": "native/core/qrss/store.cpp, em.cpp, em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "review-bug",
+  "what": "em_refine converted all member uids at the round's start, so a non-str uid after a good member was refused before that member was re-received and stored, leaving a different store than Python (which re-receives and update_pass()es earlier members first); retro_detect's held-q set had the same ordering against an earlier missing pass file. Both loops now refuse each uid when they reach it.",
+  "evidence": "integrate review finding 3",
+  "status": "fixed",
+  "where": "native/core/qrss/em_refine.cpp, em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "review-bug",
+  "what": "decode.cpp's catch list had no em_api::Refusal, so a picture whose index vanished between decode's own existence check and em_api's check_picture (a concurrent listener expiring it) would escape run() as an uncaught runtime_error instead of the script's SystemExit.",
+  "evidence": "integrate review finding 4",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/decode.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "review-bug",
+  "what": "Stale documentation: subcommand.hpp still said decode has '--em and --retro not yet', and decode.cpp's deviation list omitted the passband meta.json JSONDecodeError-vs-ValueError difference the probe found.",
+  "evidence": "integrate review findings 5 and 6",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/subcommand.hpp, decode.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "review-bug",
+  "what": "test_em_api's session-sharing test could not fail on the property it claimed: its clock sat 400 s past an unrelated hour, so the listener never wrote the retro slot's hour nor packed its lead hour while retro/refine read it. Strengthened to use the slot's hour, read before/between/after through a separate PassbandStore and the session's own, and require the lead hour to go raw -> FLAC and read back identically.",
+  "evidence": "native/tests/qrss/test_em_api.cpp test_session_sharing: clock at t0+20 fails 3 checks, t0+400 passes 174",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_em_api.cpp",
+  "group": "stage4-wave10"
+ }
+]

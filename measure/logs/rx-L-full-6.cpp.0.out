@@ -1,0 +1,7 @@
+pass 1990584_1499881_283c0800   L l-full
+  pilot       1499.881 Hz at t0   drift -0.000 Hz/min   wander 0.039 Hz rms
+  doppler    0.108 Hz   clock +0.2 ppm   Z_ref 298.6   SNR2500 -7.0 dB   kappa 1.18
+  header     K1ABC FN42 picture 7b202aad mode A segment 0 codec d1d8
+  callsign   K1ABC   match Z 622.5   keying fsk   agrees
+  mean W     +8.35 dB
+image: img/cpp-L-full-6.png

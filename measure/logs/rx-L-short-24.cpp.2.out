@@ -1,0 +1,6 @@
+pass 1990584_1500000_54ea8b3f   L l-short
+  pilot       1500.000 Hz at t0   drift -0.003 Hz/min   wander 0.030 Hz rms
+  doppler    0.108 Hz   clock +11.1 ppm   Z_ref 19.0   SNR2500 -24.2 dB   kappa 1.03
+  header     K1ABC FN42 picture 7b202aad mode A segment 0 codec d1d8
+  callsign   (not read)   match Z 3.3   keying fsk   DISAGREES
+  mean W     -4.13 dB

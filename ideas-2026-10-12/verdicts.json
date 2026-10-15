@@ -1,0 +1,1364 @@
+[
+ {
+  "lens": "evidence",
+  "verdicts": [
+   {
+    "id": "R1",
+    "verdict": "revise",
+    "corrections": "The mechanism is misdescribed. noise_psd (frontend.py:301-347) has no quieter-side fallback for the one-sided case. With no neighbour, both sides are pooled into one median (`sides = [sel]`), so the skirt half pulls that median down. When a neighbour empties the in-band side, `sel` keeps only the skirt side and its median is used directly. The `min(...)` over sides runs only when neighbours empty both sides. 'Widen the usable side outward' is capped: the CH channel is +-125 Hz (CH_FS 250, constants.py:63) and the band already reaches 120 Hz, so only inward widening, toward the signal's own band, or dividing by |H_FE|^2 is available. The build record wording is 'within about 40-75 Hz of 300 or 2700 Hz' (wfC_parts.txt:302), and the 2695 Hz L case reported +23 dB (wfC:267). The FE response figures are confirmed; see checked.",
+    "revised_gain": "Gain unchanged. FE response confirmed (measured by me); the SNR bias figures are the receiver lens's and were not re-run. Flat (better than -0.1 dB) from about 310 to 2690 Hz.",
+    "checked": "frontend.py:59, 301-347 read in full. Measurement 1 (FE response of firwin(255,1250,Kaiser 8)): 180 Hz -52.0, 200 -29.6, 220 -16.8, 250 -6.02, 280 -1.36, 300 -0.29, 305 -0.18, 310 -0.10, 320 -0.02, 326 -0.01 dB, flat 340-2660, mirror image at the top. Also read wfC_parts.txt:266-269, 302 and design.md:944."
+   },
+   {
+    "id": "R2",
+    "verdict": "revise",
+    "corrections": "Soften 'very likely explains the 0.5 Hz error' to 'consistent with'. No record traces the 0.5 Hz figure to a pass. The KC2G evidence is 1 of 2 passes, not 2. On 04:15Z the stored 1206.082 Hz is 0.62 Hz off the line's t0 value of 1205.459. On 03:45Z the stored 1205.472 Hz is only 0.013 Hz off. That pass's line has drift +0.005 Hz/min, not +0.030, with 0.684 Hz rms and outliers at 1208.38 and 1203.76 Hz, so a |u|^2-weighted line needs outlier rejection. receiver.py:398 is detection_from_pass (402 is its path line). The simulated f(0) figures match lrx/scratch_chain/all1.txt:122 (short-12mod 1500.66) and the mod2 row.",
+    "revised_gain": "Simulated (records lens): 0.23-1.09 Hz down to 0.03 Hz or less. KC2G: about 0.6 Hz better on 04:15Z, nothing on 03:45Z.",
+    "checked": "receiver.py:292, 337, 398; track.py:1631; live.py:1191-1223. Measurement 2 (KC2G rerun of m1): 04:15Z line 1205.459 Hz at t0, +0.030 Hz/min, 0.221 Hz rms, 1205.398 at 17 s, late windows 1206.0-1206.65. 03:45Z intercept 1205.459, +0.005 Hz/min, 0.684 Hz rms."
+   },
+   {
+    "id": "R3",
+    "verdict": "revise",
+    "corrections": "The premise conflicts with the spec. Spec 10 (qrsstvae-options.md:662) tells senders to choose randomly among free spots, 'changing frequency on every pass', and says an Si5351 beacon 'picks a random spot in the channel on every pass'. The app's scheduler, however, keeps one freq_hz per Entry (native/gui/qrss_schedule.hpp:80), so the gain is for app-scheduled stations that keep the dial, and is about 0 for spec-compliant movers. The A2-only flag matters more than stated. Today a hint that fails A2 is not dropped at the finish: it becomes a blind candidate (acquire.py:1403-1428; _joint_detections returns pre + hinted + tbd) gated ahead of every A3 hit, at 60-80 s each on FULL (waveform-l.md:245). Spec 6.5 (line 523) does leave the keep-one-frequency question open, so routing it there is right.",
+    "revised_gain": "Inferred: live L reach about -26 to about -31 dB only for repeat stations that keep their frequency (app scheduler); about 0 for senders following spec 10 and for the C beacon.",
+    "checked": "live.py:1191-1223, store.py:393-411, spec lines 519-523 and 654-667, qrss_schedule.hpp:72-91, acquire.py:1403-1428, 1561-1583, 1632-1650; waveform-l.md:240-252."
+   },
+   {
+    "id": "R4",
+    "verdict": "revise",
+    "corrections": "KC2G (README.md:348-357) was a CE-CE case in which the 14 dB stronger neighbour 101 Hz away was not excluded at all. It is fixed by excluding verified neighbours and other preamble hits. The both-sides-empty 'quieter side' rule is a different, analogous path, not 'the KC2G failure'. The geometry is right: with a 45 Hz guard about the band centre, any neighbour centre 75-130 Hz away removes a whole 85-120 Hz side, so at 30 Hz L spacing the neighbours at 90 and 120 Hz each do. The L skirt figure is at README.md:893 (-60.4 against -65 dB).",
+    "revised_gain": "Inferred only. The Z_ref 1 to 8-11 figure is from the CE-CE missing-exclusion case, not from the fallback.",
+    "checked": "receiver.py:60-79, README.md:340-357 and 893, frontend.py:301-347, spec line 662."
+   },
+   {
+    "id": "R5",
+    "verdict": "keep",
+    "corrections": "Minor: the AGC passage is waveform-l.md:378-382. 12.13 against 9.89 dB = 2.24 dB, consistent.",
+    "revised_gain": "",
+    "checked": "frontend.py:168-208 (win_ms 100), design.md:943, waveform-l.md:378-382, README.md:352."
+   },
+   {
+    "id": "R6",
+    "verdict": "keep",
+    "corrections": "Note: the stored hdr_llr is already the block plus spread-copy sum, so consistency can only be judged per pass, not per copy. Cluster sum at associate.py:276-281, pair fallback at :282-291.",
+    "revised_gain": "",
+    "checked": "associate.py:263-292, spec 5.1 open points, qrss-build/spread-header-review.md:91, waveform-l.md:166-169."
+   },
+   {
+    "id": "R7",
+    "verdict": "revise",
+    "corrections": "'Decode attempts are few there' is wrong. _soft_header (associate.py:274-292) runs one header.decode per time-near provisional cluster, plus pair fallbacks, for every new headerless pass, inside _finish_apply under self.lock (live.py:1303, associate at about :1336). header.decode already takes list_size (header.py:204; polar.py:181), so the code is trivial, but list 32 multiplies a 14.6 ms decode about 4x on that locked path. The spec citation should be line 382.",
+    "revised_gain": "Inferred 0.1-0.3 dB, steady paths. Cost: about +1-1.5 s per weak headerless pass at 58 clusters (4x of the 0.46 s measured), more as the store grows.",
+    "checked": "spec line 382, header.py:204-216, polar.py:181-211, associate.py:263-292, live.py:1298-1345. Measurement 3: header.decode 14.6 ms, weak-pass associate 0.46 s at 30 accumulators x 58 clusters."
+   },
+   {
+    "id": "R8",
+    "verdict": "revise",
+    "corrections": "The numbers are slightly low. At good (+2.2 dB, decoder-measurements.md:45), noise-like distortion at 12.2 dB (L) or 13.3 dB (CE, D_PASS 0.0466, demod.py:55) costs about 0.46 dB (L) and 0.36 dB (CE) in one pass, not 0.41/0.33 (computed). At very good (+5.7 dB) it costs about 1.1 dB (L) and 0.85 dB (CE), which is where cancellation can work. At +2.2 dB the latent estimates carry error variance of about 0.6 of the signal, so re-synthesised clipper distortion would correlate poorly with the true distortion: 'half is realistic' is optimistic at good. Spec 2.4: the fixed part is 22-23 dB down with the 64-block precoder.",
+    "revised_gain": "Inferred: well under 0.2 dB at good, up to about 0.5 dB at very good on one strong pass, about 0 from 4 passes on.",
+    "checked": "demod.py:53-55, spec 2.2 (lines 104-133) and 2.4 table (lines 160-168), decoder-measurements.md:44-45; arithmetic only."
+   },
+   {
+    "id": "L1",
+    "verdict": "revise",
+    "corrections": "(a) The 'A2-L 2/8 at -34' figure is from the pre-build prototype map (lrx/map_acquire.md:22 and :101), not wfB. wfB_parts.txt:342 and design.md:932 give 8/8 at -25/-28/-31 only. (b) design.md:605 excludes the lead-in from A1 'so a lead-in can never move the preamble timing'. A1 gives only f and drift, so that reason does not bind. The real risk is spec 2.8 (line 311): the lead-in exists to absorb key-up drift, and receivers 'should take the starting state from the last 8 s of the lead-in'. A window from -10.5 s includes the chirp and can bias the A1 line beyond A2's +-0.5 Hz. Start it near -8.5 s, or test with a key-up chirp. (c) The A1 counts are the records and transmit lenses' (m_a1lead.py, m3_leadin_a1.py) and were not re-run.",
+    "revised_gain": "Inferred end to end: about -31 dB live, but only for senders who send a lead-in, and unmeasured against a real key-up chirp.",
+    "checked": "acquire.py:160, design.md:603-621, spec 2.8 (lines 303-314), wfB_parts.txt:342 and 396, lrx/map_acquire.md:22 and 101."
+   },
+   {
+    "id": "L2",
+    "verdict": "keep",
+    "corrections": "Cite design.md:933 for z1 21.5/13.3/5.0 and for A3 found at -28/-30 and missed at -34; also wfB_parts.txt:395. Those z1 values are along the true path. A searched template needs a Gumbel-raised threshold, so the 5-10 dB is the spec's estimate only.",
+    "revised_gain": "",
+    "checked": "em.py:232-234, 270-288, 385, 554, 710; spec 6.5 (lines 519-523); design.md:933; e2e-results.md (8 x -20 dB to +5.64 dB)."
+   },
+   {
+    "id": "L3",
+    "verdict": "revise",
+    "corrections": "The z1 citation is design.md:933, not :936. -32 dB was never tested (found at -30, missed at -34), so today's A3 floor lies somewhere between -30 and -34 dB, not 'about -30'. z1 is measured along the true path; a Viterbi emission over searched paths needs its own threshold, hence the Gumbel table. The sideband conflict is real: wfB:456, and z1 +112.8/+215.5/+593 in all1.txt and extra.txt.",
+    "revised_gain": "Inferred: up to the 6 dB emission gap (wfB:395), of which +2-3 dB is plausible; unmeasured.",
+    "checked": "wfB_parts.txt:395 and 456, design.md:933 and 942, lrx/scratch_chain/all1.txt and extra.txt."
+   },
+   {
+    "id": "L4",
+    "verdict": "keep",
+    "corrections": "Slope figures are from opt/buildrec/m_rounds.py and were not re-run. The +9% |delta| bias and the 0.81 overshoot are confirmed at wfB_parts.txt:159 and :179.",
+    "revised_gain": "",
+    "checked": "wfB_parts.txt:159 and 179, ltrack.py:526, demod.py:208-219."
+   },
+   {
+    "id": "L5",
+    "verdict": "keep",
+    "corrections": "The README figure is README.md:883 ('+0.15 dB on a quiet path (spec target +0.5 dB)'). The CE '--em 1' run in the build is +5.94 to +6.17 dB on one pass and +0.09 dB on the accumulator (lrx/scratch_c_intrx/out_e2e.txt:60-61).",
+    "revised_gain": "",
+    "checked": "em.py:283-288 and 357, ltrack.py:242, README.md:883, e2e-results.md, out_e2e.txt:60-61, all1.txt rows short-6 and short-12."
+   },
+   {
+    "id": "L6",
+    "verdict": "keep",
+    "corrections": "The arithmetic checks: 10log10(13.8/10.5) = 1.19 dB; 5log10(2.4) = 1.90 dB; L_CW_WINDOW 192 x T_L = 11.64 s (constants.py:75). All gains inferred.",
+    "revised_gain": "",
+    "checked": "waveform-l.md:360-366, design.md:941, constants.py:72-76, spec 2.2 levels (line 129)."
+   },
+   {
+    "id": "L7",
+    "verdict": "keep",
+    "corrections": "carrier_lines is acquire.py:384-421. For (b), acquire.drop_band_owned (acquire.py:1498-1519) already applies the 3.1-22.1 Hz own-band rule, but only to L preamble hits after A2. L7(b) moves it before the 16-line cut. The a1_rank2 counts are the docs lens's and were not re-run.",
+    "revised_gain": "",
+    "checked": "acquire.py:162-164, 384-421, 1498-1519; all1.txt."
+   },
+   {
+    "id": "L8",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "wfB_parts.txt:303-304; channel.py:176-177 (moderate 0.5 Hz/1 ms, mps 0.15 Hz/2 ms); all1.txt:122 (short-12mod: 2.82 latent against 4.19 genie)."
+   },
+   {
+    "id": "L9",
+    "verdict": "keep",
+    "corrections": "KC2G wander confirmed for 04:15Z (0.221 Hz rms). The excursion over the pass is about 0.6-1.25 Hz, from 1205.40 Hz at 17 s to 1206.0-1206.65 late. 03:45Z shows 0.684 Hz rms, mostly outliers.",
+    "revised_gain": "",
+    "checked": "track.py:144-147, ltrack.py:1146, wfB_parts.txt:115 and 182, measurement 2."
+   },
+   {
+    "id": "L10",
+    "verdict": "keep",
+    "corrections": "The kappa sd reductions are inferred from 1/sqrt(n) scaling (1/sqrt(1.19) and 1/sqrt(2.5)), not measured.",
+    "revised_gain": "",
+    "checked": "wfB_parts.txt:180, 256-258, 305-307; ldemod.py:86-89 and 126-129 (G_PRE_L 0.995, D_PRE_L 0.0200, D_REF_L 0.0236)."
+   },
+   {
+    "id": "C1",
+    "verdict": "revise",
+    "corrections": "'No false rejections in 15 real CE cases' misreads wfC_parts.txt:441. Those 15 cases include L, and they are where an unweighted-residual mutant changed no D3 verdict. The CE evidence is the R ranges at wfC:377: TINY 0.93-1.48; fading TINY 0.55-1.31 (fade2.txt:4); SHORT up to 2.16 at Z 48, kept (fade3.txt:4, -6 dB disturbed). The only CE pass seen above R 2 was strong. For a weak disturbed CE pass near Z 8.5 the margin is unmeasured. The junk figures (wfC:301, 437, 545) and the 0.09 s cost (wfC:439) are confirmed.",
+    "revised_gain": "Measured on the joint path: every junk CE pass from L is refused. The false-reject rate for weak fading CE is unmeasured.",
+    "checked": "receiver.py:600-618, 494-552; wfC_parts.txt:301, 377-380, 437-441, 545; lrx/scratch_c_intrx/fade2.txt and fade3.txt."
+   },
+   {
+    "id": "C2",
+    "verdict": "keep",
+    "corrections": "The non-positive-definite break is at track.py:1257. wfB:155 also records moderate fading at -20 dB: loss 2.91 to 2.62 dB, timing 0.121 T to 0.017 T.",
+    "revised_gain": "",
+    "checked": "track.py:1183-1260, ltrack.py:699, wfB_parts.txt:152-158 and 186."
+   },
+   {
+    "id": "C3",
+    "verdict": "keep",
+    "corrections": "The CE branch is acquire.py:1571-1580 (one preamble_search at hint_line). KC2G's hint error was 0.62 Hz on 04:15Z but 0.013 Hz on 03:45Z.",
+    "revised_gain": "",
+    "checked": "acquire.py:170, 178, 189, 424, 1561-1583, 1632-1650; measurement 2."
+   },
+   {
+    "id": "C4",
+    "verdict": "keep",
+    "corrections": "L's header LLR is at ldemod.py:339 (s2h = s2n_h*scale + D_HDR_L).",
+    "revised_gain": "",
+    "checked": "demod.py:55 and 252-256, ldemod.py:32-35, 87, 128, 339; spec 5.1 open points; associate.py:280."
+   },
+   {
+    "id": "F1",
+    "verdict": "keep",
+    "corrections": "transmit_args is native/gui/qrss_tx.cpp:139. A full lead-in starts 9.2 s (CE) to 9.5 s (L) before t0 (spec line 307), and the app keys 11 s early (ui-handoff.md:31), so it fits. Airtime is 10/1782.7 = 0.56%. Add L1's key-up caveat: the spec's reason for the lead-in is to absorb key-up drift, so the A1 gain measured on clean tones is optimistic for chirping rigs.",
+    "revised_gain": "",
+    "checked": "qrss_transmit.py:9, 12, 53, 91; qrss_tx.cpp:139-162; spec 2.8 (lines 303-314) and line 296; ui-handoff.md:31."
+   },
+   {
+    "id": "F2",
+    "verdict": "keep",
+    "corrections": "The cross-reference is wrong: L's header thresholds are D1, not D2 (D2 is gate V's noise tail). The version rule is at spec line 382 ('version is 2 (or 1 ...)').",
+    "revised_gain": "",
+    "checked": "spec lines 382 and 409, qrss_ce.c:179, spec 14 step 7."
+   },
+   {
+    "id": "F3",
+    "verdict": "revise",
+    "corrections": "'Measure first (D2)' should read D1. Arithmetic: +0.113 dB at rho 0.027 and +0.228 dB at rho 0, both correct. The header price, computed from CE's block -28.7 dB against both -30.3 dB: the copy's 1.6 dB share falls to about 0.9 dB at half rho, so about 0.7 dB of header depth with both copies (stated as about 1), and 3 dB for the copy alone. Spec line 384 already calls L's -27 dB estimate 'probably pessimistic too'.",
+    "revised_gain": "+0.11 dB on every L latent for about 0.7 dB of combined header depth (computed); format change, needs the spec owner.",
+    "checked": "spec 5 (line 384), 5.1 table, l_spread.py docstring, qrss-build/l-spread-header.md."
+   },
+   {
+    "id": "F4",
+    "verdict": "revise",
+    "corrections": "acquire.py:353-376 is a1_gamma and the end of carrier_line_stats. It does not show deflection linear in line power. The dB-for-dB claim follows from A1 being an energy detector at fixed CFAR, which is inferred. Arithmetic is correct: 10log10(30/10.5) = 4.56 dB, 10log10(70/89.5) = -1.07 dB, 20log10(0.708/0.656) = 0.66 dB. The section gains are from opt/transmit/m2_peaks.py and were not re-run.",
+    "revised_gain": "",
+    "checked": "acquire.py:331-421, waveform-l.md:360-362, design.md:617, spec 6.5."
+   },
+   {
+    "id": "F5",
+    "verdict": "revise",
+    "corrections": "The risk line is wrong. In spec 2.2, 11.7 dB was a pre-measurement expectation for kurtosis-3.45 latents. Real v5 latents measured 3.15 dB PAPR (3.12-3.18) and 12.2 dB SINR (12.0-12.4), only 0.1 dB below Gaussian. The table figures are confirmed: 0 dB gives 3.2/12.3/+1.6, -2 dB gives 2.7/10.6/+1.9. Computed at good (+2.2 dB): +0.3 dB useful power with SINR down to about 10.5 dB nets about +0.06 dB, consistent with the stated -0.1..+0.1.",
+    "revised_gain": "",
+    "checked": "spec 2.2 (lines 104-133) table and the paragraph after it."
+   },
+   {
+    "id": "F6",
+    "verdict": "revise",
+    "corrections": "Arithmetic: only the data section grows. 2,200 latents are 1,100 QPSK data symbols plus about 73 references at 1 in 16, so about 1,173 L symbols = 71 s, giving about 1,854 s, not 1,043 x 1782.7 = 1,860 s. The conclusion holds: the frame has 18 s of slack (spec line 296). Spec 12 itself sizes the option as +4.3% width (22.9 Hz), i.e. a faster symbol, not a longer frame.",
+    "revised_gain": "",
+    "checked": "spec lines 196, 296, 739; constants.py:74 (L_N_HDR 1320 with 83 references; 330 + 1320 + 26,987 = 28,637); decoder-measurements.md:84-90."
+   },
+   {
+    "id": "F7",
+    "verdict": "revise",
+    "corrections": "Units are mixed. decoder-measurements.md:86-90 gives +0.13 to +0.37 dB PSNR gross, about +0.17-0.19 at good, interpolating the +3 and 0 dB columns. The '+0.3 dB of SNR' is net of a 0.18 dB energy dilution that F7 does not pay, because the latents take freed reference slots. Slot arithmetic is correct: 1/16 - 1/48 = 4.17% of the section is freed, against 4.08% needed. The 0.11 dB reference loss is correct.",
+    "revised_gain": "Inferred: about +0.18 dB PSNR (roughly +0.4 dB SNR-equivalent, less 0.11 dB of tracking reference) at good; about 0 at usable.",
+    "checked": "constants.py:38, spec 6.6, decoder-measurements.md:84-90."
+   },
+   {
+    "id": "F8",
+    "verdict": "revise",
+    "corrections": "SSTVAE's 15.2 dB SINR is at +1 dB headroom and 3.4 dB PAPR. At the same +1 dB, L's own table gives 13.3 dB, so the like-for-like gap is about 1.9 dB, not 3.0. The arithmetic also uses W = +5 dB, which is not the good level (+2.2 dB, decoder-measurements.md:45). With the WHT precoder and scrambler, the clipper distortion is already noise-like (spec 2.4), which is a weaker lever for training than in OFDM; spec 2.2 says the advantage 'does not carry over'. Spec 12 (QRSSTVAE model) expects the gain mainly in the single-pass fading loss and in partial-pass decoding, not in the clipper.",
+    "revised_gain": "Inferred from the clipper alone: about +0.16 dB at the one-pass good level (12.2 to 14.1 dB SINR), about 0 deep in multi-pass. Any larger gain would come from fading and partial passes and is unquantified.",
+    "checked": "spec 2.2 table and lines 115-116, 2.4 (line 170), 12 'A QRSSTVAE model (later)' (lines 723-733)."
+   },
+   {
+    "id": "O1",
+    "verdict": "keep",
+    "corrections": "Rerun at 30 accumulators x 58 clusters (58 formed): Store.accumulator() 23.1 ms, header.decode 14.6 ms, weak headerless associate 0.46 s, header-decoded associate with resolve_provisional 16.31 s (about 9.4 ms per pair), against the lens's 14.16 s. associate runs inside _finish_apply under `with self.lock` (live.py:1303, call at about :1336). The 13-minute week-long figure stays inferred.",
+    "revised_gain": "",
+    "checked": "Measurement 3 (copy at opt/verify-evidence/m3_copy.py); associate.py:152-164 and 376-392; live.py:1298-1345; store.py:626."
+   },
+   {
+    "id": "O2",
+    "verdict": "keep",
+    "corrections": "Gate times confirmed in all1.txt. ce-12: CE preamble 0.89 s + CE tbd 1487.95 3.8 s + L tbd 1510.7 2.13 s = 6.82 s. ce+l60: CE tbd 1487.92 4.07 s, L tbd at 1500.0 2.47 s, 7.99 s in all. The sidebands are measured at +-11.5 Hz (wfC:379). Precedent: drop_band_owned (acquire.py:1498-1519) already drops L preamble hits 3.1-22.1 Hz below a stronger L hit; O2 extends that to A3/tbd candidates and CE sidebands.",
+    "revised_gain": "",
+    "checked": "receiver.py:584, acquire.py:1432-1470 and 1498-1519, all1.txt:46 and 58, wfB_parts.txt:456, wfC_parts.txt:379."
+   },
+   {
+    "id": "O3",
+    "verdict": "keep",
+    "corrections": "Line drift: the erase is at receiver.py:277 and meas = np.isfinite(R) at track.py:781. 15 refreshes x 30 s would be about 450 s; the quoted 330 s is plausible only because gate V stops after detect_until_s (300 s). The m1 numbers were not re-run.",
+    "revised_gain": "",
+    "checked": "live.py:40-44, 1225-1262, 610-640; receiver.py:277; track.py:777-783."
+   },
+   {
+    "id": "O4",
+    "verdict": "keep",
+    "corrections": "Line numbers: tx_panel.cpp:1585 and qrss_tx.cpp:352. The benefit is real only for duty- or heat-limited stations, where CE must run lower; at a PEP limit, L's level is already at the peak.",
+    "revised_gain": "",
+    "checked": "tx_panel.cpp:1585, qrss_tx.cpp:346-352, core/tx/engine.cpp:77-85, spec line 204, waveform-l.md:37."
+   },
+   {
+    "id": "O5",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:1143-1158, 1316-1347; wfC_parts.txt:68 and 303; receiver.py:66-68."
+   },
+   {
+    "id": "O6",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:735, 798-801, 942-990 (stored from the uid's q prefix at about :963-966, skip at :971); wfC_parts.txt:69 and 305-306."
+   },
+   {
+    "id": "O7",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "receiver.py:70-79, wfC_parts.txt:301 and 545, spec 14 step 7."
+   },
+   {
+    "id": "O8",
+    "verdict": "revise",
+    "corrections": "kalman_rts (track.py:838) also has a pure-Python RTS backward loop; port both. On bit identity, _kf_forward (track.py:777-836) uses only float and complex adds, float*complex and math.log. CPython 3.13 evaluates k1*inn as a complex product (k*re - 0.0*im, k*im + 0.0*re), which equals a scalar multiply except for signed zeros, so a C port with -ffp-contract=off can be exact if it spells that out. The profile was not re-run. Its CE-only run made 712 _kf_forward calls against the joint run's 460, so the two runs did different work.",
+    "revised_gain": "",
+    "checked": "track.py:777-900, 141, 891; the cProfile figures in the idea (lens)."
+   },
+   {
+    "id": "O9",
+    "verdict": "revise",
+    "corrections": "The 25 s refresh is not redundant. live_end_s() = 28.5 s, so candidates are cached as final only once 29.5 s is heard (live.py:1185). Only the 145 s and 265 s refreshes re-gate the cached lines.",
+    "revised_gain": "About 18-26 s of CPU per known signal per slot (2 x 9-13 s), not 20-30.",
+    "checked": "live.py:1180-1189 and 1244-1256; acquire.py:1537-1540 (28.506 s, computed); LiveConfig first_s 25, refresh_s 120, detect_until_s 300."
+   },
+   {
+    "id": "O10",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:315-357, wfB_parts.txt:114."
+   },
+   {
+    "id": "O11",
+    "verdict": "keep",
+    "corrections": "Add: refused hints are blind candidates in the finish, ordered before every A3 hit (acquire.py:1403-1428), so wrong-frequency hints eat the same budget (see missing).",
+    "revised_gain": "",
+    "checked": "live.py:104-108, 315-357, 1021; wfB_parts.txt:399; e2e-results.md."
+   },
+   {
+    "id": "O12",
+    "verdict": "revise",
+    "corrections": "The slot arithmetic q_k - 2(k - g) is store.due's assumption (store.py:396-411), not a rule of the format. Spec 3 lets segments 'go in consecutive slots or be spread out', and spec 10 says mode B/C use 'the same schedule for every segment', spread across the day, with frequency changed on every pass. The app's scheduler sends a send's passes 'half an hour apart' at one freq_hz (qrss_schedule.hpp:80, 91), so the back-search is exact only for such senders. Other senders need a band-wide known-waveform search per candidate slot.",
+    "revised_gain": "Inferred: as stated, but only for back-to-back, fixed-frequency senders.",
+    "checked": "store.py:393-411, spec 3 (lines 316-349), 10 (lines 654-667), qrss_schedule.hpp:72-91, em.py:554 and 710."
+   },
+   {
+    "id": "O13",
+    "verdict": "keep",
+    "corrections": "The recover skip is at live.py:971.",
+    "revised_gain": "",
+    "checked": "live.py:1040-1046, 1067-1078, 960-975."
+   },
+   {
+    "id": "O14",
+    "verdict": "keep",
+    "corrections": "The CLI already exposes --recover-hours (qrss_listen.py:90), called at :183.",
+    "revised_gain": "",
+    "checked": "live.py:110, 1037-1041; qrss_listen.py:90 and 183."
+   },
+   {
+    "id": "O15",
+    "verdict": "revise",
+    "corrections": "Bit identity needs two tie cases handled. (1) preamble_p clamps p to 1.0 (acquire.py:789), so when every cell has p >= 0.25, np.argmin returns flat index 0, not the Lambda-maximum cell. (2) Equal floating p at different Lambda. The full p map is used by tests (test_qrss_acquire.py:199, 314, 385-386; test_qrss_lacquire.py:180), so keep preamble_p and add a fast path for the one caller at acquire.py:852. k = nc // g is at acquire.py:772.",
+    "revised_gain": "",
+    "checked": "acquire.py:749-790 and 848-860; grep of preamble_p callers; wfB_parts.txt:399."
+   },
+   {
+    "id": "O16",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "ltrack.py:161-216, wfB_parts.txt:8."
+   },
+   {
+    "id": "O17",
+    "verdict": "keep",
+    "corrections": "Correct as stated. verify_track(fit=True) runs fit_timing and then track(refine=False, outer=0), so a re-run at fit=False with v's timing reproduces the track. The FULL cost of about 1 s is inferred.",
+    "revised_gain": "",
+    "checked": "receiver.py:600-618, track.py:1360-1409 and 1575-1603, wfC_parts.txt:439."
+   },
+   {
+    "id": "O18",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:1014-1028."
+   },
+   {
+    "id": "O19",
+    "verdict": "revise",
+    "corrections": "Add the part R1 cannot fix: a CE carrier may be named at 300 or 2700 Hz (CARRIER_BAND_HZ, constants.py:62), and its 99% band (+-25.75 Hz) then reaches 274 or 2726 Hz. There the front end is about -2 dB (computed: -6.02 at 250, -1.36 at 280 Hz), so the signal itself is cut, not just the noise estimate. L's floor (tx.py:159-170, pilot at least 322.07 Hz) puts data at 300 Hz (-0.29 dB).",
+    "revised_gain": "Avoids the measured 6.5 dB edge case until R1 lands, and up to about 1-2 dB of CE signal loss at the extreme edge (inferred from the FE response).",
+    "checked": "qrss_tx.hpp:52-53, constants.py:62, tx.py:159-170, live.py:135-139, measurement 1."
+   },
+   {
+    "id": "O20",
+    "verdict": "keep",
+    "corrections": "Spec 2.2 already says 'ALC not engaged' (line 133). The windows and the lead-in send the pilot at the data's average power (spec line 129).",
+    "revised_gain": "",
+    "checked": "qrss_transmit.py:19-21, spec 2.2 lines 129 and 131-133."
+   },
+   {
+    "id": "O21",
+    "verdict": "keep",
+    "corrections": "Rerun: associate of a weak headerless pass is 0.46 s at 30 x 58 (rules 2-4 together).",
+    "revised_gain": "",
+    "checked": "live.py:1476, associate.py:263-352, measurement 3."
+   },
+   {
+    "id": "O22",
+    "verdict": "keep",
+    "corrections": "Line numbers: main_window.cpp:154-155, rx_panel.cpp:379-380 (also :255-256), qrss_window.cpp:673-674; the open question is at ui-handoff.md:137-138.",
+    "revised_gain": "",
+    "checked": "the files named, plus ui-handoff.md:137-138."
+   },
+   {
+    "id": "D1",
+    "verdict": "keep",
+    "corrections": "Spec line 384 also says L's estimate 'is probably pessimistic too', which supports the -30 to -32 dB expectation.",
+    "revised_gain": "",
+    "checked": "spec lines 382-384 and 5.1 table, waveform-l.md:166-169, qrss-build/l-spread-header.md."
+   },
+   {
+    "id": "D2",
+    "verdict": "revise",
+    "corrections": "The timed L figure was re-measured. Builder: sd 0.62 (wfB_parts.txt:110). Reviewer, 60 seeds: mean 0.02, sd 0.78, max 1.86 (wfB:148). For blind L, the builder's number over a blind search was mean 0.94 against CE's 0.19 (wfB:109), and the reviewer's 20 seeds gave 0.52/1.16/3.17 (wfB:178). With the builder's mean, a Gaussian puts 6 at (6 - 0.94)/1.16 = 4.4 sigma, about 6e-6 rather than 1e-6. Both are inferred.",
+    "revised_gain": "",
+    "checked": "wfB_parts.txt:109-110, 148, 159, 178; constants.py:64; track.py:1386-1392."
+   },
+   {
+    "id": "D3",
+    "verdict": "keep",
+    "corrections": "The -1/T_L alias is already measured and handled for preamble hits by drop_band_owned (acquire.py:1498-1519): it passes A2-L 3/12 at -12 dB and 12/12 at -6 and 0 dB, with timing up to 1.9 T_L off, hence 3 T_L. The open gap is passes from A3, tbd or hints in the 20-22.07 Hz strip, where only GHOST_HZ (20, receiver.py:100) applies.",
+    "revised_gain": "",
+    "checked": "receiver.py:100 and 430-439, design.md:926, acquire.py:1498-1519, live.py:1399-1433."
+   },
+   {
+    "id": "D4",
+    "verdict": "revise",
+    "corrections": "The premise is largely false. tests/test_qrss_multipass.py holds about 30 store and associate unit tests: rules 1, 2 (pairwise and restrictions) and 4 with resolution; due at :813; expiry; merges; atomic writes; idempotent reassociation. test_qrss_lreceiver.py:457 covers headerless filing (the wfC:497 bug), and test_qrss_live_l.py:319 is the tile-by-centre twin stub. The real gap is a store.twin cross-waveform unit test and a real FULL run of the twin-call path (wfC:552).",
+    "revised_gain": "",
+    "checked": "ls tests; grep def test_ in test_qrss_multipass.py; grep of the headerless and twin tests; wfC_parts.txt:199, 497, 552."
+   },
+   {
+    "id": "D5",
+    "verdict": "keep",
+    "corrections": "Citations: design.md:607 (Gamma(M)) and :617-619 (ten 2 s chunks, Gamma(10)). design.md:1227 itself records 591 tests in 157.4 s, so the 90 s budget is already acknowledged as missed. The dates may both be right: CE on air since 10-09 (waveform-l.md:6), format v2 since 10-10 (constants.py:39 comment).",
+    "revised_gain": "",
+    "checked": "docs/qrss/README.md:22 and 31, design.md:5, 28, 603-621, 670, 724, 1090, 1227, 1310-1311; track.py:104; constants.py:38-39 and 74."
+   },
+   {
+    "id": "D6",
+    "verdict": "keep",
+    "corrections": "Confirmed. The log line sits at the loop body's indentation (live.py:1274-1275) and already did so at 5d130d2~1:sstvae/qrss/live.py:1113-1114. The fix changes logs only, not CE results. 10log10(1.057) = 0.24 dB.",
+    "revised_gain": "",
+    "checked": "live.py:1263-1276, git show 5d130d2~1, ltrack.py:121 and 869, acquire.py:1537-1540."
+   },
+   {
+    "id": "D7",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "waveform-l.md:360-366."
+   },
+   {
+    "id": "D8",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "qrss_transmit.py:19-21, spec 2.2 ('3.15 dB PAPR (3.12 to 3.18)')."
+   },
+   {
+    "id": "D9",
+    "verdict": "keep",
+    "corrections": "Confirmed: the spec never says USB; the only 'sideband' hits are density tables. The 60 m note is docs/qrss/60m.md:15 ('Dial 5352.0 kHz, USB').",
+    "revised_gain": "",
+    "checked": "grep of USB/LSB/sideband in the spec, README.md:273, 60m.md:15, demod.py:83."
+   }
+  ],
+  "insight_corrections": [
+   "Insight 2: it is two passes, not 'two header copies', that combine 2.4 dB deeper against an ideal 3 (spec 5.1 line 412; spread-header-checks.md:22). 'A2-L 2/8 at -34' is from the pre-build prototype (lrx/map_acquire.md:22, 101); wfB has 8/8 at -25/-28/-31 only. The L A3 floor lies between -30 dB (found) and -34 dB (missed): -32 was never tested.",
+   "Insight 3: the lead-in energy ratio is about 6.8 dB (10 s at pilot gain 1.0 against 20 s at a 10.5% share, 4.76x), not about 6 dB. design.md:605 excludes the lead-in from A1 for a timing reason that does not bind A1, but spec 2.8 (line 311) says key-up drift happens early in the lead-in.",
+   "Insight 4: the W figures are lrx/scratch_c_intrx/out_e2e.txt:49-50 (Z_ref 115.2 against 74.8). Mean W is the receiver's own arithmetic mean, which reads above latent SNR (insight 11). The app line is tx_panel.cpp:1585.",
+   "Insight 5: 0.75 dB is the cost at W = +5 dB of channel SNR. At the good level (+2.2 dB total, decoder-measurements.md:45), L's 12.2 dB distortion costs about 0.46 dB and CE's about 0.36 dB (computed). The 16-pass figure is consistent with spec 2.4's 0.06 dB fixed part at good.",
+   "Insight 7: KC2G was a CE-CE case in which the neighbour was not excluded at all, fixed by excluding verified neighbours (README.md:348-357). The dense-L risk is the separate both-sides-empty 'quieter side' rule: analogous, not the same failure.",
+   "Insight 8: the bias does not come from a fallback. With no neighbour, noise_psd pools both sides into one median, and the skirt half drags it down. With the in-band side excluded, only the skirt side is used (frontend.py:336-347). FE response (measured by me): 180 Hz -52.0, 200 -29.6, 220 -16.8, 250 -6.02, 280 -1.36, 300 -0.29, 310 -0.10, 326 -0.01 dB, symmetric at the top.",
+   "Insight 9: the two KC2G passes do not share a key-up signature. 04:15Z: +0.030 Hz/min, 0.221 Hz rms. 03:45Z: +0.005 Hz/min, 0.684 Hz rms with outliers at 1208.38 and 1203.76. 03:45Z's stored end value (1205.472) was only 0.013 Hz off. The 'warm-up chirp restarting at each key-up' idea is weak, and the 0.5 Hz error is consistent with the 04:15Z end-value artefact but not traced to a record.",
+   "Insight 13: the CE-only and joint profiles differ in work, not just warm-up: 712 against 460 _kf_forward calls. The build's wall-clock figure goes the other way: 12.6 s joint against 7.7 s --just-ce (wfC_parts.txt:440).",
+   "Insight 14: CE |z1| <= 2.3 holds only at -15/-20/-25 dB (design.md:933). Strong CE reached z1 4.2-5.1 at -10/-5/0 dB (wfB_parts.txt:431, design D30), which is why z_above <= 3 was added. The sidebands are measured at +-11.5 Hz (wfC:379).",
+   "Insight 15: the R ranges are confirmed (wfC:377-380; fade2.txt:4 R 0.55; fade3.txt:4 R 2.16 at Z 48, -6 dB disturbed). The only CE pass seen with R > 2 was strong, so the margin for weak fading CE is unmeasured.",
+   "Insight 16: L's -1/T_L alias is already measured and suppressed for preamble hits by drop_band_owned (acquire.py:1498-1519): A2-L passes it 3/12 at -12 dB and 12/12 at -6 and 0 dB. Only the post-gate ghost rule is unmeasured.",
+   "Insight 18: rerun at 30 accumulators x 58 clusters gives 16.31 s (about 9.4 ms per pair), accumulator load 23.1 ms, header.decode 14.6 ms, weak-pass associate 0.46 s. picture_id is at picture.py:113-122.",
+   "Insight 19: the callsign source is e2e-results.md:93 ('2 of 17 ... match test agreed in all 17 (Z 15-50)') and README.md:756.",
+   "Insight 23: the no-ring return is qrss_window.cpp:673-674, with set_ring(nullptr) at rx_panel.cpp:379-380.",
+   "Insight 25: INT-RX left 6 of 77 alive on the first sweep and 2 of 78 at the end (wfC_parts.txt:480-482).",
+   "Insight 12: CE's kappa 0.2-0.7 against an honest 0.9-1.2 was measured in moderate fading with 2-3 seeds per case (wfB_parts.txt:282)."
+  ],
+  "missing": [
+   "Hints assume a practice the spec rejects. Spec 10 (qrsstvae-options.md:662) tells senders to change frequency on every pass, and spec 3 lets segments be spread out. store.due and live._hints predict 'the same waveform at the same frequency' in slot q_k + 2(g - k) (store.py:396-411; live.py:1191-1223). Only the app's scheduler matches that assumption: one freq_hz per Entry, passes half an hour apart (native/gui/qrss_schedule.hpp:80, 91). A hint that fails A2 is not dropped at the finish. It becomes a blind candidate (acquire.py:1403-1428; _joint_detections returns pre + hinted + tbd), gated before every A3 hit at 60-80 s each on FULL (waveform-l.md:245), against FINISH_BUDGET_S 180 (live.py:108). So spec-compliant movers can turn every due hint into budget waste (inferred, not measured). Receiver fix: hints that fail A2 become A2-only, as the live path already does (live.py:1189). Spec fix, for the spec owner: decide whether a picture's segments keep one frequency (spec 6.5, line 523, leaves it open).",
+   "The lead-in exists to absorb key-up drift. Spec 2.8 (line 311) says receivers 'should take the starting state from the last 8 s of the lead-in'. An L1 A1 window starting at -10.5 s therefore includes the chirp. The measured +5 dB used clean tones, so start the window near -8.5 s, or measure with a simulated key-up chirp, before F1 is made the default. Inferred.",
+   "Moving the front-end cutoff is an alternative to R1/O19. With firwin(255, 1250 Hz) the FE is -6 dB at 250 and 2750 Hz and is flat only from 310 to 2690 Hz (measured), so both the noise bins and a 300 Hz CE carrier's own lower sideband (274 Hz, about -2 dB) sit on the skirt. Raising the cutoff about 50 Hz, or lengthening the filter, would put 300-2700 Hz inside the flat region. That fixes the signal and the noise together, but it changes every CE result, so it needs a flag or Jeff's OK. Inferred, not measured.",
+   "R7 and O1 interact. Rule 2 decodes once per near provisional cluster for every headerless pass, under the listener lock (associate.py:274-292; live.py:1303). Any larger list size, or more junk clusters (C1/O7), multiplies a 14.6 ms decode across a growing store. Do O1(c), associate outside the lock, before R7.",
+   "Existing precedents can be reused. drop_band_owned (acquire.py:1498-1519) already implements the L own-band rule, with its timing window, for preamble hits, and drop_symbol_rate_aliases handles CE's +-1/T. O2, L7(b) and D3 should extend those functions rather than add a third geometric rule.",
+   "CE's fading header is bounded by tracking. Spec 5.1: gate V fails on 14 of 16 passes at -28 dB moderate, and both copies decode at -26.9 dB moderate against -30.3 dB steady. That makes C2's timing fixes, behind a flag, the better-supported CE header lever than R7's list size, which helps mostly on steady paths."
+  ]
+ },
+ {
+  "lens": "feasibility",
+  "verdicts": [
+   {
+    "id": "R1",
+    "verdict": "revise",
+    "corrections": "(1) The fallback is described wrongly. If a neighbour empties one side, sel is not empty, so the skirt side is used on its own. With no neighbour at all, the median is taken over both sides together, and it is still biased when one side sits in the skirt. The quieter-side min fires only when both sides are excluded (frontend.py:334-345). (2) Dividing every bin by |H_FE|^2 is NOT bit-identical mid-band. Measured: the passband ripple is 2.5e-4 dB over 500-2500 Hz. To keep mid-band bit-identical, touch only bins where |H| is below -0.01 dB (below 324 or above 2676 Hz, measured), or mask bins below -0.1 dB (310/2690 Hz). Then only channels centred below about 444 Hz or above about 2556 Hz change. (3) A rig's SSB filter rolls off at the same edges, and an FE-only correction cannot know about it. Near an edge, prefer the inward side or the log-average of the two sides (exact for a slope linear in dB), never the min. (4) There is a second caller: acquire.lead_in_span (acquire.py:965-968) calls noise_psd with no exclusions. At an edge it reads a low sigma2, inflates the lead-in Z, and can claim a lead-in on CE preamble hits that was never sent. Fix both callers. (5) It is more urgent than ranked: docs/qrss/60m.md:17-18 recommends audio offsets of 300-1900 Hz, so the recommended low end sits right in the failing zone. The seam exists: ChanCapture.noise_psd_at already knows mix_audio_hz (track.py:186-193).",
+    "revised_gain": "",
+    "checked": "frontend.py:59, 301-345; track.py:168-193; acquire.py:935-968; computed the _FE_TAPS freqz (>= -0.01 dB from 324 to 2676 Hz, >= -0.1 dB from 310 to 2690, -1.4 dB at 280 Hz, -6.0 at 250, -12.3 at 230, -29.6 at 200); docs/qrss/60m.md:17-18",
+    "id_note": ""
+   },
+   {
+    "id": "R2",
+    "verdict": "revise",
+    "corrections": "Cheaper than stated. track.report already computes line = np.polyfit(tf, fA, 1) over the frame and stores its slope as drift_hz_per_min, but it stores offset_hz = tr.freq(0.0) (track.py report, ~1608-1631). The line's intercept is already computed, so add it as a report field. Also a bug: detection_from_pass (receiver.py:398-406) builds its path from offset_hz (the spline's end value) plus the line's slope, a mixed estimate. Use the intercept there too. Hints read store pass_info f_hz (store.py:296-307, due:411-414) and tile f_hz (live.py:1211-1216), so both need the new field, with a fallback for old entries. pass_uid stays on f_hz. CE needs a flag because hinted acquisition changes.",
+    "revised_gain": "",
+    "checked": "receiver.py:292/337 (f_hz = tr.freq(0.0)), 398-406; track.py report(); store.py due/pass_info; live.py _hints"
+   },
+   {
+    "id": "R3",
+    "verdict": "keep",
+    "corrections": "Two points to add. (a) A hint that A2 fails today is put in `hinted` (acquire.py:1648-1651) and becomes a gate-V candidate at the finish, about a minute each in the 12-candidate / 180 s budget. The A2-only flag must also keep those hints out of `hinted`, not just out of live gating. (b) store.due hints only missing later segments g > k (store.py:393-417), so a repeat of the same segment, the main multi-pass case, is never hinted today. That makes R3 more valuable than ranked. Cost per remembered station: one A2 per waveform, measured at 81-101 ms per line on shared CPUs (opt/verify_feas/m2_a2.py), plus three L offsets. For 20 stations that is about 2-6 s per acquisition. Pair it with C3's sub-threshold-argmax refinement.",
+    "revised_gain": "",
+    "checked": "live.py:1160-1223; store.py:393-417; acquire.py:1636-1651; m2_a2.py timing"
+   },
+   {
+    "id": "R4",
+    "verdict": "revise",
+    "corrections": "At the spec's 30 Hz L spacing, occupied bands (about 22 Hz plus a margin) leave gaps of only about 5-8 Hz per 30 Hz. Even per-waveform exclusion then leaves almost no clean bin 85-120 Hz away, so in a dense band the fallback decides the result. Use the median of unoccupied gap bins across the band, and note that A1's band-wide CFAR median is itself biased once more than half the band is occupied (inferred). Plumbing: exclude_hz carries bare centres through channel_for, ChanCapture.exclude_hz and noise_psd (receiver.py:176-198, track.py:168-193). Per-waveform widths need (centre, half-width) pairs, and lead_in_span (acquire.py:967) needs them too. Medium cost, not small. The fallback change touches CE wherever it fires, so it needs a flag.",
+    "revised_gain": "",
+    "checked": "receiver.py:55-75, 176-198, 563-575; frontend.py:301-345; track.py:168-193"
+   },
+   {
+    "id": "R5",
+    "verdict": "revise",
+    "corrections": "Make the fix bit-identical whenever there is no strong L signal. Notch only verified strong L lines (above -6 dB, which A1 finds trivially on the un-normalised FE) before the running median, and leave normalise (frontend.py:168-208) unchanged otherwise. CE is constant envelope and cannot cause this, so the STFT bin-median variant would change every CE result in exchange for a fix to an L-only problem. capture_prepare normalises before acquisition runs (live.py:298-300), so the order needs a cheap A1 pre-pass. Medium cost.",
+    "revised_gain": "",
+    "checked": "frontend.py:168-208; live.py:287-312"
+   },
+   {
+    "id": "R6",
+    "verdict": "keep",
+    "corrections": "Confirmed: _soft_header sums unweighted (associate.py:279-281), with the pair fallback after. Weighting adds no decode attempts, so the false-accept rate is unchanged.",
+    "revised_gain": "",
+    "checked": "associate.py:263-295"
+   },
+   {
+    "id": "R7",
+    "verdict": "revise",
+    "corrections": "Now measured (opt/verify_feas/m1_list.py: steady BPSK AWGN LLRs, random headers, 150-200 trials per point). Decode rates at Es/N0 -11.0 / -10.5 / -10.0 / -9.5 dB: list 8 12 / 34 / 67 / 87%, list 32 20 / 55 / 77 / 93%. The 50% point moves from about -10.26 to -10.57 dB (+0.3 dB), and the 90% point also moves about 0.3 dB. CPU is about 1.4x, not 4x: 24-26 ms per attempt at list 8 against 33-36 ms at list 32. So it is cheap enough for every header decode, single-pass included, not just combined sums. header.decode already takes list_size (header.py:204-216), so the code is one argument. The spec states list 8 (spec line 382), so route the change to the spec owner. False accepts rise about 4x per attempt, and the attempts per pass grow with store size (clusters x pairs in _soft_header), so quote the per-pass rate. Fading gain is smaller (tracking-limited). CE needs a flag.",
+    "revised_gain": "+0.3 dB of header threshold on steady paths (measured at the 50% and 90% points), at about 1.4x decode CPU",
+    "checked": "header.py:204-216; polar.py:181-211; m1_list.py run (two runs, 1,350 decodes)"
+   },
+   {
+    "id": "R8",
+    "verdict": "revise",
+    "corrections": "Deprioritise. At the good level (latent SNR about +2 dB) the soft symbol estimates still carry an MSE of about 0.4 of the latent power. A distortion re-synthesised from them through a whole-frame clipper (L) or the PM nonlinearity (CE) therefore correlates poorly with the true distortion, so recovering half of the 0.33-0.41 dB is optimistic. It is worth nothing from 2-4 passes on, which is where QRSSTVAE operates. Park it.",
+    "revised_gain": "under 0.1 dB at one strong pass, 0 at multi-pass (inferred)",
+    "checked": "demod.py:50-56 (D_PASS); the list's arithmetic"
+   },
+   {
+    "id": "L1",
+    "verdict": "keep",
+    "corrections": "The seam exists. carrier_line_stats takes span_s (acquire.py:331). capture_read already reads PB_LEAD_S = 15 s before t0 (live.py:276-284), so the -10.5 s window has audio in both live and passband captures, and A3 already starts at TBD_START_S = -10 s (acquire.py:193). The extra lines need an A2-L-only path beside pilot_lines (acquire.py:1630-1632). In joint mode, extra L preamble hits share the 12-candidate / 180 s finish budget, so in busy slots CE candidates later in the order can be crowded out, changing joint-path CE results (CE-only is unaffected). It pays only with F1.",
+    "revised_gain": "",
+    "checked": "acquire.py:160, 193, 331-350, 1603-1660; live.py:276-284"
+   },
+   {
+    "id": "L2",
+    "verdict": "keep",
+    "corrections": "Confirmed CE-only (em.py:571, 668, 728). live.py imports nothing from em, so the live use is a separate job (O12). Large cost, as stated.",
+    "revised_gain": "",
+    "checked": "em.py:232-235, 554-571, 653-668, 710-728; grep of live.py"
+   },
+   {
+    "id": "L3",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "wfB_parts.txt ACQ open issue as cited; acquire track_before_detect shape_specs"
+   },
+   {
+    "id": "L4",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "ltrack.py:526 (_fit_delta); demod.py joint estimator as cited"
+   },
+   {
+    "id": "L5",
+    "verdict": "revise",
+    "corrections": "The listener never runs EM: live.py has no em import, and em_refine and retro_detect are called only from qrss_decode.py:177-181. A ported L rereceive therefore reaches only operators who run qrss_decode --em by hand. The part that pays (header-known round B) should be wired into the finish child for passes whose header came from association (see missing ideas). pass_path is CE-only too (em.py:250), so L needs a path from refine_path_l. make_classes_l(spec, hdr_bits, prior) exists (ltrack.py:242-267). Cost medium, as stated.",
+    "revised_gain": "",
+    "checked": "em.py:250, 270-345, 350-390; ltrack.py:242-267; qrss_decode.py:170-181; live.py imports"
+   },
+   {
+    "id": "L6",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "acquire.py A1 span/pilot_lines; constants.py L_CW_AFTER_FULL"
+   },
+   {
+    "id": "L7",
+    "verdict": "keep",
+    "corrections": "Confirmed: carrier_lines stops at v <= thr (acquire.py:400-402). Extra L hits share the joint finish budget (see L1).",
+    "revised_gain": "",
+    "checked": "acquire.py:384-421"
+   },
+   {
+    "id": "L8",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "build records as cited (not re-run)"
+   },
+   {
+    "id": "L9",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "ltrack.py:1146 docstring ('ratio, fine_ratio and fine_share stay CE's')"
+   },
+   {
+    "id": "L10",
+    "verdict": "keep",
+    "corrections": "The constants exist: G_PRE_L = 0.995 (ldemod.py:89) and D_PRE_L = 0.0200 (ldemod.py:129), so item (1) is wiring only.",
+    "revised_gain": "",
+    "checked": "ldemod.py:84-132; ltrack.py:94, 397-400 (PILOT_REACH masking)"
+   },
+   {
+    "id": "C1",
+    "verdict": "revise",
+    "corrections": "A flag helps only updated stations that run --just-ce. Every fielded pre-L listener keeps misreporting L whatever is built now, which is O7's release note, not this. The non-joint detect has no re-check (receiver.py:494-532) and _gate does (receiver.py:600-618). With O17 the check costs nothing extra. The default is a policy decision for Jeff.",
+    "revised_gain": "",
+    "checked": "receiver.py:494-532, 600-645"
+   },
+   {
+    "id": "C2",
+    "verdict": "keep",
+    "corrections": "Code confirmed: the residual form (track.py:1218-1220) and the stop on the first non-positive Hessian, 'if np.any(w <= 0): break' (track.py:1252-1253).",
+    "revised_gain": "",
+    "checked": "track.py:1183-1265; ltrack.py:699-720"
+   },
+   {
+    "id": "C3",
+    "verdict": "revise",
+    "corrections": "There is a better, cheaper variant. Whenever A1's best cell within +-2 Hz is under threshold, hint_line discards its location and returns the bare f (acquire.py:424-438). Instead, add that sub-threshold argmax as an extra A2 line beside the bare f. CE's carrier ranks first band-wide down to -31 dB (docs lens), so within +-2 Hz its argmax is reliable. Do the same for L before the three offsets. Arithmetic: with 2 s chunks (A2_CHUNK 66), a residual of more than about 0.75 Hz beyond the df grid's edge nulls even the shortest scale, so a 1 Hz hint error loses A2 outright. Both paths need it: CE-only acquire (acquire.py:1569-1581) and joint (1636-1651). Needs a flag.",
+    "revised_gain": "",
+    "checked": "acquire.py:166-189, 424-438, 1543-1581, 1603-1651"
+   },
+   {
+    "id": "C4",
+    "verdict": "revise",
+    "corrections": "Lowest priority. At the header's operating point (about -28 dB) s2n_h is about 25 per symbol (inferred from CE's 33.7% linear share at 33 Bd), against D_PASS = 0.0466. D_PASS is therefore negligible, and the 0.85 must come from the gain term applied to +-1 symbols, not from D. Fix the gain, not D. The 0.03 dB gain hardly justifies a flag on its own; bundle it with R6.",
+    "revised_gain": "",
+    "checked": "demod.py:240-262, 50-56"
+   },
+   {
+    "id": "F1",
+    "verdict": "keep",
+    "corrections": "qrss_transmit.py sits at the repo root, and line 53 holds --lead-in with default 0.0. The WAV already starts 12 s before t0 (its docstring), so a 10 s lead-in fits. The C beacon needs nothing: 'key the output early' (qrss_ce.h:32-34). A new app setting has to go into the tests/test_native_settings.py non-default fixture and the settings-dialog round trip.",
+    "revised_gain": "",
+    "checked": "qrss_transmit.py:1-60; native/gui/qrss_tx.cpp:139-163; qrss_beacon_c/qrss_ce.h:32-34"
+   },
+   {
+    "id": "F2",
+    "verdict": "revise",
+    "corrections": "The 'free now' window is narrower than stated. The L transmitter (d357ec8) is on origin/waveform_l only, not on origin/master, qrss, qrss-live or waveform_ce, and that branch was pushed 2026-10-12. The app on it already offers L transmit (native/gui/qrss_tx.cpp:33-34, 155-157). So the batch must be decided before the branch merges or anyone keys L from it; say plainly 'do not put L on the air yet'. An L-only bump is cheap on the receiver side: L headers accept only version 2 (receiver.py L_HEADER_VERSIONS = (2,)).",
+    "revised_gain": "",
+    "checked": "git merge-base checks on all remote branches; native/gui/qrss_tx.cpp; receiver.py:110"
+   },
+   {
+    "id": "F3",
+    "verdict": "revise",
+    "corrections": "Cheaper in code than stated: hdr_rho is already a per-frame attribute (lframe.py:92-105), lframe.data_latents and make_classes_l read spec.hdr_rho, and ldemod.d_pass_x(spec) uses it (ldemod.py:137). But ldemod.py:132 D_PASS_LX hard-codes the shared SPREAD_RHO, which is exactly the silent mis-weighting hazard the risk names. Remove it. The cost is the D1 measurement plus re-pinning.",
+    "revised_gain": "",
+    "checked": "lframe.py:28-32, 92-105, 289-296; ldemod.py:58, 131-137, 190; frame.py:84-97"
+   },
+   {
+    "id": "F4",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "ldemod.py:110-113 (PILOT_GAIN_PRE 0.656, HDR 0.664, DATA 0.703)"
+   },
+   {
+    "id": "F5",
+    "verdict": "keep",
+    "corrections": "Confirmed: L_CLIP_HEADROOM_DB = 0.0 and L_CLIP_OVERSHOOT = (1.0, 1.5, 2.0) (constants.py:69-71).",
+    "revised_gain": "",
+    "checked": "constants.py:63-71"
+   },
+   {
+    "id": "F6",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "arithmetic only"
+   },
+   {
+    "id": "F7",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "constants.py:38"
+   },
+   {
+    "id": "F8",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "n/a (future item)"
+   },
+   {
+    "id": "O1",
+    "verdict": "revise",
+    "corrections": "Incremental resolution reproduces the old decisions only if it tracks every change since the last resolve. Rule-3 (corr) and rule-4 (provisional) attaches, and accumulator expiry, change sums without calling resolve_provisional (associate.py:321-352). Within one resolve, a cluster attached early changes the accumulator that later clusters are tested against (associate.py:376-392). So it needs a dirty set with a cascade, plus an old-against-new equality test on a synthetic store. _identify_provisional also loads accumulators under the lock (live.py:1350-1377). Moderate, as stated.",
+    "revised_gain": "",
+    "checked": "associate.py:152-164, 279-392; live.py:1303-1377"
+   },
+   {
+    "id": "O2",
+    "verdict": "keep",
+    "corrections": "Confirmed: the joint path skips only within MERGE_HZ of a found centre (receiver.py:583-585), and an L copy's centre sits 9.5 Hz from the CE carrier.",
+    "revised_gain": "",
+    "checked": "receiver.py:560-598"
+   },
+   {
+    "id": "O3",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:287-312, 1225-1262; track.py:780 (meas = np.isfinite(R))"
+   },
+   {
+    "id": "O4",
+    "verdict": "revise",
+    "corrections": "No gain where the limit is peak power. US 60 m is 9.15 W ERP, a PEP-based limit (qrss-spec/60m-rules.md), and there L and CE tie. The 3.2 dB applies only to heat- or duty-limited stations, such as 25-50 W on 30 m. The stronger argument is CE: the QRSS pass reuses SSTVAE's single level (tx_panel.cpp:1585), which means 30 minutes of key-down at SSTVAE's peak. Small cost; add the keys to the non-default settings fixture.",
+    "revised_gain": "0 dB on PEP-limited bands (60 m); up to 3.2 dB of average power only for heat- or duty-limited stations",
+    "checked": "native/gui/tx_panel.cpp:1575-1590; native/core/tx/engine.cpp:77-85; qrss-spec/60m-rules.md"
+   },
+   {
+    "id": "O5",
+    "verdict": "keep",
+    "corrections": "Joint path only. The finish usually has more audio, so its Z_ref usually beats the live one. The drop needs a pass that reads weaker at the finish, and how often that happens is unmeasured.",
+    "revised_gain": "",
+    "checked": "live.py:1143-1158, 1316-1347"
+   },
+   {
+    "id": "O6",
+    "verdict": "revise",
+    "corrections": "Re-receiving only the missing waveform must restrict the finish to that waveform's frame. A joint finish would find the stored CE pass again and file a second copy, which is the very reason recover skips stored slots today (live.py:957-962 comment). Small, as stated.",
+    "revised_gain": "",
+    "checked": "live.py:735, 798-801, 942-990"
+   },
+   {
+    "id": "O7",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "receiver.py:66-79"
+   },
+   {
+    "id": "O8",
+    "verdict": "revise",
+    "corrections": "The listener does not ship in the five app packages. The app runs it from a repo checkout's venv: '.venv/bin/python qrss_listen.py', else python3 (native/gui/qrss_window.cpp:520-538). So the C loop must be built in the operator's Python environment, or next to native/bindings/module by tools/build_native.sh, with a silent Python fallback. kalman_rts's backward RTS loop (track.py:840-885) is a second scalar Python loop of the same order and should be ported with it. Bit identity is feasible: CPython's float*complex is a complex multiply with zero imaginary part, equal to the real*complex product except for signed zeros. Pin it with an exact-equality test and -ffp-contract=off. Moderate cost.",
+    "revised_gain": "",
+    "checked": "track.py:777-898; native/gui/qrss_window.cpp:520-538; ls native/bindings"
+   },
+   {
+    "id": "O9",
+    "verdict": "keep",
+    "corrections": "Confirmed live.py:1248-1256. Candidates refused earlier are still re-gated; only known centres are skipped. Live CE tiles change, so it needs a flag.",
+    "revised_gain": "",
+    "checked": "live.py:1160-1190, 1240-1260; LiveConfig 615-633"
+   },
+   {
+    "id": "O10",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:315-357"
+   },
+   {
+    "id": "O11",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:106-108, 315-357, 1017-1041"
+   },
+   {
+    "id": "O12",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "store.py:393-417; live.py (no em import)"
+   },
+   {
+    "id": "O13",
+    "verdict": "keep",
+    "corrections": "Confirmed: when the child dies, _FinishProcess.call raises RuntimeError (live.py:385-389). _worker then sets s.done (live.py:1067-1078), and step() adds q to finished (1042-1046).",
+    "revised_gain": "",
+    "checked": "live.py:359-430, 1042-1078"
+   },
+   {
+    "id": "O14",
+    "verdict": "revise",
+    "corrections": "Mostly implemented already. qrss_listen.py has --recover-hours (default 3; lines 90-93), and the recover queue already runs newest first, one slot at a time, only when the finish is idle (live.py:1037-1041). Running with '--recover-hours 48' does what O14 asks today. What is left: the default and the app's listener command (user-editable); and recover() runs synchronously at start (qrss_listen.py:181-183), reading each candidate slot's audio from the passband store to check coverage (live.py:980-983). Packed hours are FLAC, so at 48 h that is about 190 slot reads before listening begins. Make the coverage check lazy, at dispatch time.",
+    "revised_gain": "",
+    "checked": "qrss_listen.py:90-93, 178-183; live.py:942-990, 1037-1041; frontend.py:559-583"
+   },
+   {
+    "id": "O15",
+    "verdict": "revise",
+    "corrections": "New measurements (opt/verify_feas/m2_a2.py, noise FE, shared CPUs). Per line, preamble_search takes 101 ms for CE and 81 ms for L, channelisation included; preamble_p is 46 / 35 ms of that and gammaincc alone 23 / 20 ms. The shortcut (gammaincc at each scale's maximum) takes 0.06-0.09 ms, and its minimum p equalled preamble_p's. So the saving is about 25-45% of each A2 run, more in the joint path where channelisation is shared. Tests use the full p map (tests/test_qrss_acquire.py:199, 314, 385-386), so keep preamble_p and add the fast path inside preamble_search only. The 1.0 clip and ties need an equality test.",
+    "revised_gain": "about 20-45 ms per A2 line (measured), roughly 1 s per joint acquisition at 16 CE lines plus pilots",
+    "checked": "acquire.py:749-790, 834-870; tests/test_qrss_acquire.py; m2_a2.py run"
+   },
+   {
+    "id": "O16",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "ltrack.py:161-216 docstrings"
+   },
+   {
+    "id": "O17",
+    "verdict": "keep",
+    "corrections": "Confirmed equal by construction. verify's winning tr (track.py:1371-1404) was tracked with the same path and timing that _gate's second verify_track(fit=False) uses (receiver.py:609-612), so R is unchanged.",
+    "revised_gain": "",
+    "checked": "track.py:1360-1406, 1575-1600; receiver.py:600-618"
+   },
+   {
+    "id": "O18",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:1013-1026"
+   },
+   {
+    "id": "O19",
+    "verdict": "revise",
+    "corrections": "Fix docs/qrss/60m.md:17-18 too: it recommends offsets of 300-1900 Hz. tx.check_pilot (tx.py:159-170) and ce.check_carrier are the reference transmitter's validation, and the constants say senders may use 300-2700 Hz, so raising the minimum there is a policy to route to the spec owner. A hint in the app is free. CE between 300 and 330 Hz also loses part of its own lower sidebands in the FE skirt (computed: -1.4 dB at 280 Hz, -6 at 250), on top of the rig filter.",
+    "revised_gain": "",
+    "checked": "tx.py:159-170; native/gui/qrss_tx.hpp:52-53; constants.py CARRIER_BAND_HZ; docs/qrss/60m.md:17-18; FE freqz"
+   },
+   {
+    "id": "O20",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "qrss_transmit.py:19-21"
+   },
+   {
+    "id": "O21",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "associate.py:331-352"
+   },
+   {
+    "id": "O22",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "as cited (not re-read)"
+   },
+   {
+    "id": "D1",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "spec line 382-384"
+   },
+   {
+    "id": "D2",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "constants.py:64; track.py:1386-1392"
+   },
+   {
+    "id": "D3",
+    "verdict": "revise",
+    "corrections": "The gap is narrower than stated. Acquisition already drops L preamble hits 3.1-22.1 Hz below a stronger L hit with the same timing (drop_band_owned, L_OWN_HZ, acquire.py:185-188). So the 20-22 Hz strip GHOST_HZ misses is a gap only for A3 and hint candidates, and after tracking (_ghost_of, receiver.py:430-440). Fix the docstring either way.",
+    "revised_gain": "",
+    "checked": "receiver.py:100-104, 430-457; acquire.py:182-188"
+   },
+   {
+    "id": "D4",
+    "verdict": "revise",
+    "corrections": "The premise misquotes the record. wfC_parts.txt:199 continues: 'The store and associate changes are covered by test_qrss_lreceiver.py and test_qrss_multipass.py'. test_qrss_multipass.py holds about 30 store and association tests (rules 1-4, provisional resolution, pairwise sums, due, one-transmission-one-member). The headerless bug has its own regression test (test_headerless_passes_are_filed_beside_each_other, test_qrss_lreceiver.py:457), and twin-by-centre is in test_qrss_live_l.py:319. What is left: cross-waveform due and twin edge cases, and a FULL-length twin call.",
+    "revised_gain": "",
+    "checked": "tests/ listing; grep of test_qrss_multipass.py, test_qrss_lreceiver.py:457, test_qrss_live_l.py:319; wfC_parts.txt:195-200, 494-500"
+   },
+   {
+    "id": "D5",
+    "verdict": "keep",
+    "corrections": "design.md:24 already names rev 13 for L; lines 5 and 28 still say rev 9. README.md:31 confirmed ('Simulation only' in CE's column).",
+    "revised_gain": "",
+    "checked": "docs/qrss/design.md:1-30, 608, 724; docs/qrss/README.md:18-34"
+   },
+   {
+    "id": "D6",
+    "verdict": "keep",
+    "corrections": "(1) is confirmed: the log call sits inside the loop (live.py:1274-1276). (2) The 1.0 fallback is deliberate, per report_l's docstring ('1.0 for a frame not in the table'), so make it a test rather than a code change. (3) Equal frame times are a stated design invariant (constants.py:56-58), so the test pins the invariant.",
+    "revised_gain": "",
+    "checked": "live.py:1262-1276; ltrack.py:121, 864-872; constants.py:56-58; acquire.py:1537-1540"
+   },
+   {
+    "id": "D7",
+    "verdict": "revise",
+    "corrections": "The fast tier is already over budget: CLAUDE.md records test_qrss_lacquire at 7.4-13.5 s against a 5 s target. From the docs lens's timing (6 s for 6 seeds x 4 SNRs), 20 seeds x 2 SNRs is about 10 s. Put the rate bounds in the slow tier, and keep one pinned-seed rank check in the fast tier.",
+    "revised_gain": "",
+    "checked": "CLAUDE.md test-time notes; the list's own timings"
+   },
+   {
+    "id": "D8",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "qrss_transmit.py:19-21"
+   },
+   {
+    "id": "D9",
+    "verdict": "keep",
+    "corrections": "Confirmed: the spec has no sideband statement (grep). Only qrss-spec/60m-rules.md and the repo docs say USB.",
+    "revised_gain": "",
+    "checked": "grep USB/LSB of qrsstvae-options.md"
+   }
+  ],
+  "insight_corrections": [
+   "Insight 4 (L buys bandwidth, not dB, at a fixed peak): on US 60 m the limit is 9.15 W ERP, which is PEP-based (qrss-spec/60m-rules.md). There the equal-peak tie is the operative comparison, so L's 3.2 dB average-power edge is worth nothing on 60 m. It matters only for heat- or duty-limited stations.",
+   "Insight 21 ('L preamble is 6 ms longer' is wrong): the equality is a stated design invariant, not luck. constants.py:56-58 says a pair of latents takes 60.625 ms in both waveforms 'so ... every frame time (preamble, header, windows, end) agrees'. A test (D6) should pin that invariant.",
+   "Insight 10 (EM and data-aided re-tracking measure small): the part that does pay, the header-known round-B re-track, never reaches the field for most multi-pass passes. The listener never calls em or rereceive (live.py has no em import; only qrss_decode.py:177-181 does), so a pass whose header came from association or a later pass stays a round-A pass in the store.",
+   "Insight 18 (association is quadratic): resolve_provisional runs on every rule-1 and rule-2 attach and reloads each accumulator once per cluster (associate.py:152-164, 376-392). Rule-3 and rule-4 changes do not trigger it, so an incremental version needs a dirty set, not just 'the pair that changed'.",
+   "Insight 8 (band-edge SNR): the numbers check out (computed: FE flat to 0.01 dB from 324 to 2676 Hz and to 0.1 dB from 310 to 2690; -1.4 dB at 280 Hz, -6.0 at 250, -29.6 at 200). Three additions. A real rig's SSB filter skirt adds the same bias, which no FE-only correction removes. The recommended 60 m offsets (docs/qrss/60m.md:17-18, 300-1900 Hz) start inside the failing zone. And acquire.lead_in_span uses the same floor with no exclusions.",
+   "Insight 18 also quotes store.due as predicting later passes 'for the same waveform at the same frequency'. It predicts only missing later segments g > k (store.py:393-417), never a repeat of a segment already held, which is the most common multi-pass case. That is why remembered-frequency hints (R3) are worth more than they look.",
+   "The header list size is not a CPU question. Measured, list 32 costs about 1.4x list 8 per attempt (33-36 against 24-26 ms) and gains about 0.3 dB on a steady channel (opt/verify_feas/m1_list.py), so any insight that treats list size as a CPU trade should be dropped.",
+   "On CE bit-identity: several items marked 'no CE change' change CE results on the joint path only. Extra L lines and hints (L1, L6, L7, R3) share the 12-candidate / 180 s finish budget with CE, and O5 and O6 add or keep CE passes. --just-ce stays bit for bit, but the default listener's CE output can move in busy slots."
+  ],
+  "missing": [
+   "Re-receive a stored pass with its header known (round B) once association supplies that header, on both waveforms. em.rereceive(p, None, hdr) already does exactly that for CE (em.py:270-345), Store.update_pass exists (test_p1_update_pass_rebuilds), and each pass keeps its 250 Hz capture. Yet the listener never calls it: live.py imports nothing from em, and EM runs only via qrss_decode.py:177-181. Measured round-B gains: L +1.0 dB at -12 dB and +1.8 at -6, CE +0.8 at -12, and +0.1-0.5 dB (slope-corrected) at -24/-28. Every pass whose header decoded by soft combination or from a later pass keeps its round-A latents today. Cost: one track per such pass (about 6-7 s on FULL) in the idle finish child; CE stored z/w change, so it needs a flag; L needs L5's port first.",
+   "acquire.lead_in_span takes its sigma2 from frontend.noise_psd with no neighbour exclusion (acquire.py:965-968). A neighbour 85-120 Hz away raises the floor and can hide a real lead-in, and at a band edge the skirt lowers it and can claim a lead-in that was never sent. lead_in_s feeds keyed_from in the tracker's templates, so this touches CE preamble hits too. Fix it together with R1 and R4 (inferred, not measured).",
+   "Order the work by CPU. The finish is one child process at nice 5 (live.py:359-430), joint listening already costs +64%, and the L acquisition additions (R3, L1, L3, L6, L7) each add A2 or A3 work per slot. Land the CPU items (O2, O3, O8, O9, O15, O17) first, so a slot's finish stays well inside its 900 s cadence on laptop-class hardware (inferred).",
+   "Hints could also carry each station's measured drift. CarrierCandidate takes drift_hz_per_min, and track.report already fits it (drift_hz_per_min = line[0]*60), but _hints passes only f (live.py:1191-1223). For a rig that warms up the same way at every key-up (KC2G's +0.030 Hz/min, tentative), A2's fixed-line rotation would then start on the right slope (inferred).",
+   "Treat waveform_l as a format freeze point. d357ec8 is only on origin/waveform_l, pushed 2026-10-12, and the app on that branch already offers L transmit (native/gui/qrss_tx.cpp:33-34, 155-157). Until the F-batch (F2-F6) is decided, the branch should say plainly that L must not go on the air; otherwise the 'free now' window closes silently the first time someone keys it."
+  ]
+ },
+ {
+  "lens": "gain",
+  "verdicts": [
+   {
+    "id": "R1",
+    "verdict": "revise",
+    "corrections": "Mechanism confirmed in code: noise_psd divides each bin only by the channeliser's aliased response (_noise_response, frontend.py:331-333), never by the 255-tap FE low-pass, and the quieter-side fallback fires only when `sel` is empty (frontend.py:327). Two corrections. (1) The |H_FE|^2-division variant fixes the simulator but not the air: on a real rig the SSB/IF filter also rolls off below ~300 Hz and above ~2700 Hz, so bins at 206-241 Hz still read low after dividing by |H_FE|^2. Only the 'drop out-of-flat bins and take bins from the passband interior' variant is robust on hardware. (2) The 6.5 dB latent figure is one configuration: joint mode, a headerless TINY pass, a CE neighbour 74 Hz inside (wfC_parts.txt:266-269). For a lone edge signal the measured harm is reporting, the kappa clamp and the -6 dB headerless drop (live.py:1424-1428); its latent-SNR cost is not measured. The fix applies to channels within ~100 Hz of an edge, about 8% of the band.",
+    "revised_gain": "In simulation, up to 6.5 dB latent SNR in the joint L-beside-CE edge case, plus honest SNR/W/kappa at the edges. Zero mid-band. On air the |H_FE|^2 form recovers only part, because the rig's filter skirt remains (inferred).",
+    "checked": "frontend.py:301-345 (noise_psd, fallback, resp); frontend.py:59; wfC_parts.txt:255-306 (edge sweep, open issues); live.py:1424-1428"
+   },
+   {
+    "id": "R2",
+    "verdict": "revise",
+    "corrections": "The reporting gain stands. The acquisition gain is mostly captured already. hint_line (acquire.py:424-438) uses A1's best bin within HINT_SPAN_HZ = 2.0 Hz whenever that bin clears threshold (acquire.py:196, whose comment cites this same 0.6 Hz two-pass move). L hints with no A1 line already try f and f+-1 Hz (acquire.py:189), so a 0.6 Hz error keeps both waveforms inside A2's +-0.5 Hz grid. The bare-f case remains only for CE hints with no A1 line, i.e. CE below about -31 dB, where the docs lens found the carrier ranked first in A1. Where a better t0 frequency would matter is detection_from_pass for EM re-receives (receiver.py:398-406; em.py:251, 295), which builds a straight path from report.offset_hz. Prefer the |u|^2-weighted line fit evaluated at t0, not the frame median: with a key-up warm-up chirp (KC2G: same 1205.459 Hz intercept on both passes) the t0 intercept is what the next preamble sees.",
+    "revised_gain": "Reported-frequency error 0.23-1.09 Hz down to <=0.03 Hz (as measured). Acquisition: about 0 for L and for CE above -31 dB. A small, unquantified gain for hinted CE passes below A1's reach and for CE EM re-receive starts (inferred).",
+    "checked": "acquire.py:160-200, 424-438, 1576, 1639; receiver.py:292, 398-406; em.py:251/295"
+   },
+   {
+    "id": "R3",
+    "verdict": "revise",
+    "corrections": "Compare against the finish, not live A1. A stored pass comes from finish_receive, which runs the whole-slot A3 when heard >= 0.5 and passes the hints in (live.py:341-344). I measured A3 on L_FULL: 10/10 at -30 dB (steady and quiet), 0/5 at -32 steady. So stored L passes are already found to about -31, and a hinted A2-L (8/8 at -31, 2/8 at -34, roughly -33 at 50%) adds about 1.5-2 dB for them. The -26 to -31 gain is a live-tile gain. Frequency stability is fine within a session (0.6 Hz between KC2G passes) but not across days: spec 2.6 gives 1 to a few Hz of temperature drift per pass and +-35 Hz SSB-rig offsets. A day-old frequency falls outside HINT_SPAN_HZ (2 Hz) and L_HINT_OFFSETS_HZ, so it needs a +-5-10 Hz A2 sweep (10-20x the cells and false-alarm draws). The cross-pass A1 sum's '1.5 dB per doubling' assumes the line stays in one A1 bin (~0.04 Hz for the 25 s window); with 0.6 Hz moves between passes it becomes a max over ~100 bins per pass, worth well under 1.5 dB. R3 delivers the same A2-L-limited reach that F1+L1 give without remembering anything, so the two largely overlap.",
+    "revised_gain": "Stored L passes: +1.5-2 dB for same-session repeats (inferred from measured A3 and A2-L). Live L tiles: about +5 dB. CE: about 0. Cross-pass A1 sum: <0.5 dB per doubling (inferred).",
+    "checked": "m1_a3_lfull.py (A3 on L_FULL, see m1_out.txt); live.py:316-357, 1191-1223; acquire.py:189, 196; spec 2.6 table"
+   },
+   {
+    "id": "R4",
+    "verdict": "revise",
+    "corrections": "The geometry is confirmed (receiver.py:62-65; the neighbour's centre is 9.5 Hz below its pilot, guard 45 Hz). The gain depends on neighbour strength and band density, and both are low today. Worked example: a same-strength L neighbour at -20 dB SNR2500 sits about +0.6 dB above the floor in its 22 Hz. If it fills about 60% of a 35 Hz noise window, the median moves into its bins: N is about 3 dB high and Z_ref about 1.4x low (inferred). Neighbours below about -25 dB cost under 0.5 dB. KC2G was a CE case with a neighbour 14 dB stronger. The fallback change touches CE wherever both sides are excluded.",
+    "revised_gain": "0 in today's sparse band. In a band packed at 30 Hz with neighbours above about -25 dB, about 1-3 dB of N bias removed (inferred), up to the measured KC2G Z_ref ~1 -> 8-11 when a strong neighbour fills the floor.",
+    "checked": "receiver.py:62-79; frontend.py:301-345; waveform-l.md:144-146, 194-201"
+   },
+   {
+    "id": "R5",
+    "verdict": "revise",
+    "corrections": "Measured the cross-modulation that was left unmeasured (m2_agc_xmod.py: a strong l-short L in noise, frontend.normalise). The AGC gain modulation is 3.95% rms at -6 dB SNR2500, 6.8% at 0 dB, 15.4% at +10 dB and 20.4% at +20 dB. That caps every other signal's SINR at 28.1, 23.4, 16.3 and 13.8 dB (the part above 0.5 Hz, which a tracker cannot follow: 28.7, 24.1, 17.2 and 14.7 dB). For a neighbour at the one-pass good level (latent +2.2 dB) beside a +10 dB L, that costs about 0.16 dB. At the deep multi-pass point (per-pass latent about -12 dB) it is under 0.01 dB, and it is independent between passes. The strong signal's own 2.24 dB loss occurs only at +10 dB, where it already sits near the clipper's 12.2 dB SINR ceiling: about 0.3-0.5 dB of PSNR on a very good picture (inferred from spec 6.1's slope). The fix changes the front end, and so every CE result.",
+    "revised_gain": "About 0 at every operating threshold. <=0.16 dB for a single-pass good neighbour beside a +10 dB L. About 0.3-0.5 dB PSNR for a very strong L signal itself (inferred). Low priority.",
+    "checked": "m2_agc_xmod.py (measured); frontend.py:168-208; waveform-l.md:380-383"
+   },
+   {
+    "id": "R6",
+    "verdict": "revise",
+    "corrections": "2 spoiled sums in 40 at -26 dB is a 5% event, and the pair fallback (associate.py:279-291) already rescues some of those, at a rate never measured (waveform-l.md:166-168). At the 16-pass point the summed header has about 12 dB of margin, so spoiled sums matter only for few-pass clusters. The consistency estimate from 2,474 bits at -26 dB is itself noisy.",
+    "revised_gain": "<0.1 dB of header threshold, few-pass clusters only (inferred).",
+    "checked": "associate.py:263-291; spec 5.1; waveform-l.md:166-168"
+   },
+   {
+    "id": "R7",
+    "verdict": "revise",
+    "corrections": "Combined multi-pass headers are not header-limited at the operating point. Sixteen passes add about 12 dB to the soft sum, and two steady CE passes already decode at -32.7 dB (spec 5.1). List size matters only for 1-3 pass sums near threshold, and on fading the header is tracking-bound (-29.0 quiet, -26.9 moderate). At rate ~1/17 (2048 code bits, 158 with CRC) CA-SCL with list 8 is already close to ML, and list 32 typically gains <=0.1-0.2 dB (inferred). The 4x false-accept rate, 1 in 2,000 against the CRC alone, feeds association, which tests every cluster (O1).",
+    "revised_gain": "<=0.1 dB, steady-path few-pass sums only (inferred).",
+    "checked": "spec section 5 line 382 and 5.1 lines 405-412"
+   },
+   {
+    "id": "R8",
+    "verdict": "revise",
+    "corrections": "At the single-pass good point the latent estimates sit at about +2 dB latent SNR, too noisy to predict the clipper's frame-wide distortion well. L's clipper also runs over the whole 250 Hz frame and is not sample-exact at 8 kHz (spec 2.2: senders agree only 'to the clipper's rounding'). Realistic cancellation is a quarter to a half of the 0.41/0.33 dB ceiling, and nothing from 2 passes on, where the precoder already averages the distortion away.",
+    "revised_gain": "<=0.1-0.15 dB on single strong passes; 0 from 2 passes on (inferred).",
+    "checked": "spec 2.2 (clipper exactly, scrambler); demod.py:55"
+   },
+   {
+    "id": "L1",
+    "verdict": "revise",
+    "corrections": "The A1 measurements stand, but the end-to-end gain is smaller for stored passes. When heard >= 0.5 the finish runs A3 over the whole slot (live.py:341-344), and I measured A3 finding L_FULL at -30 dB 10/10 (steady and quiet; p 6e-8 to 2.3e-4 against TBD_PFA 1e-3) and at -32 steady 0/5. So stored passes are already found to about -31. With L1+F1, A1 reaches -32 (11/12 on l-tiny) but A2-L limits at about -33 (8/8 at -31, 2/8 at -34), and L gate V near -33/-34 (inferred from CE's Z~4 at quiet -34 times L's 1.5x). Net for stored passes: about +1.5-2 dB. For live tiles and the heard < 0.5 finish branch (live.py:345-357): about +5-6 dB. The A1 gain was simulated with a drift-free lead-in tone. Spec 2.8's stated purpose for the lead-in is key-up drift, which A1's linear +-3 Hz/min drift cells will not fully match, so expect less on real rigs (inferred). A3 already starts at TBD_START_S = -10 s (acquire.py:195), so the finish counts the lead-in today; it is about 4% of a FULL pass's pilot energy.",
+    "revised_gain": "Live L reach -26/-27 to about -32/-33 dB (+5-6 dB). Stored passes (finish with heard >= 0.5) about +1.5-2 dB over A3's measured -31 dB (inferred). Less where the lead-in drifts.",
+    "checked": "m1_a3_lfull.py (measured A3 L_FULL); live.py:316-357; acquire.py:160, 195-203; spec 2.8; wfB_parts.txt:342-353"
+   },
+   {
+    "id": "L2",
+    "verdict": "revise",
+    "corrections": "The gain depends on how good the accumulator is, more for L than for CE. The mean template captures W/(1+W) of the data power. L's power is about 80% data, CE's known part (carrier plus refs) about 55%. With a +5 dB accumulator L's template holds about 0.8 of the pass power, about the same as CE's, so CE's P9 result (-40 dB quiet FULL, Z 7.7, one seed, test_qrss_em.py:625-636) transfers. The deep levels that need the search are reached only while the accumulator is weak: at the 16-pass usable point it is about -3.6 dB. There L's template holds about 0.44 of the power (-2.7 dB against +5 dB), CE's about 0.65 (-1 dB). So a realistic L reach is about -36/-37 dB on quiet, against the measured blind A3 at about -31: +5-6 dB, not 10. Also: the search is non-coherent in 2 s chunks, so a FULL frame is needed (MEDIUM sits at the gate at -40); a Bonferroni over timing/drift applies; and the bootstrap needs some passes found blind first.",
+    "revised_gain": "About +5-6 dB per-pass floor at the deep multi-pass levels (weak accumulator), up to about +9 dB only once the accumulator is near +5 dB (inferred).",
+    "checked": "tests/test_qrss_em.py:30-45, 625-636 (CE P9); design.md:1036-1047; spec 6.5; m1 baseline"
+   },
+   {
+    "id": "L3",
+    "verdict": "revise",
+    "corrections": "The baseline is about -31 dB, not -30: measured 10/10 at -30, 0/5 at -32 steady. A3 is already partly a data-band detector. At -30 steady, the best Viterbi path ran in the data band in 5/5 trials (3.3-16.1 Hz below the pilot), and the pilot-anchored re-path put the detection within 0.23 Hz of the pilot. The band-energy z1 of 5.0 at -34 dB is along the true path; a search pays a Gumbel over paths and channels, so the limit is nearer -33 to -33.5. All of this is on white noise. Real bands hold other narrow signals, and CE sidebands read z1 > 100, all of which an energy emission responds to. Every extra false candidate costs a 60-80 s gate V out of the 180 s budget.",
+    "revised_gain": "About +2-2.5 dB on white noise (-31 to about -33/-33.5). Less on a busy band. Inferred.",
+    "checked": "m1_a3_lfull.py output (hit offsets, z, p); acquire.py:1135-1141, 1241-1292; wfB_parts.txt:339-353, 395"
+   },
+   {
+    "id": "L4",
+    "verdict": "revise",
+    "corrections": "MSE-based 'raw vs rescaled' latent SNR overstates the decoder-level cost. If k comes from |u_hat| (as the item says), w scales as 1/k^2 while z scales as k, so z*w is (w0/k)(a+n): the over-scaled pass is down-weighted automatically, and mean(w*e^2) stays honest. Combining the four measured round-A passes (k 0.83/1.02/1.49/0.99) with those weights loses (sum 1/k)^2/(N sum 1/k^2), which is -0.16 dB against ideal, with an essentially unbiased scale (0.996). After round B (k 1.00/1.04/1.23) the loss is -0.04 dB. Polar SC/SCL decisions are nearly invariant to a common LLR scale, so the '1.2x overconfident' point matters only relative to other passes in a sum. L5's round B already removes most of the spread (23% max against 49%).",
+    "revised_gain": "About 0.05-0.2 dB in multi-pass accumulation, about 0.05 dB once passes are round B. Single-pass decoder effect unmeasured, probably small (inferred, computed from the measured k values).",
+    "checked": "m_rounds.py (harness and metric definitions); wfB_parts.txt:159, 179; demod.py:208-219 cited"
+   },
+   {
+    "id": "L5",
+    "verdict": "keep",
+    "corrections": "The header-known re-track is the measured part, and it applies to the passes that matter deep in multi-pass, since those are headerless. Note that it overlaps L4 (round B shrinks the k spread). The spec's 16-pass L thresholds (spec 6.3/6.4, via the data-aided reference 20% -> 66%) assume the EM bootstrap this item says not to build. If the data prior stays as small at -28 dB as at -12/-20, L's spec multi-pass figures are optimistic by the EM credit; measure (see missing).",
+    "revised_gain": "+0.1-0.5 dB per headerless L pass at -24/-28 dB (as measured, slope-corrected), the same in the accumulated SNR. Data prior: <=0.38 dB where measured.",
+    "checked": "em.py:283-288 (via grep); spec 6.4 text; README.md:882-887; e2e-results.md --em 1 row"
+   },
+   {
+    "id": "L6",
+    "verdict": "revise",
+    "corrections": "(a) For stored passes it is bounded by A2-L and gate V against A3's measured -31, so about +1.5-2 dB, and it is redundant with L1+F1 for senders that use a lead-in. (b) Duplicates what the finish's A3 already does over the data section; it only makes live tiles earlier. (c) In the windows the pilot is FSK-keyed 16.495 Hz down for the Morse key-down units (spec 2.7), so the line has less than the full average power. It helps stored passes only in the heard < 0.5 finish branch (live.py:345-357), which receives only live detections and hints.",
+    "revised_gain": "(a) +2-3 dB live, about +1.5-2 dB stored. (b) live only, about 0 stored. (c) only for late joiners and restarts with less than half the slot heard (inferred).",
+    "checked": "live.py:316-357; spec 2.7 keying row; m1 baseline"
+   },
+   {
+    "id": "L7",
+    "verdict": "revise",
+    "corrections": "Live only. At -29 dB the 1/20 -> 5-7/20 gain sits above the finish's blind reach (A3 found 10/10 at -30 dB), so stored passes gain about 0, and the extra 16-48 A2-L lines add false-alarm draws for that live-only benefit. Redundant once L1/F1 or L6(a) exist.",
+    "revised_gain": "Live: about +1 dB at the 25-35% detection point (as measured). Stored: about 0.",
+    "checked": "m1 baseline; acquire.py:162-164, 384-412"
+   },
+   {
+    "id": "L8",
+    "verdict": "revise",
+    "corrections": "(a) Its gain is at -12 dB on moderate fading, single pass. At deep per-pass SNR the noise dwarfs the in-pulse fading term. (b, c) W calibration errors of 10-22% cost under 0.05 dB in MRC combining, since weight errors are second order: a 22% weight error on all of a link's passes costs nothing, and on one pass of several about 0.01 dB. CE-vs-L relative weights in mixed accumulators are the only place it adds up.",
+    "revised_gain": "(a) 0.9-1.3 dB SINR at -12 dB moderate single-pass, about 0 deep. (b)/(c) <0.05 dB (inferred).",
+    "checked": "wfB_parts.txt:300-306"
+   },
+   {
+    "id": "L9",
+    "verdict": "keep",
+    "corrections": "Unmeasured, but bounded by spec 2.6's wander table: 0.2 Hz rms costs L 0.2-0.9 dB at the good level in one pass and 1.0-1.9 dB at usable after 16 passes. README (frequency wander) already measures more than the budget at 3-10 s correlation times. That table bounds what a better fine path can recover.",
+    "revised_gain": "Bounded by about 0.2-1.9 dB of wander loss, depending on rig and level (spec 2.6). The share recoverable is unmeasured.",
+    "checked": "spec 2.6 table; README.md:812-815; track.py:144-147 (cited)"
+   },
+   {
+    "id": "L10",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "wfB_parts.txt:256-258, 300-307"
+   },
+   {
+    "id": "C1",
+    "verdict": "keep",
+    "corrections": "Correctness and junk control, not dB. Note that fielded pre-L listeners cannot get it, so O7's release note remains the main protection.",
+    "revised_gain": "",
+    "checked": "waveform-l.md 'Keeping L out of the CE gate'; wfC_parts.txt open issues"
+   },
+   {
+    "id": "C2",
+    "verdict": "revise",
+    "corrections": "The mechanism applies to CE, measured here (m3_ce_timing.py: CE SHORT, steady, -27 dB, 9 seeds, round-A tracks started at the true timing +-0.15 T). refine_timing corrected 0 of 18 starts. 14/18 ended exactly at the start error (0.150 T; the Newton loop breaks on the first non-positive-definite Hessian, track.py:1257) and 4/18 walked further off (0.20-0.28 T rms). The mean latent-SNR loss against the true-timing track is 0.46 dB (max 1.47). Started at the true timing it does not move (2/2). So CE at the multi-pass operating SNR keeps whatever coarse timing gate V and A2 hand it. Caveat: SHORT has about 1/6 of FULL's known symbols, so on FULL the Hessian is about 2.5x better conditioned (roughly a 4 dB shift, inferred). The A/B should run on FULL at CE's deep points (-32 to -36 dB: 64-pass good, 16-pass usable/recognizable), and CE's coarse-timing error at those SNRs is the unmeasured input.",
+    "revised_gain": "Upgraded from 'unknown, probably smaller'. On SHORT at -27, 0.46 dB mean (1.5 dB worst) is recoverable from a 0.15 T start. On FULL, probably 0.1-0.4 dB at -30 to -36 dB (inferred).",
+    "checked": "m3_ce_timing.py (measured); track.py:1138-1166, 1183-1290; wfB_parts.txt:152-158, 186"
+   },
+   {
+    "id": "C3",
+    "verdict": "revise",
+    "corrections": "Niche, overlapping R2. hint_line (acquire.py:424-438) already uses any A1 line within 2 Hz of the hint, and the CE carrier ranks first in A1 to -31 dB. So the bare-f A2 runs only for CE hints below about -31 dB, which is also where CE's gate V is near its limit (quiet -34: Z_ref about 4 at the true timing, README.md:866-869).",
+    "revised_gain": "Only hinted CE passes in roughly -31 to -33 dB with a 0.5-1.5 Hz hint error. Unquantified, probably <1 dB of reach in that window.",
+    "checked": "acquire.py:170, 189, 196, 424-438; README.md:866-869"
+   },
+   {
+    "id": "C4",
+    "verdict": "revise",
+    "corrections": "A 0.85 relative LLR scale between CE and L passes is a weight error. In a soft sum its cost is second order, under 0.01 dB for 15%. The spec's own figure for the CE-only case is 0.03 dB.",
+    "revised_gain": "About 0 (<=0.03 dB).",
+    "checked": "spec 5.1; demod.py:256 (cited)"
+   },
+   {
+    "id": "F1",
+    "verdict": "revise",
+    "corrections": "Keep the proposal. Its cost is trivial and it is format-legal. Revise the gain: today's listeners' finish already counts the lead-in in A3 (TBD_START_S = -10 s) and finds L_FULL to about -31 dB (m1). F1 alone (about +2 dB at A1) therefore helps live tiles and the heard < 0.5 branch, not stored passes. With L1, stored passes gain about +1.5-2 dB, bounded by A2-L and gate V. The A1 numbers were simulated with a steady lead-in tone; spec 2.8 exists for transmitters that drift at key-up, so expect less on the rigs that most want a lead-in (inferred).",
+    "revised_gain": "Live: about +2 dB alone, +5-6 dB with L1. Stored passes: about 0 alone, +1.5-2 dB with L1 (inferred).",
+    "checked": "acquire.py:195; spec 2.8; m1_a3_lfull.py"
+   },
+   {
+    "id": "F2",
+    "verdict": "keep",
+    "corrections": "Batch only the items that survive. F4 is redundant with F1+L1 (drop), F5(b) loses for heat-limited stations, and F3/F6 are each about 0.1 dB.",
+    "revised_gain": "",
+    "checked": "spec 14 (cited); items F3-F6 below"
+   },
+   {
+    "id": "F3",
+    "verdict": "revise",
+    "corrections": "The upside is small and the downside unmeasured. In deep multi-pass, headers combine across passes, so the copy's value is rescuing 1-2 pass headers whose 80 s block was lost. Spec 5.1: on fading the copy alone is only 0.3-0.7 dB short of the block, because it averages over the fades. Decide only after D1, and prefer keeping rho if the copy's rescue rate is material.",
+    "revised_gain": "<=+0.115 dB on every L latent (rho 0.027), against about 1-3 dB of header-rescue depth (scaled from CE, inferred).",
+    "checked": "spec 5.1 lines 386-412; waveform-l.md spread copy bullet"
+   },
+   {
+    "id": "F4",
+    "verdict": "drop",
+    "corrections": "Redundant with F1+L1, which are already in the format. (a) costs A2-L 1.1 dB, and A2-L is the binding stage once A1 is fixed (A2-L 8/8 at -31, 2/8 at -34), so (a) lowers the chain's ultimate depth below what F1+L1 reach. (b)'s +0.66 dB matters only for no-lead-in passes on the live path; stored passes are found by A3 (about -31, measured). Both need a spec change and re-pinned PILOT_GAIN_* values.",
+    "revised_gain": "(a) net negative at depth against F1+L1. (b) about +0.66 dB live A1 only, about 0 stored.",
+    "checked": "m1 baseline; wfB_parts.txt:342 (A2-L rates)"
+   },
+   {
+    "id": "F5",
+    "verdict": "revise",
+    "corrections": "(b)'s +0.3 dB holds only for PEP-limited stations. waveform-l.md's case for L is the heat-limited rig ('our IC-7100 runs 25 to 50 W'; 'Where the limit is the rig's or the amplifier's heat, that is a 3 dB gain'). For those stations harder clipping costs 0.1-0.4 dB at fixed average power, so (b) works against L's main use case. (a)'s +0.1 dB is PEP-limited only too. Gaussian latents flatter real ones.",
+    "revised_gain": "PEP-limited: (a) about +0.1, (b) about +0.3 dB at deep multi-pass, about 0 at one pass. Heat-limited: -0.1 to -0.4 dB. Net sign depends on the station.",
+    "checked": "spec 2.2 table and 'Practical consequence'; waveform-l.md 'A rig limited by heat'"
+   },
+   {
+    "id": "F6",
+    "verdict": "revise",
+    "corrections": "decoder-measurements.md gives the gross PSNR gain as +0.15 to +0.19 dB at 0 to +3 dB per latent and +0.13 at -3, minus 0.18 dB of energy per latent. The '+0.3 dB' is SNR-equivalent; it is about +0.1 dB PSNR net at the good level and nothing at usable, where deep multi-pass operates. The room must come from somewhere: references feed L's already pilot-limited tracker, the spread copy is F3, and a shorter symbol costs the same 0.18 dB.",
+    "revised_gain": "About +0.1 dB PSNR (about +0.3 dB SNR-equivalent) at single-pass good, about 0 deep, before the cost of making room.",
+    "checked": "/mnt/project-files/qrss-spec/measure/decoder-measurements.md:84-101"
+   },
+   {
+    "id": "F7",
+    "verdict": "revise",
+    "corrections": "Unit error: '+0.2 to +0.3 dB PSNR' should be about +0.3 dB SNR-equivalent, i.e. about +0.1-0.15 dB PSNR at good (decoder-measurements.md:84-91). It is zero at usable and below, where CE's deep multi-pass work happens. For that it breaks the fielded v2 format and the C beacon.",
+    "revised_gain": "About +0.1-0.15 dB PSNR at the single-pass good level, 0 deep. Lowest priority.",
+    "checked": "decoder-measurements.md:84-91; constants.py:38 (cited)"
+   },
+   {
+    "id": "F8",
+    "verdict": "revise",
+    "corrections": "At the good point (W = +2.2 dB, not +5), raising distortion SINR from 12.2 to 15.2 dB gives 1/(1/1.66+1/16.6) = 1.79 dB against 1.99 dB: +0.2 dB latent, about +0.08 dB PSNR. SSTVAE's own fine-tune through its clipper (v5) measured +0.096 dB PSNR, confounded with 30 extra epochs (CLAUDE.md, codec v5). The 2-2.5x latent-proxy flattery points the same way.",
+    "revised_gain": "About +0.05-0.1 dB PSNR at single-pass good, about 0 from 2 passes on.",
+    "checked": "spec 2.2 line on SSTVAE 15.2 dB; CLAUDE.md v5 paragraph"
+   },
+   {
+    "id": "O1",
+    "verdict": "revise",
+    "corrections": "The measured 14.2 s at 30 x 59 justifies the fix on its own. The 13-minute week-long extrapolation is a worst case: 200 accumulators and 500 provisional clusters need many stations or a lot of junk (C1/O7). Present it as the quadratic bound, not the expected value. Caching (b) alone removes the 21.6 ms npz reload behind most of the 8 ms per pair.",
+    "revised_gain": "",
+    "checked": "opt/live-ops/m3_store_scale.py numbers as quoted; associate.py ranges cited"
+   },
+   {
+    "id": "O2",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "wfB_parts.txt:432-456 (sideband gates, dedup, open issue)"
+   },
+   {
+    "id": "O3",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:1165-1190 (refresh candidate flow)"
+   },
+   {
+    "id": "O4",
+    "verdict": "revise",
+    "corrections": "The 3.2 dB is available only to a station whose single level is set for another mode and that also sends L. A station sending only L can set the one level for L today. SSTVAE's OFDM PAPR (3.4 dB) is close to L's (3.15), so the real conflict is CE (constant envelope, 100% duty) against L/SSTVAE. The safety point for CE (a PA surprise at 100% duty) is the stronger argument.",
+    "revised_gain": "Up to +3.2 dB average power for heat-limited stations alternating CE with L/SSTVAE. 0 for an L-only station.",
+    "checked": "spec 2.2 'Practical consequence'; waveform-l.md 'A rig limited by heat'"
+   },
+   {
+    "id": "O5",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "wfC_parts.txt:303-306"
+   },
+   {
+    "id": "O6",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "waveform-l.md:374-377; wfC_parts.txt open issues"
+   },
+   {
+    "id": "O7",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "waveform-l.md 'Keeping L out of the CE gate'"
+   },
+   {
+    "id": "O8",
+    "verdict": "keep",
+    "corrections": "CPU only, no dB.",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "O9",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:1165-1190"
+   },
+   {
+    "id": "O10",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "live.py:316-357"
+   },
+   {
+    "id": "O11",
+    "verdict": "keep",
+    "corrections": "The budget binds only on busy bands. Unmeasured.",
+    "revised_gain": "",
+    "checked": "live.py:106-108, 320-344"
+   },
+   {
+    "id": "O12",
+    "verdict": "keep",
+    "corrections": "The CE half is measured: template search finds a -40 dB FULL quiet pass against a +5 dB accumulator (test_qrss_em.py:625-636, Z 7.7, one seed). It needs FULL frames (MEDIUM sits at the gate). The L half inherits L2's weaker accumulator dependence.",
+    "revised_gain": "",
+    "checked": "tests/test_qrss_em.py:30-45, 625-636"
+   },
+   {
+    "id": "O13",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "O14",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "O15",
+    "verdict": "keep",
+    "corrections": "Corner case for the bit-identity claim. preamble_p clips the Bonferroni p to 1.0 (acquire.py:787). When every cell clips, np.argmin over the grid returns cell 0, while the per-scale argmax returns the Lambda peak, so a failed hit's f/tau would differ. Equal for passed hits; the equality test must cover the clipped case.",
+    "revised_gain": "",
+    "checked": "acquire.py:760-790, 852-857"
+   },
+   {
+    "id": "O16",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "O17",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "O18",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "O19",
+    "verdict": "keep",
+    "corrections": "Supported further by R1's correction: the rig's own filter skirt makes noise estimation below ~320 Hz unreliable on air even after R1 lands.",
+    "revised_gain": "",
+    "checked": "frontend.py noise_psd; wfC edge sweep"
+   },
+   {
+    "id": "O20",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "spec 2.2 rig settings"
+   },
+   {
+    "id": "O21",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "O22",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "D1",
+    "verdict": "keep",
+    "corrections": "Revise the inference. 'Likely -30 to -32 dB' is plausible for steady paths only. On fading, CE's header is tracking-bound (-29.0 quiet, -26.9 moderate, both copies), and L's tracking is weaker (pilot 13.8%; round A loses 1.2-1.8 dB on moderate fading even at -12 dB). So L's fading header is plausibly no deeper than CE's. Measure quiet and moderate as well as steady, with >= 10 seeds per point (single-digit trials invent thresholds).",
+    "revised_gain": "",
+    "checked": "spec 5.1 table; waveform-l.md tracker bullet"
+   },
+   {
+    "id": "D2",
+    "verdict": "keep",
+    "corrections": "Note for L: A3 (measured cliff at about -31 dB) binds before gate V for blind passes, so a lower Z_ACCEPT buys L no blind depth. For CE, gate V is the lever (quiet -34: Z_ref about 4 at the true timing, README.md:866-869). 20log10(6/T) assumes Z proportional to amplitude; CE's Z goes 62 -> about 4 over 22 dB, slightly faster, so about 1.5 dB at T = 5.",
+    "revised_gain": "CE blind: about 1.5 dB at T = 5 if the real-band tail allows. L blind: about 0 until A3 improves.",
+    "checked": "README.md:866-869; m1"
+   },
+   {
+    "id": "D3",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "D4",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "D5",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "D6",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "D7",
+    "verdict": "keep",
+    "corrections": "Also pin A3's L_FULL cliff, which is slow (about 10 s per pass, so slow tier only). Measured: 10/10 at -30 (steady and quiet), 0/5 at -32 steady.",
+    "revised_gain": "",
+    "checked": "m1_a3_lfull.py"
+   },
+   {
+    "id": "D8",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "not re-run"
+   },
+   {
+    "id": "D9",
+    "verdict": "keep",
+    "corrections": "",
+    "revised_gain": "",
+    "checked": "spec grep (no sideband statement), per item"
+   }
+  ],
+  "insight_corrections": [
+   "'A3 at the slot end reaches about -30 dB on L_FULL' is conservative. Measured (opt/verify-gain/m1_a3_lfull.py): 5/5 at -30 dB steady (p 5.6e-6 to 2.3e-4 against TBD_PFA 1e-3), 5/5 at -30 quiet (p 7e-8 to 2.6e-6), 5/5 at -28 quiet, 0/5 at -32 steady, where no hit was returned at all. The blind cliff is about -31 dB, and quiet fading reads slightly stronger than steady (z 55-57 against 52-54 at -30).",
+   "Insight 2 ('L's realised multi-pass gain depends on hints finding nearly every repeat') is wrong at the 16-pass good point. The finish's blind A3 found every L_FULL pass at -30 dB on steady and quiet, against the -29.6 dB per-pass target. Detection binds only deeper: the 32/64-pass good points (-32.3/-34.9) and the 16-pass usable/recognizable points (-34.3/-37.7). 'Combining works: 8 passes at -20 dB combine to the ideal 9 dB' is a CE measurement (e2e-results.md, run 2026-10-09 before the L receiver existed); L multi-pass combining has not been run end to end.",
+   "'L -29.6 / CE -26.4 after 16 passes' are spec model figures (sims/l_spread.py; spec 6.3/6.6). The model iterates EM-aided tracking to convergence (spec 6.4: 'many weak passes bootstrap each other through EM'). CE's -26.4 was confirmed in P3, but with the nominal frequency and timing handed to the receiver (README.md:805-809). L's figure is unmeasured and leans on a data-aided reference (20% -> 66%) that L's receiver does not have (EM is CE-only) and that measured small wherever tried. It is probably optimistic for L (inferred).",
+   "'For L the binding stage has moved from gate V to A1 and A3' needs splitting by path. For stored passes with at least half the slot heard (live.py:341-344), A1 is not binding: A3 is, at about -31 dB. A1 binds only for live tiles and in the heard < 0.5 finish branch (live.py:345-357). So the lead-in's '5 dB' is a live figure; for stored passes it is about 1.5-2 dB.",
+   "The lead-in A1 measurements used a drift-free lead-in tone. Spec 2.8's stated reason for the lead-in is a transmitter that drifts when it keys up, which A1's linear +-3 Hz/min drift cells match only partly. Real-rig gains will be smaller (inferred).",
+   "'A3's pilot-only emission is about 6 dB behind CE's' overstates how pilot-only it is. At -30 dB steady the best A3 path ran 3.3-16.1 Hz below the pilot, in the data band, in 5 of 5 trials, and the pilot-anchored re-path recovered the pilot within 0.23 Hz (m1). A3 already uses data-band lumps; an L-matched emission adds about 2-2.5 dB, not the full 6.",
+   "'Both refine_timing flaws showed up only under L's weaker references' is no longer true. Measured on CE SHORT at -27 dB (opt/verify-gain/m3_ce_timing.py, 9 seeds): from a 0.15 T start CE's refine_timing corrected 0 of 18. 14 stayed exactly at 0.150 T (Newton breaks on a non-PD Hessian, track.py:1257) and 4 walked off to 0.20-0.28 T, a mean 0.46 dB latent loss (max 1.47 dB). The flaw is live on CE at its multi-pass operating SNR. Whether it bites on FULL frames is unmeasured.",
+   "'The AGC follows L's envelope above -6 dB' needs a size attached, and the size is small. Measured gain modulation (opt/verify-gain/m2_agc_xmod.py) is 3.95% rms at -6 dB, 6.8% at 0, 15.4% at +10 and 20.4% at +20 dB. That caps every other signal's SINR at 28.1, 23.4, 16.3 and 13.8 dB: irrelevant to weak neighbours at any operating threshold.",
+   "'L's header is probably deeper than its -27 dB estimate' holds for steady paths only. On fading, CE's header is tracking-bound (-29.0 quiet, -26.9 moderate), and L's tracking is weaker, so L's fading header is plausibly no better than CE's.",
+   "'Erasure costs far more... argues for sending the 2,200 never-sent latents (+0.3 dB at the good level)': the +0.3 dB is SNR-equivalent, about +0.1 dB PSNR net (decoder-measurements.md:84-91: +0.15-0.19 dB PSNR gross minus 0.18 dB of energy), and nothing at usable or below, where deep multi-pass operates. F7's '+0.2 to +0.3 dB PSNR' repeats that unit error.",
+   "'SNR2500 reads 0.3-0.9 dB low... field figures probably pessimistic' comes from CE mid-band runs only. Near the band edges the same estimator reads up to 8.4 dB high (R1), so the sign depends on where the signal sits.",
+   "'L buys bandwidth, not dB, at a fixed peak' and F5(b) pull in opposite directions. waveform-l.md argues L is for heat-limited rigs, where its 3.2 dB average-power edge is the point, and for those stations F5(b)'s harder clipping costs 0.1-0.4 dB."
+  ],
+  "missing": [
+   "Measure L multi-pass end to end before ranking L EM/tracking work. Run 8-16 L_FULL passes at -26 to -30 dB on quiet fading through the real listener finish (blind A3, header association, accumulator), and compare the accumulated W with spec 6.3. Every L multi-pass threshold is a model figure that assumes EM-aided tracking (spec 6.4), and the one end-to-end multi-pass run (e2e-results.md) is CE only. Offline, about 16 x 60 s, not CI.",
+   "Loosen A3's threshold for L-shaped hits only. A3's cliff is steep: at -30 dB steady, z was 52.3-54.6 against a threshold near 51.4. The shape test is N(0,1) on noise (wfB: z1 mean 0.03, sd 1.00 along A3 paths), and an L hit needs z1 > 4, false about 3e-5. Raising TBD_PFA from 1e-3 to about 1e-1 for hits whose shape says L would therefore add few false L candidates, while z1 along the true path is still about 8 at -32 (it scales with SNR: 21.5/13.3/5.0 at -28/-30/-34). Inferred about +0.5-1 dB of blind L reach at the finish for a few lines of code. Measure first: at -32 dB the Viterbi path may no longer lie on the signal (evidence: m1 p-values; acquire.py:203; wfB_parts.txt:348-353).",
+   "Replay the real recordings as the acceptance test for every acquisition and noise-floor change (R1, R4, L1, L3, L7, R2): KC2G 04:15Z and 03:45Z, AG7EW beside KC2G. Every gain in the list is on white noise with ideal tones. The one field case contradicted simulation twice: a neighbour in the noise floor (README.md:347-357) and a 0.6 Hz f(0) error (opt/rxcode/m1_kc2g_freq.py). The rig's own filter skirt is never in the simulator (R1).",
+   "Run C2's A/B on FULL frames at CE's deep points (-30 to -36 dB, quiet). Also measure CE's coarse (A2/gate-V) timing error there: CE's refine_timing is measured inert at -27 dB on SHORT (m3_ce_timing.py), so the coarse error is the timing every CE pass is demodulated at, and its size sets C2's real gain.",
+   "L gate V on fading is unmeasured, and it is probably the next binding stage once L1/L3 deepen detection. For CE it already binds: quiet -34 dB gives Z_ref about 4 at the true timing, 0/10 found (README.md:866-869). Measure L's gate V Z_ref at -31 to -34 dB on quiet before building L2/L3; otherwise the deeper candidates are refused at 60-80 s each out of the 180 s budget.",
+   "Late joins and restarts are where live acquisition decides the stored pass. With less than half the slot heard, the finish receives only live detections and hints (live.py:345-357), so L's live A1 limit (about -26 dB) applies there. How often listeners join late (restarts, recovery after outages, O13/O14) should decide how much live-only acquisition work (L6, L7) is worth."
+  ]
+ }
+]

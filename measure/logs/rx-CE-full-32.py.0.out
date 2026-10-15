@@ -1,0 +1,7 @@
+pass 1990584_1500007_16c147c0   CE full
+  frequency   1500.007 Hz at t0   drift -0.000 Hz/min   wander 0.020 Hz rms
+  doppler    0.042 Hz   clock +11.2 ppm   Z_ref 6.2   SNR2500 -35.0 dB   kappa 1.01
+  header     not decoded
+  callsign   (not read)   match Z 0.0   keying ook
+  mean W     -18.12 dB
+image: no header decoded, cannot place the latents

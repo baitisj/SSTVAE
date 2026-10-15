@@ -1,0 +1,137 @@
+[
+ {
+  "group": "plan-and-stage1",
+  "wave": "map",
+  "what": "Nine readers mapped the Python QRSS stack, native/ and the app contract, and a tenth agent wrote the staged port plan (port_plan.md), which was then approved.",
+  "agents": 10,
+  "commit": "none (plan only)",
+  "bugs_found_in_review": 0
+ },
+ {
+  "group": "plan-and-stage1",
+  "wave": "stage 0",
+  "what": "Not a workflow wave: the Build thread built the generator (tools/gen_qrss_config_header.py), the sstvae_qrss library, util/sha256, sequences and the --native-qrss pytest harness.",
+  "commit": "3843897 (2026-10-12 21:17Z, 24 files, +7521 lines)",
+  "bugs_found_in_review": 0
+ },
+ {
+  "group": "plan-and-stage1",
+  "wave": "wave 1",
+  "what": "Ported frame/lframe, precoder+morse (+pytext), polar+header, filters (scipy upfirdn/firwin/resample_poly/i0/i0e) and infra (half, npsum, crc32, rational, npz), each in its own worktree with an adversarial review.",
+  "agents": 10,
+  "commit": "f95c14f (merge with follow-ups, 2026-10-13 00:36Z); worktree finals precoder_morse ef94ca5, polar_header 322f399, frame f3a41d9, filters 848c5e7, infra 25dbed7",
+  "bugs_found_in_review": 46
+ },
+ {
+  "group": "plan-and-stage1",
+  "wave": "wave 2",
+  "what": "Ported picture, beaconfile, the tx slot functions, CE transmit and L-wave transmit as three lanes (picture_chain, ce_tx, l_tx), each reviewed.",
+  "agents": 6,
+  "commit": "0f1f9e3 (merge with follow-ups, 2026-10-13 02:31Z); worktree finals picture_chain 8c06e04, ce_tx 88a81dd, l_tx dbb28a8",
+  "bugs_found_in_review": 12
+ },
+ {
+  "group": "plan-and-stage1",
+  "wave": "wave 3",
+  "what": "Started the pass_audio and codec_cli lanes; a container restart interrupted it, leaving only WIP commits and no results in the journal.",
+  "agents": 2,
+  "commit": "584110a, 60b0c73 (WIP, 02:55Z)",
+  "bugs_found_in_review": 0
+ },
+ {
+  "group": "plan-and-stage1",
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "what": "Resumed pass_audio (transmit_audio, streaming PassAudio, scipy WAV writer) and codec_cli (sstvae_qrss_codec, sstvae-qrss encode/beacon). It then integrated the transmit subcommand, the slot parser, the in-process api.hpp and a C++->Python chain test, and ended with a final review.",
+  "agents": 6,
+  "commit": "2662c90, 2767c1c, follow-ups 7268bc6 (2026-10-13 06:16Z); integrate 1afd26b, final review 18aa704; app swap 2b6d29b (06:31Z, another session)",
+  "bugs_found_in_review": 13
+ },
+ {
+  "group": "stage2-waves4-5",
+  "wave": "4",
+  "what": "Receiver foundations. A skeleton step and its review came first: rx constants generator, types/pyjson/trackbase (PathFn, ChanCapture), shared math (npstats, linalg, bspline) and the rx_types.hpp/_rx.py converters. Three lanes followed, each with its own review: frontend (frontend, rules, chan, StreamFE, math/convolve, npcomplex), math (special, ndfilter, cubic_spline, npfft, acquire_stats) and demod (demod, ldemod, render planes, ce_rx, lwave_rx).",
+  "agents": 8,
+  "commit": "7245713",
+  "bugs_found_in_review": 25
+ },
+ {
+  "group": "stage2-waves4-5",
+  "wave": "5",
+  "what": "Ported track.py's tracker core (track, Kalman/RTS, refine_timing) and its timing and verification code (fit_timing as a direct sparse gather, gate V, refine_path/line_path). Also ported acquisition A1/A2 (carrier lines, preamble search, lead_in_span) and A3 (track_before_detect) plus cwid. Each part was reviewed, and every parity file carries a whole-caller A/B.",
+  "agents": 8,
+  "commit": "21ba9bf",
+  "bugs_found_in_review": 4
+ },
+ {
+  "group": "stage2-waves6-7",
+  "wave": "6a",
+  "what": "Ported sstvae/qrss/ltrack.py (L tracker core as ltrack.{hpp,cpp}, then L coarse timing and gate V as ltrack_timing.{hpp,cpp}) and the rest of acquire.py (arbitration, detections, acquire() single and joint) with the acquire converters moved into the shared rx_types.hpp/_rx.py; each part got an adversarial review.",
+  "agents": 6,
+  "commit": "40c3910 (wave 6a follow-ups, on base 21ba9bf; journal lane heads: ltrack 8eda251 -> review 0aa8512 -> timing 539cdfa -> review d2711ac; acquire e936a6c -> review 6f71ba0, landed as 627657e..7d061fa)",
+  "bugs_found_in_review": 3
+ },
+ {
+  "group": "stage2-waves6-7",
+  "wave": "6b-run1",
+  "what": "First launch of wave 6b (workflow wf_6a5030c8-827), receiver per-pass port only. It was stopped by accident ('[Request interrupted by user]') while the agent was writing the ctest and parity tests. It left WIP commits 345e006 and cb7a31d, which the relaunch resumed.",
+  "agents": 1,
+  "commit": "cb7a31d (WIP)",
+  "bugs_found_in_review": 0
+ },
+ {
+  "group": "stage2-waves6-7",
+  "wave": "6b",
+  "what": "Ported receiver.py in three parts, each reviewed: the per-pass half (receive_pass with L folded in, decode_header, prepare, channel_for); the slot half (detect, _gate, receive_slot, joint) with the C++ receive API rx_api.hpp and a scipy-faithful WAV reader; and the sstvae-qrss receive subcommand, with --image and an .npz reader (simfile).",
+  "agents": 6,
+  "commit": "2671a6b (wave 6b follow-ups, on base 40c3910; lane heads b62614e, d9f3350, 22581a3)",
+  "bugs_found_in_review": 16
+ },
+ {
+  "group": "stage2-waves6-7",
+  "wave": "7",
+  "what": "Four parts, each reviewed: nine Python reference fixes, each mirrored in C++; statistical acceptance (13 seeded scenarios against committed Python reference summaries, with SHA-256 staleness pins); the A-7 false-alarm recheck on the C++ statistic; and the path and CLI clean-ups (one UTF-8/WTF-8 file helper, fsencode bindings, argparse exclusive groups, a derived test_dispatch). This wave closed stage 2.",
+  "agents": 7,
+  "commit": "c0c830f (wave 7 follow-ups, on base 2671a6b; lane heads 2937c0b and a42696a)",
+  "bugs_found_in_review": 19
+ },
+ {
+  "group": "stage3-waves8-9",
+  "wave": "8",
+  "what": "Stage 3a: ported the multi-pass store and association, the 48 h passband store with its own FIXED-predictor FLAC encoder, a vendored dr_flac reader and the directory lock, and the live.py pieces below LiveListener (FeRing, captures, finish_receive, DialLog, Tile, SlotState, LiveConfig). Each of the three lanes had its own review.",
+  "agents": 6,
+  "commit": "136c208 (integration, pushed; base c0c830f; lane -> review commits: store 838ec0e -> 8fff495, passband a99dd64 -> 0335932, live d666330 -> 1ef6776)",
+  "bugs_found_in_review": 15
+ },
+ {
+  "group": "stage3-waves8-9",
+  "wave": "9a",
+  "what": "Stage 3b: ported the LiveListener class and run() with a codec renderer, the audio sources (Stamper, StreamSource, WavSource), and sstvae-qrss decode without EM/retro, plus shared util fixes (errno_of, Windows replace_file retry, pynum Unicode). It also fixed wave 8's Python reference bugs a-aa in Python and C++ in step.",
+  "agents": 6,
+  "commit": "375a85c (pushed; integration a12c3b8 then 375a85c; base 136c208; reviews 10d22c0 listener, a2aed2d sources/decode, 02500ac reference fixes)",
+  "bugs_found_in_review": 12
+ },
+ {
+  "group": "stage3-waves8-9",
+  "wave": "9b",
+  "what": "End of stage 3: sstvae-qrss listen and the in-process listen API (Session) with CLI interop tests against qrss_listen.py, LPC subframes in the FLAC encoder, and nine leftovers from 9a (errno, UTF-8 PNG writes, store fixes, StreamSource wake-up, temporary names, Tile types, QRSS ctests under TSan in CI).",
+  "agents": 6,
+  "commit": "3b818e8 (local integration, the follow-up's base; fb7853e after the later rebase, with integration 033e7a5; base 375a85c; reviews 7369da9 FLAC, 983933f listen, 0c313e1 leftovers)",
+  "bugs_found_in_review": 16
+ },
+ {
+  "group": "stage3-waves8-9",
+  "wave": "9b-followup",
+  "what": "Added LiveListener::abandon(), live::default_seams() and PassbandStore::stop_packing(), so a bounded stop leaves nothing behind. Gave the QRSS ctests a 1500 s TIMEOUT under ThreadSanitizer, so acquire and receiver_slot run inside ctest again in the CI tsan job.",
+  "agents": 2,
+  "commit": "4936f0c (build 5d7fdcc; c80c93b + 867c335 in the final waveform_l history, followed by test fix 9139841 and regen 89653b9)",
+  "bugs_found_in_review": 2
+ },
+ {
+  "group": "stage4-wave10",
+  "wave": "10",
+  "what": "Stage 4: em.py ported whole so a release build runs no Python: a skeleton (tail statistics ndtri/norm_isf/gamma_logsf/py_lgamma, em.hpp shared pieces lmmse_latents/prior_from/em_prior/known_header/known_keying/template_z, the Hooks), then two parallel lanes (EM: pass_path/rereceive/em_refine; retro: template search and retro_detect), then integration (sstvae-qrss decode --em/--retro, em_api app API, a no-Python chain ctest); every build agent was followed by an adversarial reviewer.",
+  "agents": 8,
+  "commit": "df9e029 (integration review; merged into waveform_l as b84c1f8; base 89653b9)",
+  "bugs_found_in_review": 28
+ }
+]

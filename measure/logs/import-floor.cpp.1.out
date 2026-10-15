@@ -1,0 +1,14 @@
+usage: sstvae-qrss <command> [arguments]
+
+QRSSTVAE from the command line: each command takes the arguments of
+the qrss_*.py script it names and behaves as that script does.
+
+commands:
+  beacon      write a clock-chip beacon file for one segment (qrss_beacon.py)
+  decode      decode a picture from the multi-pass store or one pass to a PNG (qrss_decode.py)
+  encode      encode an image once into a stored picture (.qrsp) (qrss_encode.py)
+  listen      listen live on stdin (or a replayed WAV), keeping the QRSS window's tiles (qrss_listen.py)
+  receive     receive the CE and L passes in a slot recording (--no-store only) (qrss_receive.py)
+  transmit    write one pass as transmit audio (8 kHz WAV) (qrss_transmit.py)
+
+'sstvae-qrss <command> --help' describes one command.

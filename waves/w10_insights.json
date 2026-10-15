@@ -1,0 +1,422 @@
+[
+ [
+  "skeleton",
+  "build",
+  "python-bug",
+  "template_z returns NaN for an infinite lam, or for n_cells = NaN. On lam = inf, the far-tail fallback computes (K-1) log(inf) - inf, which is NaN. Python's min(nan, 0.0) keeps the NaN (the first argument wins), and _gauss_z(nan) is NaN. A NaN Z compares False against any threshold, so such a peak is silently dropped rather than reported as overwhelming.",
+  "em_pins.hpp TEMPLATE_Z rows {INF_, 33, 1.0} -> NaN and {40, 33, NAN_} -> NaN; sstvae/qrss/em.py:419-427"
+ ],
+ [
+  "skeleton",
+  "build",
+  "python-bug",
+  "_gauss_z(-inf) returns NaN instead of +inf: the Mills iteration computes sqrt(inf), then inf - 2 log(inf * sqrt(2 pi)), which is NaN.",
+  "em_pins.hpp GAUSS_Z row {-INF_, NAN_}; sstvae/qrss/em.py:406-416"
+ ],
+ [
+  "skeleton",
+  "build",
+  "python-bug",
+  "template_z with n_chunks <= 0 does not refuse cleanly. gamma.logsf returns NaN for a <= 0, which sends the call to the fallback, and math.lgamma(0 or -2) raises a bare ValueError 'math domain error'. With lam <= 0 in the fallback, math.log raises the same.",
+  "em_pins.hpp TEMPLATE_Z rows (40, 0, 1), (40, -2, 1), (0, 0, 1) -> 'math domain error'; em.py:421-425"
+ ],
+ [
+  "skeleton",
+  "build",
+  "python-bug",
+  "lmmse_latents keeps a NaN weight (np.maximum propagates NaN), so a single NaN W poisons its whole precoder block's v through block_mean. This is unreachable through Store.merge, which refuses non-finite input, but a hand-made (S, W) passed to prior_from carries it.",
+  "inferred from code: em.py:110-130; pinned case k=4 (w[2] = NaN) in gen_em_pins.prior_case"
+ ],
+ [
+  "skeleton",
+  "build",
+  "numerics",
+  "CPython's math.lgamma is its own Lanczos approximation (Modules/mathmodule.c m_lgamma), not the C library's lgamma, and the two differ in the last place for roughly half of all arguments. Porting it as math::py_lgamma made template_z's far-tail fallback bit-exact.",
+  "scratch sweep: 0 mismatches against math.lgamma over about 70k arguments after the port; LGAMMA_DIGEST in em_pins.hpp"
+ ],
+ [
+  "skeleton",
+  "build",
+  "numerics",
+  "scipy 1.18.1 has no gamma._logsf of its own: rv_continuous._logsf applies apply_where(x > gammaincinv(a, 0.5), log(gammaincc), log1p(-gammainc)), and numpy's SIMD log/log1p differ from libm by an ulp at some points. So gamma.logsf cannot be bit-exact without reimplementing numpy's SIMD log.",
+  "11 of 40060 points not bitwise, worst 2.05e-16 rel; 110-value pinned table worst 2.14e-16"
+ ],
+ [
+  "skeleton",
+  "build",
+  "numerics",
+  "norm.isf(q) is -ndtri(q)*1.0+0.0, so isf(0.5) is +0.0, not -0.0. scipy's cephes ndtri calls only libm's log and sqrt, so it ports bit for bit.",
+  "test_special.cpp norm_isf(0.5) signbit check; NDTRI_DIGEST over 736 values"
+ ],
+ [
+  "skeleton",
+  "build",
+  "performance",
+  "Through the binding, C++ against Python: template_z 1.1 us vs 236 us (about 210x); the far-tail branch 1.1 us vs 123 us; _gauss_z 0.1 us vs 72 us; prior_from on a FULL pass (50600 latents) 1.77 ms vs 5.04 ms (2.8x). The template search calls template_z per candidate cell set, so the retro lane gets this for free.",
+  "scratchpad/emgen/timing.py, 20-5000 calls each"
+ ],
+ [
+  "skeleton",
+  "build",
+  "process",
+  "The sstvae-qrss executable is the ninja target 'sstvae-qrss'. 'sstvae_qrss_cli' is the CLI library's phony target and does not link the binary. Until the executable exists, tests/test_qrss_native_decode.py skips almost everything ('sstvae-qrss not built'), which looks like a pass.",
+  "ninja -C native/build-qrss -t query sstvae_qrss_cli / sstvae-qrss; decode tests went from 7 skipped to 1 skipped"
+ ],
+ [
+  "skeleton",
+  "build",
+  "process",
+  "Keep uids out of cross-implementation pins: replace the uid in a refusal text with <uid> on both sides, and key pinned queries by the formula pass's name. This holds to the never-compare-pass_uid rule and still pins the refusal.",
+  "gen_em_pins.scenario_results / test_em.cpp test_scenarios"
+ ],
+ [
+  "skeleton",
+  "build",
+  "process",
+  "A pinned soft-header scenario needs a premise the generator asserts. A weak LLR amplitude of 3/16 (exact in float32) gives: one, two or three passes summed fail to decode, six decode. 'soft-split3' (six passes as three segments of two) then proves the soft header is summed per segment, not over all members.",
+  "gen_em_pins.check_weak; em_pins.hpp soft-split3 -> None, soft -> header"
+ ],
+ [
+  "skeleton",
+  "review",
+  "performance",
+  "em_prior on six FULL members: Python 11.9 ms vs C++ 3.3 ms; known_header 10.7 ms vs 1.5 ms (one polar list header decode 11.6 ms -> 1.27 ms); template_z 110-186 us -> 1.1 us.",
+  "measured with scratchpad/rv10/bench.py, warm page cache, 2026-10-14"
+ ],
+ [
+  "skeleton",
+  "review",
+  "performance",
+  "known_keying is SLOWER in C++ (31.7 ms) than Python (23.7 ms) because it loads every member's whole pass file (~3.6 MB for FULL, ~5 ms each in C++). Likely the store lane's CRC32 (slicing-by-8) against zlib's PCLMUL crc32 plus extra copies in load_pass; worth a look in the store lane, not in em.",
+  "measured 2026-10-14 with bench.py; cause inferred from code (native/core/qrss store crc32.cpp)"
+ ],
+ [
+  "skeleton",
+  "review",
+  "numerics",
+  "scipy 1.18.1's gamma.logsf is not plain log(sf): rv_continuous._logsf splits at the median (x > gammaincinv(a, 0.5) -> log(gammaincc), else log1p(-gammainc)). The port reproduces the split; plain log(gammaincc) loses digits below the median. The plan's 'closed form for integer a' would also not have been bit-parity; the cephes path chosen is.",
+  "worst rel error 2.2e-16 against scipy over the pin grid; scipy/stats/_distn_infrastructure.py logsf/_logsf"
+ ],
+ [
+  "skeleton",
+  "review",
+  "numerics",
+  "template_z and gauss_z agree bit for bit with Python, including the far tails where ndtri switches branches, so no tolerance is needed there.",
+  "scratchpad/rv10/fuzz_tz.py, 20000 random points, 0 differing"
+ ],
+ [
+  "skeleton",
+  "review",
+  "process",
+  "The parity file missed a mutation (known_header skipping the LLRs of a member whose decoded header mismatches) because make_pass_result with decoded=True and no hdr_es_n0_db yields all-zero LLRs, so that member contributed nothing either way. Fixture defaults can silently hide a whole branch; a new scenario with hdr_es_n0_db=-3.0 now catches it.",
+  "tests/test_qrss_native_em.py test_known_header 'foreign-decoded-llr+soft'; mutation survived before, caught after"
+ ],
+ [
+  "skeleton",
+  "review",
+  "process",
+  "Keep both the ctest pins and the Python parity file: the ctest pins caught em.cpp mutations the parity file's scenario set did not, and vice versa (the LLR case above).",
+  "mutation runs during review, em.cpp restored from scratchpad/rv10/em.cpp.orig"
+ ],
+ [
+  "skeleton",
+  "review",
+  "process",
+  "path::string() in a test goes through the ANSI code page on Windows; util::path_text is the UTF-8 form and should be the default in any new ctest that builds a store root from a temp dir.",
+  "native/tests/qrss/test_em.cpp fresh_dir/Cleanup change"
+ ],
+ [
+  "em",
+  "build",
+  "python-bug",
+  "em.rereceive unpacks `new, trs = receiver.receive_pass(..., return_tracks=True)`, but receive_pass returns a bare None (not (None, tracks)) when gate V refuses an unverified detection, so rereceive raises TypeError 'cannot unpack non-iterable NoneType object' instead of returning None. Unreachable from passes the receiver stores (finite z_ref and timing), reachable from a hand-built PassResult. The C++ reproduces the TypeError text; left as is per the rules.",
+  "sstvae/qrss/em.py:300 (tuple unpack) vs sstvae/qrss/receiver.py:301 (return None before the (pr, tracks) return at :328)"
+ ],
+ [
+  "em",
+  "build",
+  "python-bug",
+  "em_refine's stop test `history[-1] - history[-2] < tol_db` is False for NaN, and acc_mean_w_db returns -inf for an accumulator with no heard latent, so -inf - -inf = NaN never stops the rounds: all `rounds` run. Harmless (nothing is re-received with useful effect there) but the convergence test silently does not apply; the C++ mirrors it.",
+  "sstvae/qrss/em.py:399 and :146-147"
+ ],
+ [
+  "em",
+  "build",
+  "performance",
+  "C++ vs Python wall time (binding vs reference, simulated -6 dB passes, one thread, RelWithDebInfo): pass_path TINY 0.05 s vs 0.21, SHORT 0.19 vs 0.94, FULL 1.09 vs 6.07; rereceive receive_pass branch TINY 0.06 vs 0.36, SHORT 0.32 vs 2.59, FULL 3.37 vs 18.27; hdr split (path given) SHORT 1.01 vs 4.94, FULL 4.22 vs 22.95; no split SHORT 0.54 vs 3.00, FULL 3.24 vs 17.35; split measuring its own path SHORT 1.18 vs 6.70, FULL 4.98 vs 29.37; em_refine one round over 3 TINY passes 0.31 vs 1.68, over 2 SHORT 1.98 vs 10.22. Ratios 0.12-0.24 (4-8x faster); parity-file ratios 0.20-0.28 for rereceive and 0.19-0.22 for em_refine.",
+  "scratch time_both.py runs 2026-10-14; parity file WORST 'time ... C++/Python'"
+ ],
+ [
+  "em",
+  "build",
+  "numerics",
+  "Single rereceives produced float32 z and w bit-identical to Python on every TINY variant (double-level agreement ~1e-12 is absorbed by float32 rounding); SHORT differed in a few elements by one or two float32 ulps (7.3e-10 of scale). Whole em_refine A/B on SHORT gave identical history, stores and accumulators; on TINY stored z differed by 1.04e-8 after rounds (an ulp flip feeds the next round's prior).",
+  "tests/test_qrss_native_em_refine.py WORST: rereceive z 0 (TINY) / 7.33e-10 (SHORT), em_refine stored z 1.04e-08 (TINY) / 0 (SHORT)"
+ ],
+ [
+  "em",
+  "build",
+  "process",
+  "The A/B helper first recorded the C++/Python time ratio for every em_refine call, including rounds 0 and -2 (pure store I/O), and reported a 'worst' ratio of 0.885 that looked like the C++ loop was barely faster. Gating the ratio on calls that re-received something gave 0.19-0.22. Time ratios must be taken only on calls that do the work being compared.",
+  "tests/test_qrss_native_em_refine.py _ab (the `if any(_LINE.match(x) for x in lr)` gate)"
+ ],
+ [
+  "em",
+  "build",
+  "process",
+  "The ctest pins passed on the first build with worst error 1.48e-8 against a 1e-5 bar, so two deliberate mutations checked that the ctest can fail: swapping which parity run supplies the report/LLRs (19 failures) and dropping the per-member path hand-back between rounds (6 failures, caught only by the EmSeams stub test).",
+  "native/tests/qrss/test_em_refine.cpp, mutation runs 2026-10-14"
+ ],
+ [
+  "em",
+  "build",
+  "simplification",
+  "On the receive_pass branch, rereceive hands receive_pass the ChanCapture it already built through ReceiverSeams.channel_for, so the capture is mixed and its noise PSD computed once instead of twice (Python builds an identical second channel inside receive_pass). The seam meant for tests doubles as a reuse path with no new API.",
+  "native/core/qrss/em_refine.cpp rereceive (s.channel_for lambda)"
+ ],
+ [
+  "em",
+  "review",
+  "process",
+  "functools.wraps copies the wrapped function's __dict__, so a marker attribute such as __qrss_native__ is inherited by any spy that wraps a row. Detecting 'is this the native row' by that marker alone silently bypasses a decorator-style spy: the test still passes and the spy is never called. Check for __wrapped__ as well, or compare identity.",
+  "tests/qrss_native/em_refine.py:39-42; dropping the __wrapped__ check fails test_em_refine_seam[wrapped] (mutation-checked)"
+ ],
+ [
+  "em",
+  "review",
+  "process",
+  "Two of em_refine/rereceive's reference branches had no test that could fail: the header-version re-label (hdr.version != p.header.version, em.py:289-290) and 'L member logged in round 1 only'. Every fixture used version-2 headers, and every L case stopped after one round because nothing gained. Pins for a version-1 pass, and a tol_db=-inf run, are what make them testable.",
+  "mutants M1 (drop the re-label) and M2 (log the L line every round) survived the lane's ctest and parity file; both now fail test_qrss_core_em_refine"
+ ],
+ [
+  "em",
+  "review",
+  "process",
+  "After restoring a mutated source, rebuild before probing. A probe against the stale mutant binary showed a flat C++ EM history ([6.198, 6.198, 6.198]) that read like a real port bug. After rebuilding, it matched Python to 1 ulp.",
+  "measured during the review (probe_seg against native/build-qrss/python)"
+ ],
+ [
+  "em",
+  "review",
+  "performance",
+  "C++/Python wall-time ratios on the fast tier: em_refine 0.32, SHORT rereceive 0.19, TINY rereceive 0.28. The C++ is 3-5x faster, single-threaded, with the reference's arithmetic.",
+  "tests/test_qrss_native_em_refine.py _print_worst, this commit: time em_refine C++/Python 0.316, time short rereceive 0.186, time tiny rereceive 0.278"
+ ],
+ [
+  "em",
+  "review",
+  "numerics",
+  "The only cross-implementation error that reaches the stored passes is the primitives' rounding, carried through re-receive. Stored z is 1e-8 rel after three EM rounds and the accumulator S 4e-9, three orders under STORE_BAR. pass_path's Z_ref at the q floor (tiny-15, 5e-7) is the loosest figure, which is where a `>` tie between line and refined paths could in principle flip.",
+  "worst: em_refine stored z 1.04e-08, accumulator S 4.4e-09, pass_path Z_ref (q floor) 5.03e-07"
+ ],
+ [
+  "rt",
+  "build",
+  "performance",
+  "template_search C++ vs Python (one FULL-pass accumulator: 1 segment, 1 candidate, 5 clock steps), raw FE Capture: TINY 0.17 s vs 0.33 s, SHORT 0.88 s vs 1.93 s, FULL 6.3 s vs 16.6 s; on a receiver.Prepared: 0.10 vs 0.23, 0.62 vs 1.42, 3.8 vs 12.6 s. receiver::prepare is ~2.5 s of FULL's 6.3 s.",
+  "scratchpad/w10r/timing.py, best of 3/2/1 runs, 2026-10-14, shared 4-CPU container; Z identical (dZ 0 to 3.6e-15), same cell"
+ ],
+ [
+  "rt",
+  "build",
+  "performance",
+  "retro_detect over the parity file's seven-slot world (5 searched, 2 found and received): SHORT C++ 4.9 s vs Python 12.1 s; TINY 1.14 s vs 2.77 s; second run (nothing new) SHORT 2.55 vs 5.0 s. Under --native-qrss=rx, test_qrss_cli's decode --retro takes 7.7 s and test_qrss_em's retro test 2.6 s (was 7.2 s).",
+  "scratchpad/w10r/timing_retro.py; pytest --durations"
+ ],
+ [
+  "rt",
+  "build",
+  "performance",
+  "The search is FFT-bound and both sides use pocketfft, so the gain is ~2.2-3.3x, not 10x. Per search_chan call (K=128, 19 bins): products 27 ms -> AVX2 clone, |C|^2 28 ms -> AVX2 branch-free hypot (bit-identical, NaN/inf lanes checked), IFFTs 53 ms per-row -> 36 ms batched 32 rows per pocketfft call (memcmp-identical); total 111 -> 65 ms vs numpy 175 ms. The remaining levers are not bit-exact or need build changes: wider-SIMD pocketfft needs a separate -mavx2 TU (CMake), threads across the 19 bins would give ~4x but no core QRSS code is threaded yet.",
+  "scratchpad/w10r/bench_parts.cpp, bench_batch.cpp, bench_abs.cpp"
+ ],
+ [
+  "rt",
+  "build",
+  "numerics",
+  "pocketfft's multi-row c2c (rows in SIMD lanes) gives exactly the bits of one-row-at-a-time exec, so batching is free for parity; numpy's np.abs on complex128 is a SIMD hypot (larger*sqrt(fma(r,r,1)) with explicit inf/NaN selection) whose branch-free AVX2 form reproduces np::abs lane for lane.",
+  "bench_batch: 'identical 1'; bench_abs: 'identical 1, value diffs 0' including inf/NaN/zero inputs"
+ ],
+ [
+  "rt",
+  "build",
+  "numerics",
+  "False-alarm recheck, C++ vs Python on noise-only captures against a picture's accumulator: TINY n=40: Z max 1.114, mean 0.030, median 0, 38 of 40 exactly 0, count >3/>4/>5 = 0/0/0; SHORT n=42: Z max 1.640, mean 0.170, median 0, 32 of 42 zero, >3/>4/>5 = 0/0/0. Per-capture |dZ| at most 1.68e-14 (TINY) / 5.54e-14 (SHORT), Lambda rel 4.2e-16, the same winning cell on all 82; no detection on either side. Lambda/K on noise averages 1.91 (TINY, K=26) and 1.39 (SHORT, K=128) -- the max over 118,845 cells, so the Bonferroni Z is 0 most of the time. The ctest adds 8 pin-free TINY noise captures (largest Z 0.000) and pins 7 noise cases' Lambda.",
+  "scratchpad/w10r/fa_recheck.py + fa_report.py (fa_tiny.jsonl, fa_short.jsonl); test_em_search.cpp test_false_alarms"
+ ],
+ [
+  "rt",
+  "build",
+  "python-bug",
+  "em._chunk_template raises IndexError ('index 0 is out of bounds for axis 0 with size 0') when the keyed span holds no sample of the capture (t0_index past n_ch, or n_ch 0): `starts = n[0] + ...` indexes an empty arange. template_search can reach it with a capture whose t0_index lies far past its end; an empty template would be the natural answer (template_search already skips len(starts) == 0). Left as is; the C++ reproduces the IndexError text.",
+  "sstvae/qrss/em.py:483 (starts = n[0] + chunk * np.arange(n_k)); gen_em_search_pins.py cases tiny-empty, tiny-after"
+ ],
+ [
+  "rt",
+  "build",
+  "python-bug",
+  "template_search with tau_s < -0.004 makes lag_max negative and _search_chan slices C[:, :2*lag_max+1] from the end, returning meaningless cells instead of refusing. The C++ refuses (deviation).",
+  "sstvae/qrss/em.py:597 lag_max = int(math.ceil(tau_s * CH_FS)); :512 [:, :2 * lag_max + 1]"
+ ],
+ [
+  "rt",
+  "build",
+  "numerics",
+  "Detections built in the pins land exactly on the planted cell: a template-of-segment-1 signal from candidate (1500.5 Hz, 0.3 Hz/min, 2 ppm), 37 samples late, one clock step (149.95 ppm on TINY) and 3 bins up comes back as segment 1, f 1500.866 Hz, ppm 151.95, tau0 37, Z 28.5; SHORT at amp 0.035, Z 16.3. TINY's clock step is huge (149.95 ppm) because TS_SLIP_SAMPLES/(dur*CH_FS) uses TINY's 53 s span.",
+  "gen_em_search_pins.py --probe output; em_search_pins.hpp TEMPLATE_SEARCH"
+ ],
+ [
+  "rt",
+  "build",
+  "process",
+  "A ctest that needs a capture with a real detection can be built without committed sample data: the formula store's own template (prior_from + make_classes + chunk_template with chunk 1) planted at a chosen lag/step/bin into splitmix noise, phases from libm cos/sin on an exactly-reduced turn, then rounded to float32. C++ and Python then agree to ~2e-16 on Z, so 1e-9 pins have six orders of margin; one mutation of the drift derotation fails 11 checks.",
+  "native/tests/qrss/test_em_search.cpp ch_capture; mutation run (drift/61.0)"
+ ],
+ [
+  "rt",
+  "build",
+  "process",
+  "My own SHORT receive_template test asserted a decoded header at -30 dB; the reference's pass had header None. The parity comparison (header equality) already covered it; the extra expectation was wrong, not the port.",
+  "tests/test_qrss_native_em_search.py::test_receive_template_short, first slow run"
+ ],
+ [
+  "rt",
+  "review",
+  "numerics",
+  "receive_template on SHORT with a CW-known member is the only place this lane misses 1e-6. track.refine_timing is a finite-difference Newton with h = 0.3 samples, and it turns last-ulp differences in its input into about 3e-5 of the ppm. template_search's output is bit-identical going in, so this is the track lane's sensitivity, not an em_search error. A pass found at the detection gate inherits it.",
+  "test_template_search_cw_and_drift_short worst: cw pass ppm 2.68e-05, z 4.11e-06, f_hz 2.2e-08 Hz; the TINY counterpart is 0 / 1.8e-12"
+ ],
+ [
+  "rt",
+  "review",
+  "python-bug",
+  "Fragile spot in the reference: template_search on a 250 Hz capture calls chan.noise_floor() per candidate, and the floor raises ZeroDivisionError (0 samples) or ValueError (1 sample) on a capture too short for it. Whether a search refuses therefore depends on whether any candidate reaches the capture. The port now copies this ordering instead of hiding it. Python is unchanged.",
+  "probe_short.py: n in {0,1} with f_mix 0 raises on both sides; with f_mix 200 Hz (all out of reach) both return (None, 0.0, {})"
+ ],
+ [
+  "rt",
+  "review",
+  "process",
+  "The fast tier had no case that put a drifting candidate or a CW-voted member through template_search. Flipping the drift's sign in derotated() passed every existing fast test, and dropping the OOK vote is caught only on SHORT, since TINY has n_win = 0 and keying never reaches its template. The lane's ctest pins cover drift 0.3 and FSK on SHORT, but not OOK.",
+  "mutations: drift sign survived 10/10 template_search_tiny cases and was caught by the new cw/drift TINY tests; ook=false was caught only by test_template_search_cw_and_drift_short (dZ 1.17)"
+ ],
+ [
+  "rt",
+  "review",
+  "performance",
+  "Template search is about 2-2.6x faster than Python, from exact precomputation: per-candidate channel/derotation/N0 reused across segments, FR FFTs cached per chunk start, the roll done as an index offset, 32-row batched pocketfft, and an AVX2+FMA clone of the product and |C|^2 loops.",
+  "TINY C++ 0.27-0.34 s vs Python 0.53-0.75 s (probe_cw.py); SHORT 1.4 s vs 3.2 s; author's FULL 6.3 s vs 16.6 s; retro over 7 SHORT slots 4.9 s vs 12.1 s"
+ ],
+ [
+  "rt",
+  "review",
+  "numerics",
+  "On noise, the Bonferroni-corrected Z sits mostly at its floor. TINY: 38 of 40 captures give Z = 0, max 1.11. SHORT: 32 of 42 give Z = 0, max 1.64. Both are far under the Z > 6 gate, and C++ and Python agree to 5.5e-14 on every capture.",
+  "scratchpad/w10r/fa_tiny.jsonl, fa_short.jsonl: TINY mean 0.030 sd 0.174; SHORT mean 0.170 sd 0.383; 82/82 identical cells"
+ ],
+ [
+  "rt",
+  "review",
+  "simplification",
+  "Taking the 250 Hz channel once for all candidates is valid only because channel_for at the CH rate ignores the detection: it wraps prep.fe with the given mix. The noise floor's laziness has to follow the reference's reach test as well, or the shared floor becomes an observable behaviour change.",
+  "sstvae/qrss/receiver.py:207-211; native/core/qrss/em_search.cpp search_prepared"
+ ],
+ [
+  "integrate",
+  "build",
+  "performance",
+  "End-to-end CLI wall time, C++ against Python, on a two-member store (SHORT + TINY with captures), including process start, codec load and fp16 render: decode --em 2 1.22 s vs 5.51 s (4.5x); decode --retro (slots held, so mostly fixed cost) 0.60 s vs 1.75 s. The no-Python chain (encode, listen replay of a 1201 s recording, --list, --retro SHORT find, --em 1) runs in 12.8 s in total, listen 7.8 s of it.",
+  "scratchpad timeit.py run 2026-10-14; ctest qrss_core_em_chain output: [listen] 7.8 s, [retro] 1.7 s, [em] 1.7 s"
+ ],
+ [
+  "integrate",
+  "build",
+  "numerics",
+  "decode --em/--retro side by side print exactly the same text in every case (0 units of the last printed digit) and render pixel-identical PNGs, on stores of real received passes written by either implementation, and the reverse run (Python --em on a C++-refined store) is identical too: the 1e-8-of-scale z differences em_refine's parity measured never reach a printed digit or a pixel.",
+  "test_qrss_native_decode.py worst line: 'picture mean squared error 0, printed number (units of the last digit) 0'"
+ ],
+ [
+  "integrate",
+  "build",
+  "simplification",
+  "em_refine's progress contract is not 'total never falls': when EM converges early its last call is (done, done, 'converged after round r'), lowering total to done. em_api.hpp first documented it wrong and test_em_api's monotonicity check caught it on the first run; the header and the check now state the exception, which is what a progress bar needs (close the bar at done, not at the planned total).",
+  "first test_em_api run: 'FAIL refine converging: total never falls at call 3'; native/core/qrss/em_refine.hpp:194-202"
+ ],
+ [
+  "integrate",
+  "build",
+  "process",
+  "A Python call that numbers rounds from 1 on every invocation (em_refine: for r in range(1, rounds+1), em_round = r) means a second `--em 1` leaves every member at 'EM round 1' again, not 2 -- the member's em_round is the round of its last re-receive within one call, not a cumulative count. My reverse test assumed cumulative and failed; worth knowing for an app that shows 'EM round' as progress across button presses.",
+  "sstvae/qrss/em.py:377-390; test_decode_em_reverse first run"
+ ],
+ [
+  "integrate",
+  "build",
+  "python-bug",
+  "Not a bug but a hazard: qrss_decode.py --em N with N huge iterates range(1, N+1) and em_refine's history loop would run up to N rounds if every round kept gaining >= tol_db; there is no cap. Bounded in practice by convergence (tol 0.05 dB).",
+  "qrss_decode.py:171 (em.em_refine(store, key, rounds=args.em)), sstvae/qrss/em.py:377"
+ ],
+ [
+  "integrate",
+  "build",
+  "process",
+  "In the chain test, choosing the weak pass's frame matters for honesty: a TINY pass in a recording listened with --frame short is 'missed' trivially. Checking the listener's passes/ directory (one .npz) is what makes 'the live receiver missed it, the template search found it' a tested claim.",
+  "native/tests/qrss/test_em_chain.cpp (listen: the live receiver stored the strong pass only)"
+ ],
+ [
+  "integrate",
+  "review",
+  "python-bug",
+  "Accumulator.uids returns members' uids unchecked and em_refine's round loop re-receives and update_pass()es members in order, so a damaged member part-way down the list leaves the store half-refined when the ValueError from _pass_path finally fires (known_header only protects the case where it reaches the bad member first). Not wrong per se, but em_refine has no all-or-nothing guarantee on a damaged accumulator.",
+  "sstvae/qrss/em.py:378-394 (for uid in list(acc.uids): ... store.update_pass(new)), store.py:301-305"
+ ],
+ [
+  "integrate",
+  "review",
+  "python-bug",
+  "A passband meta.json that is not JSON surfaces from PassbandStore.__init__ as a raw json.decoder.JSONDecodeError traceback from qrss_decode.py --retro rather than a SystemExit naming the passband directory; the same is true of a meta.json without 'scale' (KeyError).",
+  "sstvae/qrss/frontend.py:520 (m = json.loads(meta.read_text())), probe case a-pb-badmeta"
+ ],
+ [
+  "integrate",
+  "review",
+  "process",
+  "A side-by-side test of a shared store against a live listener proves nothing unless the listener writes the same hour the reader reads; the original session test passed with the listener 400 s past an unrelated hour. Checking that the slot's hours exist before, and that the lead hour went raw -> FLAC during the test, is what gives it teeth.",
+  "native/tests/qrss/test_em_api.cpp test_session_sharing: clock at t0+20 fails 3 checks, t0+400 passes 174"
+ ],
+ [
+  "integrate",
+  "review",
+  "process",
+  "A helper shared between two API entry points with different meanings of \"\" (refine: each pass's own; retro: invalid) silently weakened the stricter one. Separate the check per caller when the empty value means different things.",
+  "native/core/qrss/em_api.cpp:46 vs :172"
+ ],
+ [
+  "integrate",
+  "review",
+  "simplification",
+  "The Python repr of a JSON value existed only in decode.cpp; moving it to pyjson::repr lets the store raise Python's 'bad pass uid <repr>' without the store depending on decode.",
+  "native/core/qrss/pyjson.cpp repr(), decode.cpp py_repr now one line"
+ ],
+ [
+  "integrate",
+  "review",
+  "performance",
+  "Measured: em_api ctest 5.1-5.5 s (173 checks incl. the session test with ~200 chunks pushed); the no-Python chain ctest 12.7 s; decode parity file 136 s on 4 shared CPUs (fast tier); a header touch in pyjson.hpp/store.hpp costs ~7.5 min per tree at -j2.",
+  "ctest/pytest timings above"
+ ],
+ [
+  "integrate",
+  "review",
+  "process",
+  "em_api always installs a progress hook, so em_refine does one extra load_pass per member per round (eligible()) to size the total; measured negligible on TINY (refine of 2 rounds over 3 TINY passes 0.52 s) but it is a full pass read on FULL passes.",
+  "native/core/qrss/em_refine.cpp eligible(), inferred from code"
+ ],
+ [
+  "integrate",
+  "review",
+  "process",
+  "The no-Python chain uses SHORT passes because a TINY frame has no header (n_hdr=0), so a strong TINY pass alone can never create an accumulator for retro/EM to work on.",
+  "native/tests/qrss/test_em_chain.cpp; frame tiny n_hdr=0"
+ ]
+]

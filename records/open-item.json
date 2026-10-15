@@ -1,0 +1,668 @@
+[
+ {
+  "wave": "wave 1",
+  "kind": "open-item",
+  "what": "A shared numpy pairwise-sum helper never landed, so private pairwise sums remain in three files.",
+  "evidence": "util/numpy_sum.hpp not created; private sums in precoder.cpp, polar.cpp and filters.cpp; core/qrss npsum.hpp exists and a switch to it was suggested.",
+  "status": "open",
+  "where": "native/core/qrss/precoder.cpp, polar.cpp, filters.cpp",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "open-item",
+  "what": "Additions to check_includes' SYMBOLS table were suggested as optional.",
+  "evidence": "<bit>, <cctype>, <compare> and gcd.",
+  "status": "open",
+  "where": "tools/check_includes.py",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "open-item",
+  "what": "OnnxCodec has no source_sha256 accessor, so the C++ opens a second, metadata-only ORT session.",
+  "evidence": "codec_cli notes.",
+  "status": "open",
+  "where": "native/core/codec, native/core/qrss/codec",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "open-item",
+  "what": "Windows non-ASCII paths fail through narrow fopen/ofstream, and the source_sha256 wstring is widened byte by byte.",
+  "evidence": "codec_cli/final review notes. A later wave 'paths' entry is outside this group's sources.",
+  "status": "open",
+  "where": "native/core/qrss/codec",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "open-item",
+  "what": "std::strerror is not thread-safe.",
+  "evidence": "Final review note.",
+  "status": "open",
+  "where": "native/core/qrss/codec/api.hpp (ReadError)",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "open-item",
+  "what": "The in-process API has no 'next slot' helper.",
+  "evidence": "review:integrate API notes.",
+  "status": "open",
+  "where": "native/core/qrss/codec/api.hpp",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "open-item",
+  "what": "A locale test for transmit --freq under de_DE was suggested. The final review added a de_DE test for refusal texts.",
+  "evidence": "codec_cli and final review notes.",
+  "status": "open",
+  "where": "tests (sstvae-qrss CLI)",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "open-item",
+  "what": "Only the C++ to Python direction is tested. The reverse chain, Python transmit to C++ receive, belongs to stage 2.",
+  "evidence": "integrate notes.",
+  "status": "open",
+  "where": "tests (chain)",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "open-item",
+  "what": "Stage 1 exit criteria 5-6 and the on-air check are not evidenced in this group's sources.",
+  "evidence": "Criteria 5-6: the app sends with .venv renamed away, and a TINY null-sink loopback. The PTT/on-air FULL check is owner-only.",
+  "status": "open",
+  "where": "port_plan.md exit criteria",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "open-item",
+  "what": "Hex spellings of the CE/L constants PULSE_NORM and G0 were suggested as optional.",
+  "evidence": "ce_tx/l_tx notes.",
+  "status": "open",
+  "where": "tools/gen_qrss_config_header.py",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "4",
+  "kind": "open-item",
+  "what": "Add tools/gen_qrss_rx_config.py --check to CI so a stale rx_config.hpp turns CI red.",
+  "evidence": "Skeleton shared_changes_needed: ci.yml around line 72. Done in commit 7245713 'wave 4 follow-ups (... rx constants checked in CI)'.",
+  "status": "fixed",
+  "where": ".github/workflows/ci.yml, tools/gen_qrss_rx_config.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "open-item",
+  "what": "Emit live.py's ALIGN (16) and HALO (128) from the generator instead of the hand copies in frontend.hpp.",
+  "evidence": "Frontend shared_changes_needed. Done in commit 7245713: 'StreamFE's ALIGN and HALO now come from the generated rx_config.hpp'.",
+  "status": "fixed",
+  "where": "native/core/qrss/frontend.hpp, tools/gen_qrss_rx_config.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "open-item",
+  "what": "pyjson and pass_uid locale safety could not be tested under a comma decimal locale, because only C/POSIX locales are installed.",
+  "evidence": "Skeleton review notes: pyjson parses through pynum::py_float and formats through frame::py_repr; pass_uid prints '%.0f'",
+  "status": "open",
+  "where": "native/core/qrss/pyjson, types",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "open-item",
+  "what": "In the transmit lane's ce.cpp, at_positions, phase_at, phase_grid and var_grid compute values for an L frame where the reference asserts, and phase_grid/var_grid spread a NaN or inf over fewer samples than scipy's upfirdn. The demod reviewer listed both, did not fix them, and ce.cpp was not touched afterwards.",
+  "evidence": "NaN/inf spreads over 121 samples against 128 on tiny at 250 Hz because the C++ skips zero taps. Suggested fixes: move ce_rx::require_ce_layout into ce.cpp; run the zero taps or document it. Affects _mean_template_grid only with non-finite symbols, which EM never produces.",
+  "status": "open",
+  "where": "native/core/qrss/ce.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "open-item",
+  "what": "The math lane did not compare the x86_64 cross build. Agreement with scipy's special functions elsewhere holds only to that platform libm's ulp.",
+  "evidence": "math lane parity 'Not compared' list",
+  "status": "open",
+  "where": "native/core/math/special",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "Add shared converters for CarrierStats, _A2Input, _A2Channel, PreambleHit, PreambleKind, TbdHit and Acquisition in rx_types.hpp and _rx.py. In wave 5 the A1/A2 and A3 bindings converted them locally.",
+  "evidence": "A1/A2 and A3/cwid shared_changes_needed; done in wave 6a (commit 627657e '... shared acquisition converters')",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/rx_types.hpp, tests/qrss_native/_rx.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "preamble_p's gammaincc is now the largest single item in preamble_search and slower than scipy's. A faster regularized-gamma upper tail, or skipping it when Lambda is far from the threshold, is the next A2 performance lever.",
+  "evidence": "~26 ms per call in C++ against scipy's ~17.5 ms (A1/A2 port); special.cpp later gained only ndtri/norm_isf/gamma_logsf (wave 10)",
+  "status": "open",
+  "where": "native/core/math/special, acquire_stats preamble_p",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "_preamble_sums is slower than numpy's BLAS zgemm einsum. This is the place to vectorise or block if A2 becomes a cost on Android.",
+  "evidence": "_preamble_sums CE py 0.0172 s vs C++ 0.0220 s, L 0.0079 vs 0.0131 (A1/A2 review)",
+  "status": "open",
+  "where": "native/core/qrss/acquire_a12",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "Making lead_in_span's z bit-exact would need a scipy-style real-input FFT path in convolve.hpp for complex data with real taps. This is optional because the span is unaffected away from z == z_min.",
+  "evidence": "A1/A2 review shared_changes_needed (optional); no later change to convolve.cpp",
+  "status": "open",
+  "where": "native/core/math/convolve.hpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "cwid::unit_source depends on track::TrackResult and track::NoisePsdFn from trackbase.hpp, and its signature was to be re-checked after the track lane merged. No source in this scope records the check.",
+  "evidence": "A3/cwid port shared_changes_needed",
+  "status": "open",
+  "where": "native/core/qrss/cwid",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "An in-place cfar_normalise variant in acquire_stats would let tbd_emissions skip one frames x bins float32 copy, about 34 MB on FULL.",
+  "evidence": "A3/cwid port shared_changes_needed (optional)",
+  "status": "open",
+  "where": "native/core/qrss/acquire_stats, acquire_tbd",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "Correct the track.hpp header comment and the tests/qrss_native/track.py docstring, which still said the timing functions were to come; they live in track_timing.",
+  "evidence": "Track timing shared_changes_needed. Done in commit 21ba9bf: 'track.hpp and the track rows file said the timing functions were still to come; they are track_timing's'.",
+  "status": "fixed",
+  "where": "native/core/qrss/track.hpp, tests/qrss_native/track.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "Neither implementation's tests reach refine_timing's 3-D gamma Newton branch, so the port of that branch is checked only by evaluation, never by a taken path.",
+  "evidence": "track core review 'Not compared: an injected or simulated timing that actually takes refine_timing's 3-D gamma branch'",
+  "status": "open",
+  "where": "native/core/qrss/track refine_timing",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "what": "Three minor A3/cwid residues were left as is: tbd_viterbi uses `long` for bin indices, which is 32-bit on MSVC; TbdHit.f_hz is computed eagerly for the first hit; and the f_mix None -> Rational(0) mapping in the A1/A2 binding remains.",
+  "evidence": "Harmless because B is at most about 10^4 bins. Only the point where a polyfit error would be raised could differ. All three are recorded unfixed in the A3/cwid and A1/A2 reviews.",
+  "status": "open",
+  "where": "native/core/qrss/acquire_tbd, acquire_a12 binding",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "6a",
+  "kind": "open-item",
+  "what": "A real acquisition speed-up needs the per-line A2 searches run in parallel (they are pure and independent) or a BLAS-backed Lambda grid. Not done.",
+  "evidence": "port:acquire-arbitration insight [1], inferred from the stage profile",
+  "status": "open",
+  "where": "native/core/qrss/acquire_a12.cpp / acquire.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "open-item",
+  "what": "A dedicated complex gather kernel (one pass over x per clock error instead of four real fit_grid passes) should roughly halve fit_grid_l, the dominant L FULL cost. It was not written, because the task said to reuse track_timing's kernel and AVX2 clone. Wave 6b's notes call it 'the lever' for L's smaller gains.",
+  "evidence": "Inferred from the 4-gather structure in ltrack_timing.cpp fit_grid_l. w6b insights: 'the fit_grid_l halving above is the lever'.",
+  "status": "open",
+  "where": "native/core/qrss/ltrack_timing.cpp fit_grid_l",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "Trade-off of the eager tries: a blind candidate that passes on its best timing now pays up front for the runners-up's segment refinement, which the old code skipped. A lazy runner-up extraction would make this free: keep each carrier estimate's Z, Zl and x, pull k>=1 peaks on demand, and rebuild the list in carrier-estimate order to stay bit-identical. Not done.",
+  "evidence": "C++ fit_timing n_best=8 vs 1: CE SHORT 0.103 vs 0.071 s, L SHORT 0.162 vs 0.080, CE FULL 1.225 vs 1.104, L FULL 1.816 vs 1.331; Python SHORT 0.27-0.32 vs 0.20 s",
+  "status": "open",
+  "where": "track_timing.cpp / ltrack_timing.cpp fit_timing_tries",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "The Windows branches (wmain/CommandLineToArgvW, _wfopen, the Windows stderr digest) were only cross-compiled with mingw (-fsyntax-only, plus <windows.h>-first probes), never run: wine is not installed. probe_open.exe was built but not run.",
+  "evidence": "paths-cleanups test [15]; review:paths-a7 parity 'Not compared: the Windows build itself'",
+  "status": "open",
+  "where": "native/core/util/fileio.hpp, pypath, apps/sstvae_qrss/main.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "open-item",
+  "what": "Optional shared row fixes listed but not applied in the 6a follow-ups. lwave.cpp's pilot row returns a value for a 0-d tau where Python raises TypeError. track.cpp's symbol_mf row flattens N-d positions where Python raises numpy's broadcast/einsum ValueError. The ltrack binding works around both locally.",
+  "evidence": "port:ltrack-core shared_changes_needed [0]-[1]; 40c3910 touches neither file",
+  "status": "open",
+  "where": "native/bindings/module/qrss/lwave.cpp, track.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "open-item",
+  "what": "The ltrack rows docstring and ltrack.hpp header comment named 'another lane' as the home of the coarse timing and gate V. Updated to name ltrack_timing in the 6a follow-ups.",
+  "evidence": "ltrack-timing port shared_changes_needed [0]-[1]; 40c3910",
+  "status": "fixed",
+  "where": "tests/qrss_native/ltrack.py, native/core/qrss/ltrack.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "open-item",
+  "what": "Coverage left out of the slot parity: the wall-clock budget is checked only on a fake clock, never a real one; FULL-frame scenarios are timed, not compared; and the acceptance suite (slow, CLI subprocesses) is not run there.",
+  "evidence": "port:receiver-slot parity 'Not compared'",
+  "status": "open",
+  "where": "tests/test_qrss_native_receiver_slot.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b, 7",
+  "kind": "open-item",
+  "what": "Narrow-path file opening in the QRSS core (fopen(std::string) in wavread, wav, api, npz and beaconfile; MSVC reads it in the ANSI code page) and surrogatepass where Python uses os.fsencode in the bindings. Fixed for QRSS in wave 7: one util::open_file helper, fs_path bindings (str/bytes/PathLike) and a UTF-8 CLI argv.",
+  "evidence": "review:receiver-slot shared_changes_needed [0], finding 13; wave 7 paths item 1; tests/test_qrss_native_paths.py",
+  "status": "fixed",
+  "where": "native/core/util/fileio.hpp, bindings/module/qrss/fspath.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "SSTVAE's own narrow-path sites remain outside the QRSS port's files. images.cpp opens through ifstream and stbi_write_png(path.c_str()). codec.cpp:87 and grad_session.cpp:31 widen byte by byte (std::wstring(path.begin(), path.end())). checkpoint.cpp uses a narrow fs::path and getenv(USERPROFILE/LOCALAPPDATA). On Windows a non-ASCII picture, model or cache path fails there. Left for SSTVAE's owner.",
+  "evidence": "build:paths-cleanups shared_changes_needed [0]-[3]; review:paths-a7 [1]-[3], finding 7",
+  "status": "open",
+  "where": "native/core/images/images.cpp, codec/codec.cpp, codec/grad_session.cpp, checkpoint/checkpoint.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "Optional: move fileio.hpp's out-of-line bodies into a native/core/util/fileio.cpp listed in sstvae_core's sources (a CMake edit), if header-only is unwanted.",
+  "evidence": "build:paths-cleanups shared_changes_needed [4]",
+  "status": "open",
+  "where": "native/core/util/fileio.hpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "Minor paths/CLI residues noted by the review and not changed. util::list_dir sorts by bytes where Python sorts by str (differs only for surrogate-escaped names). The CLI's err stream is not tied to cout, so interleaving on a shared terminal can differ. stderr_text drops a held-back partial sequence if the process exits through std::exit mid-message.",
+  "evidence": "review:paths-a7 notes",
+  "status": "open",
+  "where": "native/core/util, apps/sstvae_qrss",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "Follow-ups applied at the wave 7 merge. receive.cpp's --image directory check now goes through util::is_dir (the wide API on Windows). --slot/--start parse the str sys.argv holds (pypath::fs_str), closing the same accept/refuse split fixed in transmit. CLAUDE.md documents the --native-qrss switch and rx_reference/rx_pins.json. A stale <fstream> was dropped from types.cpp.",
+  "evidence": "c0c830f; build:reference-fixes shared [0]; review:reference-fixes shared [0]; review:paths-a7 shared [0]; acceptance shared [1]",
+  "status": "fixed",
+  "where": "native/apps/sstvae_qrss/receive.cpp, CLAUDE.md, types.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "CI checks of the staleness pin. native-build.yml's 'pytest -q --native' runs the acceptance file, with its pin tests and 13 scenarios, on Linux, macOS arm64 and Windows (about 25 s). The module-free python job does not; adding 'python tools/gen_qrss_rx_reference.py --all --check' there (about 55-70 s) remains optional. The builder had wrongly reported that nothing in CI notices a stale pin.",
+  "evidence": "build:acceptance shared [0]; review:acceptance shared [0], finding 6",
+  "status": "open",
+  "where": ".github/workflows/ci.yml",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "what": "Judgement call left to Jeff: pinning live.py means a listener-only edit (stage 3) trips 'Python receiver changed; regenerate references', even though the references do not change. Regeneration takes about a minute and is byte-identical. Dropping it is one line in PINNED plus a pins regeneration.",
+  "evidence": "review:acceptance deviation [1], notes",
+  "status": "open",
+  "where": "tools/gen_qrss_rx_reference.py PINNED",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "8",
+  "kind": "open-item",
+  "what": "A member-selective npz read was suggested and never done: inflate and CRC-check only the named members, as np.load does lazily, so pass_zw reads only z and w and pass_info only meta and hdr_llr.",
+  "evidence": "Accumulator load 7.6 ms in C++ against 2.1 ms in Python (w8 store build shared_changes_needed); accumulator read 9.5 against 4.5 ms (w8 review). No later source says it was done.",
+  "status": "open",
+  "where": "native/core/qrss/npz.{hpp,cpp}, store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "open-item",
+  "what": "Windows code paths were compiled only with mingw (-fsyntax-only) and never run, since there was no wine in this container. That covers LockFileEx, FlushFileBuffers, the replace_file retry, the CreateFileW file-index signature, the wide-path PNG write, the ReadFile/CancelSynchronousIo loop, the _get_osfhandle guard and SetConsoleCtrlHandler.",
+  "evidence": "Notes from the w8 passband, w8 store, 9a sources, 9b leftovers and 9b listen lanes and reviews: 'compiled, not run'.",
+  "status": "open",
+  "where": "native/core/qrss (Windows branches)",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "open-item",
+  "what": "Cross-process concurrent writers to one store still lose updates in both implementations (plan 4.5).",
+  "evidence": "w8 store review notes: 'Cross-process lost updates remain, as in Python'.",
+  "status": "open",
+  "where": "sstvae/qrss/store.py, native/core/qrss/store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "open-item",
+  "what": "images::save_png called stbi_write_png with a narrow fopen and no STBIW_WINDOWS_UTF8, so on Windows a state or output directory with non-ASCII characters wrote no pictures. It was the one C++ file site wave 7's UTF-8 path work had missed.",
+  "evidence": "images.cpp:32-33 and 589-593. Fixed for writes in 9b leftovers item 2: qrss/png.cpp writes through stbi_write_png_to_func and util::open_file, used by the listener, decode_image and receive_image.",
+  "status": "fixed",
+  "where": "native/core/images (via native/core/qrss/png.cpp)",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "open-item",
+  "what": "images::load_array opens a narrow std::ifstream, so on Windows a transmit-side --image path outside the ANSI code page cannot be opened. The fix needs SSTVAE images code (a load from bytes via stbi_load_from_memory), which the QRSS lanes may not edit.",
+  "evidence": "9b leftovers review, finding 3 and shared_changes_needed.",
+  "status": "open",
+  "where": "native/core/images/images.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "open-item",
+  "what": "The macOS POLLNVAL path of StreamSource::close() is untested. The Linux pty test passes even with the old 100 ms poll; only a mutation that drops the wake byte makes it hang. A terminal fd >= FD_SETSIZE still takes the poll() fallback.",
+  "evidence": "9b leftovers deviations 2-3; leftovers review finding 8.",
+  "status": "open",
+  "where": "native/core/qrss/sources.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "open-item",
+  "what": "In MSVC debug CRT builds, an _ASSERTE may still fire before the silenced invalid-parameter handler; the guard targets release builds.",
+  "evidence": "9a sources review notes.",
+  "status": "open",
+  "where": "native/core/qrss/sources.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "open-item",
+  "what": "Lost coverage: since store.due skips malformed accumulators in both implementations, the listener's 'hints: <str(e)>' log path is no longer reached by any test.",
+  "evidence": "9b leftovers notes and deviation 4.",
+  "status": "open",
+  "where": "native/core/qrss/listener.cpp, sstvae/qrss/live.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "open-item",
+  "what": "Not run to completion here: rx_engine under TSan, which took more than the session's 200 s cap. The CI tsan job edits were validated only with yaml.safe_load and were not run on CI from these sessions.",
+  "evidence": "9b leftovers notes; follow-up notes ('the job was not run on CI from here').",
+  "status": "open",
+  "where": ".github/workflows/ci.yml",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "open-item",
+  "what": "Not compared at the end of stage 3: pictures/PSNR through the listen CLIs (only FULL passes render); finish_process; run() in realtime mode; background-mode interleavings (only their invariants); libFLAC 1.3.x decoders; and encode speed, which is not asserted.",
+  "evidence": "'Not compared' sections of the 9a listener and 9b listen and FLAC reports.",
+  "status": "open",
+  "where": "tests/test_qrss_native_listen.py, listener, flac",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "open-item",
+  "what": "Residues the header documents, which a non-blocking abandon() cannot avoid: a line deliver() is already handing to the log seam still arrives; an association whose drop check passed can start after abandon() returns (the Session waits for it, up to the deadline); backfill's ring writes, which are in memory; and receives under way run to their end on CPU only.",
+  "evidence": "Follow-up review finding 4; listen_api.hpp 'Abandoning, precisely'.",
+  "status": "open",
+  "where": "native/core/qrss/listener.hpp, listen_api.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "open-item",
+  "what": "write_state's WriteScope has no test: removing only the WriteScope survives every test, because the race between building state.json and the tmp+rename has no seam. It is held up only by reasoning (abandon() waits for writing_ == 0 under write_mu_).",
+  "evidence": "Mutant L3b passed test_qrss_core_listener 3 runs in a row; the review confirmed no seam exists (the clock runs under mu_ and calling abandon() from it deadlocks by design).",
+  "status": "open",
+  "where": "native/core/qrss/listener.cpp write_state",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "open-item",
+  "what": "Re-entrancy caveats: a Session sink that calls stop() deadlocks on the sink barrier; a log seam that calls LiveListener::log() re-enters a std::mutex try_lock; and abandon() must not be called from the clock seam, which runs under mu_.",
+  "evidence": "Follow-up review findings 2 and 5; listener.hpp and listen_api.hpp.",
+  "status": "open",
+  "where": "native/core/qrss/listener.hpp, listen_api.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "open-item",
+  "what": "A load-bearing coupling that nothing names: during a replay, live::run's wait_idle holds the session's run mutex for a whole receive, and a bounded stop works only because LiveListener::close() sets stopping_, which makes wait_idle return at once. Any change to idle_locked() that stops honouring stopping_ would make stop() during a replay wait for the receive.",
+  "evidence": "listener.cpp idle_locked (1138) and close (476); listen_api.cpp abandon(); test_stop_a_replay_with_a_receive_held at 1.251 s.",
+  "status": "open",
+  "where": "native/core/qrss/listener.cpp, listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "open-item",
+  "what": "Accepted residuals in background mode: a picture written for generation g can sit on disk briefly after a newer update bumps the generation, until the newer render overwrites it; and close() waits up to CLOSE_PACKER_S on the packer.",
+  "evidence": "9a listener review notes.",
+  "status": "open",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "open-item",
+  "what": "A suggested docs follow-up: note in CLAUDE.md or the port notes that os.wait4's ru_maxrss on a pytest-spawned child is floored by pytest's own RSS, and grep the other parity tests for ru_maxrss.",
+  "evidence": "9b listen review shared_changes_needed [2].",
+  "status": "open",
+  "where": "CLAUDE.md, tests/test_qrss_native_*.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "open-item",
+  "what": "The w8 store review asked for a bounded retry in util::replace_file on Windows: MoveFileExW fails with ACCESS_DENIED or SHARING_VIOLATION while a picture viewer holds the destination open. This matches Python's os.replace, but the app is better served by retrying.",
+  "evidence": "Done in 9a (59bd840, 'Windows replace_file retry'), up to about 1 s; checked with mingw only.",
+  "status": "fixed",
+  "where": "native/core/util/fileio.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "open-item",
+  "what": "The w8 live review asked to tie live.py to the reference hash (gen_qrss_rx_reference.py PINNED), because nothing linked the C++ live constants and ctest pins to the reference file.",
+  "evidence": "By 9a, rx_pins.json hashed frontend.py and live.py (0be27ca), and the live pins became generated with a staleness test (gen_qrss_live_pins.py --check).",
+  "status": "fixed",
+  "where": "tools/gen_qrss_rx_reference.py, tools/gen_qrss_live_pins.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "open-item",
+  "what": "CLAUDE.md's QRSS Commands bullet needed stage 3's parity files: test_qrss_native_live.py, with a fast tier of 24 tests in about 16 s and a slow tier of 5, and QRSS_LIVE_NOISE.",
+  "evidence": "w8 live build shared_changes_needed [1]; done at the wave 8 integration (136c208: 'CLAUDE.md: stage 3's parity files, QRSS_LIVE_NOISE, and running the parity files in groups').",
+  "status": "fixed",
+  "where": "CLAUDE.md",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "open-item",
+  "what": "Remaining template-search speed levers are not bit-exact or need build changes: a wider-SIMD pocketfft needs a separate -mavx2 translation unit (CMake), and threads across the 19 bins would give ~4x, but no core QRSS code is threaded yet.",
+  "evidence": "retro build performance insight (bench_parts.cpp, bench_batch.cpp, bench_abs.cpp)",
+  "status": "open",
+  "where": "native/core/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "open-item",
+  "what": "The fast tier cannot catch a broken OOK vote in template_search, since TINY has n_win = 0 and keying never reaches its template, and the lane's ctest pins cover drift 0.3 and FSK on SHORT but not OOK; only the slow test_template_search_cw_and_drift_short catches it.",
+  "evidence": "mutation ook=false caught only by test_template_search_cw_and_drift_short (dZ 1.17)",
+  "status": "open",
+  "where": "native/tests/qrss/test_em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "open-item",
+  "what": "The AVX2+FMA clones and the scalar fallback (std::fma plus scalar np::abs) were checked to agree only on this x86 box; aarch64 and MSVC builds were not run (the clones are GCC/Clang x86 only).",
+  "evidence": "retro review parity 'Not compared: aarch64 and MSVC builds'; check_includes clean",
+  "status": "open",
+  "where": "native/core/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "open-item",
+  "what": "FULL receive_template and retro over FULL passes were not compared side by side (time).",
+  "evidence": "retro build parity 'Not compared: ... FULL receive_template / retro over FULL (time)'",
+  "status": "open",
+  "where": "tests/test_qrss_native_em_search.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "open-item",
+  "what": "The slow P4/P5 EM tests of test_qrss_em.py (8 MEDIUM passes acquired blind, each well beyond the 3-minute command limit) were not run under --native-qrss=rx.",
+  "evidence": "EM build parity and notes",
+  "status": "open",
+  "where": "tests/test_qrss_em.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "open-item",
+  "what": "The no-Python chain ctest is checked for lines and files, not against Python, and test_em_api cannot tell Session::store()'s identity apart from a second Store on the same root (both share the root mutex and see the same files); the reviewer judged that behaviour-equivalent and noted rather than changed it.",
+  "evidence": "integrate build parity ('The no-Python chain (codec tree) is checked for lines and files, not against Python'); integrate review notes",
+  "status": "open",
+  "where": "native/tests/qrss/test_em_chain.cpp, test_em_api.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "open-item",
+  "what": "Wave 10 delivered em_api, its ctest and the CLI; the integration notes give the contract for whoever wires it into the app: call refine/retro only on a worker thread, gate buttons with check_picture/retro_frame/check_passband_dir and catch em_api::Refusal, share a running listen_api::Session's store and passband objects, marshal Hooks.progress to the GUI thread (close the bar at done on convergence), own the cancel atomic in the UI object, re-read the accumulator and render on the worker, and set receiver rules (QRSS_OLD_EDGE_NOISE) once at startup.",
+  "evidence": "integrate build notes 'How the app's UI thread uses this (native/core/qrss/em_api.hpp)', items 1-7",
+  "status": "open",
+  "where": "native/core/qrss/em_api.hpp, app",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "pre-port (c131551, 2026-10-12)",
+  "kind": "open-item",
+  "status": "fixed",
+  "where": "sstvae/qrss/frontend.py noise_psd, acquire.lead_in_span; native/core/qrss/rules.cpp, frontend.cpp",
+  "what": "Ideas-doc R1 (top pick 1: near 300/2700 Hz the noise floor is taken from the front-end filter skirt, so SNR reads up to 8.4 dB high) was built in the Python reference as D43 before the C++ port started, and the C++ front end carries it with the same A/B switch.",
+  "evidence": "commit c131551 2026-10-12 18:58Z 'QRSS receiver: noise floor only where the front end is flat; skip weaker lines in a found signal's band'; Jeff chose 'Both fixes' on the decision card at 17:15:58Z. Memory record: D43 falls back, when a neighbour covers the only flat side, to the geometric mean of the flat bins and the compensated skirt (the doc proposed 'never take a minimum, take bins from the interior side'); mid-band CE bit-identical (34 arrays); --old-edge-noise / QRSS_OLD_EDGE_NOISE restores the old rule. C++: native/core/qrss/rules.cpp:48-50 apply(old_edge_noise, old_gating).",
+  "group": "format"
+ },
+ {
+  "wave": "pre-port (c131551, 2026-10-12)",
+  "kind": "open-item",
+  "status": "fixed",
+  "where": "sstvae/qrss/acquire.py / receiver.py gating; native/core/qrss/rules.cpp, acquire.cpp",
+  "what": "Ideas-doc O2 (top pick 2: never gate a candidate inside an accepted signal's own band; strong CE sidebands at about 11.5 Hz were most of joint listening's extra CPU) was built as D44 in the same commit and ported. The built rule is narrower than the doc's: it skips an in-band A3 line only when its A3 Z is at most the owner's own line.",
+  "evidence": "commit c131551; memory: 'D44 skips an in-band A3 line only when its A3 Z <= the preamble-found owner's own line (Detection.a3_z); a review found the first version hid a stronger faded-preamble station'; --old-gating / QRSS_OLD_GATING; doc's measured motive: gating 4.9-6.8 s down to about 1 s for a lone CE signal on SHORT at -12 dB.",
+  "group": "format"
+ },
+ {
+  "wave": "7",
+  "kind": "open-item",
+  "status": "open",
+  "where": "sstvae/qrss/live.py:109-110 FINISH_MAX_CANDIDATES / FINISH_BUDGET_S; native/core/qrss/live.hpp:111-112",
+  "what": "The doc priced each refused FULL candidate at 60 to 80 s of gate V against a 12-candidate, 180 s finish budget, and O2, O9, O10, O11, R9, L3, L11, D2 and D12 all lean on that arithmetic. Wave 7 removed gate V's duplicate coarse grid in Python and the C++ gate costs about 7-8 s, but both implementations keep 12 candidates and 180 s ('a false one costs ~1 min'), so in the C++ listener the candidate cap rather than the time budget now binds (inferred); the budget was never retuned.",
+  "evidence": "wave 7 item 5, Python noise gate V CE FULL 73.33 -> 59.29 s, L FULL 62.25 -> 51.39 s (second agent: 74.5 -> 63.1 s and 63.1 -> 50.6 s); C++ CE FULL 8.30-8.33 s, L FULL 6.98-7.19 s, Python about 7.2-7.6x slower. Wave 6b: Python gate V on a signal pass 16.4 s CE, 18.6 s L FULL at -12 dB. Doc's figures: 'a refused blind candidate costs 60 to 80 s' (waveform-l.md:245-246), gate V 10.9 s L / 13.3 s CE (wfB_parts.txt), 8.6-9.8 s per refresh (m1_refresh_horizon.py). Constants unchanged: live.py:109-110, live.hpp:111-112 (generated from the Python).",
+  "group": "format"
+ },
+ {
+  "wave": "8, 9a",
+  "kind": "open-item",
+  "status": "open",
+  "where": "sstvae/qrss/associate.py resolve_provisional; native/core/qrss/associate.cpp, crc32.cpp, listener.cpp",
+  "what": "Doc top pick O1 (association is quadratic in the store and holds the listener lock 14-16 s per decoded header) is not addressed by the port, which mirrors associate.py. The C++ associate is about 2x faster per pass once its CRC was sliced, and the C++ listener now reads store.due outside its own lock, but incremental association was not built.",
+  "evidence": "wave 8: associate per pass on a 50-pass FULL store Python 78.1 ms vs C++ 90.3 ms (x0.86) with byte-at-a-time CRC; slicing-by-8 CRC 6.3 -> 1.25 ms per 2.5 MB accumulator, associate 38.8 ms; adopted (native/core/qrss/crc32.cpp:10-42). Wave 9a review finding A (fixed): hints_locked called store_->due(q) with the listener mutex held while associate() holds the store mutex for a whole transaction; now read_due() outside mu_. Quadratic structure kept: inferred from parity with associate.py. Doc's O1: 14.16-16.31 s per header-decoded pass with 30 accumulators and 58-59 provisional clusters (Python).",
+  "group": "format"
+ },
+ {
+  "wave": "10",
+  "kind": "open-item",
+  "status": "open",
+  "where": "native/core/qrss/listener.cpp; em_api.hpp; em_refine.cpp",
+  "what": "Doc top pick R10 (the listener never re-receives a stored pass once the store supplies its header) and O12 (search back for missed earlier segments) are still open: the C++ listener, like live.py, calls no EM or retro search; em_api.hpp gives the app on-demand EM/retro with progress and cancel instead. L passes are still skipped by rereceive (L5, L2 open).",
+  "evidence": "native/core/qrss/listener.cpp includes no em header and calls no em:: function (grep); wave 10 script: rereceive 'L pass -> none', em_search candidates 'L members skipped'; doc R10: em.rereceive exists for CE, 'live.py imports nothing from em', round B worth 0.1-0.5 dB per deep L pass.",
+  "group": "format"
+ },
+ {
+  "wave": "1 (transmit CLI)",
+  "kind": "open-item",
+  "status": "open",
+  "where": "qrss_transmit.py:53; native/apps/sstvae_qrss/transmit.cpp:89",
+  "what": "Doc top pick F1 + L1 (an 8-10 s L lead-in by default plus an L-only A1 window over it, about 5 dB deeper live) is unchanged: the C++ transmitter copied the Python default of no lead-in, and no L1 window was built. Jeff never picked it ('L lead-in not picked yet').",
+  "evidence": "qrss_transmit.py:53 add_argument('--lead-in', type=float, default=0.0); native/apps/sstvae_qrss/transmit.cpp:89 option('--lead-in' ... otherwise('0.0')); memory MEMORY.md line 90.",
+  "group": "format"
+ },
+ {
+  "wave": "5",
+  "kind": "open-item",
+  "status": "open",
+  "where": "native/core/qrss/acquire_a12.cpp:387; acquire_stats.cpp:427",
+  "what": "Doc idea O15 (compute A2's minimum p from one gammaincc per scale, bit-identical, saving 20-45 ms per A2 line) was not taken up: the C++ ports preamble_p as the full per-cell map, and its gammaincc is slower than scipy's.",
+  "evidence": "acquire_a12.cpp:387 calls preamble_p(...) over all cells; wave 5: C++ preamble_p 26 ms vs scipy 17.5 ms; doc O15: shortcut 0.06-0.09 ms returned the same minimum p.",
+  "group": "format"
+ },
+ {
+  "wave": "9a",
+  "kind": "open-item",
+  "status": "fixed",
+  "where": "sstvae/qrss/live.py:1361-1372; native/core/qrss/listener.cpp",
+  "what": "Doc idea D6 part 1 (the 'N signal(s) at X%' refresh log line printed once per kept pass) was fixed in both implementations as wave 9a reference fix v. D6's other two parts (L_KEYED_POWER test, equal-preamble-length test) are not recorded as done.",
+  "evidence": "wave 9a script fix 'v. finish_receive logs \"N signal(s) at X%\" once per pass inside the loop: once per slot'; live.py:1361-1372 'took' flag, comment 'once per refresh, not once per pass'.",
+  "group": "format"
+ },
+ {
+  "wave": "9a",
+  "kind": "open-item",
+  "status": "open",
+  "where": "sstvae/qrss/live.py:1150-1172 _worker; native/core/qrss/listener.cpp",
+  "what": "Doc idea O13 (requeue an end-of-slot finish that threw, once, from the passband store) is only half addressed: wave 9a fix aa makes a failed live refresh retry at the next refresh instead of retiring the slot, but an end-of-slot receive that throws still sets done and recover() skips it, in both implementations.",
+  "evidence": "live.py:1157-1170: name != 'live' -> log and s.done = True; live refresh failures logged once and retried. Wave 9a listener deviations: 'A live receive (refresh) that throws is logged once per slot and message, and the slot is received again at its next refresh... An end-of-slot receive that throws still retires the slot, as in the reference.'",
+  "group": "format"
+ },
+ {
+  "wave": "9a, 9b",
+  "kind": "open-item",
+  "status": "open",
+  "where": "native/core/qrss/listener.cpp refresh",
+  "what": "Doc ideas O3 (stop live refreshes at the heard horizon), O9 (skip re-gating known signals), O10 (reuse live detections at the finish), O18 (early result from the finish child) and O6 (per-waveform bookkeeping) were not part of the port, which mirrors live.py's refresh and finish logic for parity; they now apply to the C++ listener the app runs, at C++ speed.",
+  "evidence": "inferred from the port's parity contract (wave 9a task: 'Every method the Python has, with the same decisions') and the absence of these changes from the wave 9a/9b deviation and fix lists; wave 9b: 'C++ refresh 3 s against finish 3 s' in TINY replays.",
+  "group": "format"
+ }
+]

@@ -1,0 +1,7 @@
+pass 1990584_1499954_de9e4dda   CE full
+  frequency   1499.954 Hz at t0   drift +0.001 Hz/min   wander 0.038 Hz rms
+  doppler    0.173 Hz   clock +0.0 ppm   Z_ref 201.9   SNR2500 -6.8 dB   kappa 0.96
+  header     K1ABC FN42 picture 7b202aad mode A segment 0 codec d1d8
+  callsign   K1ABC   match Z 602.7   keying fsk   agrees
+  mean W     +7.75 dB
+image: img/py-CE-full-6.png

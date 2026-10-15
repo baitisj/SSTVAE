@@ -1,0 +1,285 @@
+{
+ "machine": "Intel Xeon @ 2.80 GHz, 4 vCPU on a shared cloud VM, 16 GB RAM, Linux 6.18.\n\nLoad (1-minute load average):\n- At the first check, before any run: 0.67 / 1.92 / 2.94, decaying from earlier work.\n- Over the 41 checks taken before heavy runs: median 0.67, maximum 1.56.\n- At the end: 0.23 / 0.63 / 0.87.\n\nCommands ran one at a time.\n\nBuilds:\n- C++: native/build-qrss-codec/sstvae-qrss, a Release build with the codec on (ORT 1.28.0).\n- Python: .venv/bin/python, with onnxruntime 1.31.0.\n\nHow each run was measured: mtime.c, then timeout 200, then the command.\n- Wall time comes from CLOCK_MONOTONIC.\n- CPU time is user+sys from wait4.\n- Peak RSS is wait4's ru_maxrss: the maximum over the process and the children it reaped, not their sum.\n- A tree peak (summed RSS, sampled every 50 ms) is also recorded.\n- Each case is the median of 3 runs if a run took under 30 s, otherwise 1 run.",
+ "rows": [
+  {
+   "what": "Start-up floor (import the receive modules vs --help)",
+   "python": "1.00 s wall, 1.55 s CPU, 101 MB (median of 3)",
+   "cpp": "0.01 s, 0.01 s, 20 MB (median of 3)",
+   "ratio": "72x",
+   "same_result": "n/a",
+   "command": "python -c 'import qrss_receive; from sstvae.qrss import receiver, track, ltrack, acquire' | sstvae-qrss --help"
+  },
+  {
+   "what": "Encode 640x480 PNG to .qrsp, fp16, mode A",
+   "python": "1.39 s, 2.68 s, 245 MB (N=3)",
+   "cpp": "0.32 s, 0.83 s, 152 MB (N=3)",
+   "ratio": "4.4x",
+   "same_result": ".qrsp byte-identical, picture ID 7b202aad. JPEG input gives different IDs (7b202aad vs edb7bb4e) because stb and libjpeg decode it differently; timing is the same (4.2x).",
+   "command": "qrss_encode.py enc/wonder_wheel_640x480.png enc/X.qrsp --model /home/user/qrss-data/models --precision fp16 --mode A | sstvae-qrss encode (same args)"
+  },
+  {
+   "what": "Transmit CE TINY, int16 WAV",
+   "python": "1.31 s, 1.82 s, 139 MB (N=3)",
+   "cpp": "0.11 s, 0.11 s, 23 MB (N=3)",
+   "ratio": "12.1x",
+   "same_result": "WAV byte-identical",
+   "command": "qrss_transmit.py enc/py.qrsp tx/X.wav --slot 2026-10-09T06:00Z --callsign K1ABC --grid FN42 --waveform CE --freq 1500 --frame tiny | sstvae-qrss transmit (same args)"
+  },
+  {
+   "what": "Transmit CE SHORT",
+   "python": "1.66 s, 2.19 s, 177 MB (N=3)",
+   "cpp": "0.39 s, 0.38 s, 23 MB (N=3)",
+   "ratio": "4.2x",
+   "same_result": "WAV byte-identical",
+   "command": "as above with --frame short"
+  },
+  {
+   "what": "Transmit CE MEDIUM",
+   "python": "2.50 s, 3.03 s, 267 MB (N=3)",
+   "cpp": "1.02 s, 1.00 s, 24 MB (N=3)",
+   "ratio": "2.4x",
+   "same_result": "WAV byte-identical",
+   "command": "as above with --frame medium"
+  },
+  {
+   "what": "Transmit CE FULL",
+   "python": "5.32 s, 5.52 s, 574 MB (N=3)",
+   "cpp": "2.80 s, 2.75 s, 25 MB (N=3)",
+   "ratio": "1.9x",
+   "same_result": "WAV byte-identical",
+   "command": "as above with --frame full"
+  },
+  {
+   "what": "Transmit CE FULL, --float",
+   "python": "3.50 s, 4.04 s, 299 MB (N=3)",
+   "cpp": "1.36 s, 1.35 s, 24 MB (N=3)",
+   "ratio": "2.6x",
+   "same_result": "identical",
+   "command": "as above with --frame full --float"
+  },
+  {
+   "what": "Transmit L TINY",
+   "python": "1.14 s, 1.67 s, 140 MB (N=3)",
+   "cpp": "0.19 s, 0.19 s, 23 MB (N=3)",
+   "ratio": "6.0x",
+   "same_result": "WAV byte-identical",
+   "command": "qrss_transmit.py ... --waveform L --frame tiny | sstvae-qrss transmit (same)"
+  },
+  {
+   "what": "Transmit L SHORT",
+   "python": "1.39 s, 1.93 s, 178 MB (N=3)",
+   "cpp": "0.70 s, 0.70 s, 30 MB (N=3)",
+   "ratio": "2.0x",
+   "same_result": "WAV byte-identical (with --float, 18 of 2.17M samples differ by up to 5.7e-14)",
+   "command": "... --waveform L --frame short"
+  },
+  {
+   "what": "Transmit L MEDIUM",
+   "python": "2.29 s, 2.80 s, 273 MB (N=3)",
+   "cpp": "1.83 s, 1.80 s, 43 MB (N=3)",
+   "ratio": "1.3x",
+   "same_result": "WAV byte-identical (with --float, 16 of 5.34M samples differ by up to 4.6e-13)",
+   "command": "... --waveform L --frame medium"
+  },
+  {
+   "what": "Transmit L FULL, int16",
+   "python": "4.30 s, 4.80 s, 590 MB (N=3)",
+   "cpp": "4.94 s, 4.90 s, 80 MB (N=3)",
+   "ratio": "0.87x (C++ slower)",
+   "same_result": "WAV byte-identical",
+   "command": "... --waveform L --frame full"
+  },
+  {
+   "what": "Transmit L FULL, --float",
+   "python": "3.86 s, 4.33 s, 315 MB (N=3)",
+   "cpp": "2.58 s, 2.54 s, 81 MB (N=3)",
+   "ratio": "1.5x",
+   "same_result": "35 of 14.38M samples differ, at most 4.5e-13 (about 1 ULP near zero)",
+   "command": "... --waveform L --frame full --float"
+  },
+  {
+   "what": "Receive CE TINY at -6 dB (both waveforms searched)",
+   "python": "3.15 s, 6.94 s, 152 MB (N=3)",
+   "cpp": "1.34 s, 1.34 s, 54 MB (N=3)",
+   "ratio": "2.3x",
+   "same_result": "stdout identical",
+   "command": "qrss_receive.py rx/CE-tiny-6.wav --slot 2026-10-09T06:00Z --frame tiny --no-store | sstvae-qrss receive (same). Input from qrss_simulate.py --snr -6 --preset quiet"
+  },
+  {
+   "what": "Receive CE TINY at -16 dB",
+   "python": "3.32 s, 7.78 s, 152 MB (N=3)",
+   "cpp": "1.49 s, 1.47 s, 54 MB (N=3)",
+   "ratio": "2.2x",
+   "same_result": "stdout identical",
+   "command": "as above, rx/CE-tiny-16.wav"
+  },
+  {
+   "what": "Receive L TINY at -6 dB",
+   "python": "3.38 s, 8.99 s, 153 MB (N=3)",
+   "cpp": "1.69 s, 1.68 s, 54 MB (N=3)",
+   "ratio": "2.0x",
+   "same_result": "stdout identical",
+   "command": "as above, rx/L-tiny-6.wav"
+  },
+  {
+   "what": "Receive L TINY at -16 dB",
+   "python": "2.58 s, 5.69 s, 152 MB (N=3)",
+   "cpp": "1.07 s, 1.04 s, 54 MB (N=3)",
+   "ratio": "2.4x",
+   "same_result": "stdout identical",
+   "command": "as above, rx/L-tiny-16.wav"
+  },
+  {
+   "what": "Receive CE SHORT at -6 dB",
+   "python": "7.24 s, 10.89 s, 297 MB (N=3)",
+   "cpp": "2.46 s, 2.42 s, 143 MB (N=3)",
+   "ratio": "2.9x",
+   "same_result": "stdout identical: header K1ABC FN42 7b202aad, callsign agrees, mean W +8.17 dB",
+   "command": "qrss_receive.py rx/CE-short-6.wav --slot 2026-10-09T06:00Z --frame short --no-store | sstvae-qrss receive (same)"
+  },
+  {
+   "what": "Receive CE SHORT at -24 dB (weak; still found by the preamble)",
+   "python": "7.86 s, 11.49 s, 297 MB (N=3)",
+   "cpp": "2.49 s, 2.47 s, 143 MB (N=3)",
+   "ratio": "3.2x",
+   "same_result": "Everything equal except the uid hash suffix: header, callsign, f_hz and Z",
+   "command": "as above, rx/CE-short-24.wav"
+  },
+  {
+   "what": "Receive L SHORT at -6 dB",
+   "python": "7.24 s, 13.49 s, 297 MB (N=3)",
+   "cpp": "2.99 s, 2.98 s, 143 MB (N=3)",
+   "ratio": "2.4x",
+   "same_result": "stdout identical",
+   "command": "as above, rx/L-short-6.wav"
+  },
+  {
+   "what": "Receive L SHORT at -24 dB",
+   "python": "6.55 s, 10.58 s, 297 MB (N=3)",
+   "cpp": "2.37 s, 2.35 s, 143 MB (N=3)",
+   "ratio": "2.8x",
+   "same_result": "Equal except the uid hash; the callsign check reports DISAGREES in both implementations",
+   "command": "as above, rx/L-short-24.wav"
+  },
+  {
+   "what": "Receive CE SHORT at -28 dB (below the floor)",
+   "python": "11.06 s, 18.88 s, 297 MB (N=1)",
+   "cpp": "3.65 s, 3.64 s, 143 MB (N=1)",
+   "ratio": "3.0x",
+   "same_result": "rc 1, 'no CE or L signal found' in both",
+   "command": "as above, rx/CE-short-28.wav"
+  },
+  {
+   "what": "Receive CE SHORT at -32 dB (nothing found)",
+   "python": "10.87 s, 16.49 s, 297 MB (N=3)",
+   "cpp": "3.42 s, 3.38 s, 143 MB (N=3)",
+   "ratio": "3.2x",
+   "same_result": "rc 1, nothing found in both",
+   "command": "as above, rx/CE-short-32.wav"
+  },
+  {
+   "what": "Receive L SHORT at -32 dB (nothing found)",
+   "python": "3.50 s, 6.67 s, 297 MB (N=3)",
+   "cpp": "1.44 s, 1.41 s, 143 MB (N=3)",
+   "ratio": "2.4x",
+   "same_result": "rc 1, nothing found in both",
+   "command": "as above, rx/L-short-32.wav"
+  },
+  {
+   "what": "Receive CE FULL at -6 dB plus --image (codec decode)",
+   "python": "45.04 s, 50.47 s, 1393 MB (N=1)",
+   "cpp": "12.06 s, 12.96 s, 796 MB (median of 3)",
+   "ratio": "3.7x",
+   "same_result": "Text equal except the uid hash. PNGs: 10 subpixels differ by 1 (PSNR 97.8 dB C++ vs Python); both 22.16 dB vs the original",
+   "command": "qrss_receive.py rx/CE-full-6.wav --slot 2026-10-09T06:00Z --no-store --image img/X.png --model /home/user/qrss-data/models | sstvae-qrss receive (same)"
+  },
+  {
+   "what": "Receive L FULL at -6 dB plus --image",
+   "python": "43.01 s, 52.49 s, 1393 MB (N=1)",
+   "cpp": "14.99 s, 15.77 s, 796 MB (N=3)",
+   "ratio": "2.9x",
+   "same_result": "Equal except the uid hash. PNGs: 10 subpixels differ by 1 (PSNR 97.8 dB); both 22.58 dB vs the original",
+   "command": "as above, rx/L-full-6.wav"
+  },
+  {
+   "what": "Receive CE FULL at -32 dB, blind (TBD detection, no header)",
+   "python": "124.42 s, 136.0 s, 1393 MB (N=1)",
+   "cpp": "21.55 s, 21.28 s, 796 MB (N=3)",
+   "ratio": "5.8x",
+   "same_result": "Equal except the uid hash. Both found it by method 'tbd' at SNR2500 -35.0 dB; neither decoded the header",
+   "command": "as above, rx/CE-full-32.wav (qrss_simulate --snr -32 --seed 16)"
+  },
+  {
+   "what": "Receive L FULL at -30 dB",
+   "python": "63.59 s, 74.28 s, 1393 MB (N=1)",
+   "cpp": "12.40 s, 12.31 s, 796 MB (N=3)",
+   "ratio": "5.1x",
+   "same_result": "rc 1, nothing found, stdout identical",
+   "command": "as above, rx/L-full-30.wav"
+  },
+  {
+   "what": "Listen replay, TINY: CE at 1200 Hz (K1ABC) and L at 2000 Hz (W1AW), -10 dB, slot 2025-10-01T00:00Z",
+   "python": "8.04 s, 10.59 s, 175 MB; tree 329 MB because of the receive child process (N=3)",
+   "cpp": "4.29 s, 6.19 s, 94 MB; tree 88 MB (N=3)",
+   "ratio": "1.9x",
+   "same_result": "cmp_listen AGREE. 2 tiles. Worst differences: f_hz 7.8e-7, snr_db 8e-6, mean_w_db 5.7e-5, z_ref 1.4e-4 relative. Store trees and logs equal. Passband 1112 kB vs 1096 kB on disk (112.5 MB apparent, sparse raw); nothing packed",
+   "command": "qrss_listen.py --wav live/tiny.wav --slot 2025-10-01T00:00Z --frame tiny --store store --state state --model M | sstvae-qrss listen (same), fresh dir per run"
+  },
+  {
+   "what": "Listen replay, SHORT: CE K1ABC at 1200 Hz and L W1AW at 2000 Hz, -6 dB",
+   "python": "24.15 s, 28.53 s, 421 MB; tree 511 MB (N=3)",
+   "cpp": "9.15 s, 10.66 s, 209 MB; tree 210 MB (N=3)",
+   "ratio": "2.6x",
+   "same_result": "cmp_listen AGREE. Both tiles complete with callsigns and picture 7b202aad. Worst differences: f 3e-7, snr 3e-7, mean_w 2e-6. Packed FLAC hour has equal samples: 166,471 bytes (libFLAC) vs 159,219 (C++); raw would be 57.6 MB. Passband 4248 vs 4236 kB on disk; store 10436 vs 10424 kB",
+   "command": "qrss_listen.py --wav live/short.wav --slot 2025-10-01T00:00Z --frame short --store store --state state --model M | sstvae-qrss listen (same)"
+  },
+  {
+   "what": "Listen replay, FULL, CE at -6 dB, --refresh 600",
+   "python": "Skipped: over the 200 s limit. Timed out at 200.06 s with 71 s CPU, 1290 MB peak RSS (1529 MB tree). Round-B receive of the half-heard previous slot alone took 131 s",
+   "cpp": "68.79 s, 77.28 s, 1263 MB (N=1)",
+   "ratio": "over 2.9x (Python did not finish)",
+   "same_result": "C++ only: 1 tile, complete. Its PNG vs Python's receive of the same WAV: max diff 1, PSNR 93.6 dB; both 23.11 dB vs the original. That receive took 40.03 s in Python and 11.62 s in C++ (3.4x)",
+   "command": "qrss_listen.py --wav live/full.wav --slot 2025-10-01T00:00Z --frame full --refresh 600 --store store --state state --model M | sstvae-qrss listen (same)"
+  },
+  {
+   "what": "Decode from a store of 4 CE SHORT passes (-6, -15, -20 dB attached; -30 dB kept in the passband)",
+   "python": "1.62 s, 3.17 s, 454 MB (N=3)",
+   "cpp": "0.57 s, 1.62 s, 359 MB (N=3)",
+   "ratio": "2.9x",
+   "same_result": "stdout identical, PNG pixel-identical",
+   "command": "qrss_decode.py out.png --key K1ABC:7b202aad --store st --model M | sstvae-qrss decode (same), fresh store copy per run"
+  },
+  {
+   "what": "Decode with --em 2, same store",
+   "python": "33.34 s, 34.65 s, 468 MB (N=1)",
+   "cpp": "5.78 s, 6.68 s, 361 MB (N=3)",
+   "ratio": "5.8x",
+   "same_result": "stdout identical: mean W +9.24, then +9.33, then +9.33 dB. PNG pixel-identical. Refined stores have the same files; z max diff 1.9e-9; json floats differ only in the last digit",
+   "command": "... decode out.png --key K1ABC:7b202aad --store st --em 2 --model M"
+  },
+  {
+   "what": "Decode with --retro --frame short, same store",
+   "python": "7.14 s, 8.63 s, 460 MB (N=3)",
+   "cpp": "2.60 s, 3.55 s, 355 MB (N=3)",
+   "ratio": "2.8x",
+   "same_result": "Both find the same pass in the passband: q=1990587, Z 26.3, 1500.052 Hz, attached by header, 4 passes. Only the new uid hash differs. PNG pixel-identical",
+   "command": "... decode out.png --key K1ABC:7b202aad --store st --retro --frame short --model M"
+  }
+ ],
+ "sizes": "**sstvae-qrss binary**\n- Codec build: 90,441,960 bytes as built, 4,796,672 stripped (text 4.74 MB).\n- No-codec build: 83,874,080 bytes as built, 4,579,432 stripped.\n\n**Shared libraries**\n- The no-codec build NEEDS only libstdc++, libm, libgcc_s and libc.\n- The codec build also NEEDS libonnxruntime.so.1 (24.3 MB, ORT 1.28.0), libQt6Network and libQt6Core (from the model fetcher).\n  - ldd resolves 57 libraries totalling 92.5 MiB, of which ICU data is 30.8 MB.\n  - Its RUNPATH points into native/build/_deps.\n- No libpython in either build (ldd | grep -c python gives 0).\n\n**Python environment it replaces**\n- The project .venv is 462 MB, including dev extras such as pyarrow at 155 MB.\n- Minimal closures:\n  - numpy + scipy + pillow: 179.2 MiB.\n  - The cli extra: 263.2 MiB in 21 dists.\n  - cli + soundfile: 267.6 MiB in 24 dists. The largest are scipy 106.7, onnxruntime 61.5, numpy 53.8, pillow 18.8 and hf-xet 11.0 MiB.\n- On top of that come the interpreter (6.5 MB) and the stdlib (about 40-53 MB).\n\n**Lines of code** (physical / code, where code excludes blank, comment and docstring lines)\n- Reference: sstvae/qrss/*.py is 31 files, 16,092 / 9,865; the qrss_*.py scripts are 7 files, 1,085 / 725. Total 17,177 / 10,590.\n  - The reference includes code that was not ported: channel.py (950 lines), si5351.py (127) and qrss_simulate.py.\n- Shipped C++, 182 files, 55,046 / 40,497 in total (3.8x the reference's code lines):\n\n| Part | Files | Physical | Code |\n|---|---|---|---|\n| core/qrss, hand-written | 129 | 45,787 | 33,805 |\n| core/qrss/codec | 11 | 932 | 589 |\n| core/math, added | 19 | 4,285 | 3,180 |\n| core/util, added | 4 | 654 | 475 |\n| apps/sstvae_qrss | 19 | 3,388 | 2,448 |\n\n- Also written:\n\n| Part | Files | Physical | Code |\n|---|---|---|---|\n| Generated tables and config | 5 | 8,166 | 8,021 |\n| pybind11 bindings | 68 | 20,759 | 16,197 |\n| ctests | 96 | 33,575 | 29,031 |\n| Parity tests test_qrss_native_*.py | 61 | 35,117 | 25,500 |\n| Parity helpers | 52 | 3,432 | 1,915 |\n| Generators | 8 | 2,212 | 1,577 |\n| Vendored dr_flac.h | 1 | 12,760 | 8,877 |\n\n- The port is 175 commits, starting at 3843897 (2026-10-12).\n\n**Tests**\n- ctest: 98 in the codec tree (78 QRSS) and 97 without the codec (77 QRSS).\n- Parity: 61 files, 4,398 tests collected (4,272 fast, 126 slow).\n- Reference QRSS suite: 29 files, 841 tests (692 fast, 149 slow).",
+ "surprises": [
+  "The C++ is slower on L FULL int16 transmit: 4.94 s against Python's 4.30 s. L MEDIUM is only 1.3x faster. Callgrind on L SHORT puts 43% of the time in lwave::resample_into, a scalar copy of scipy's upfirdn, and about 28% in glibc's scalar sincos inside ce::to_audio, where numpy is vectorised. int16 output also renders the whole pass twice, once to find the peak and once to write (native/core/qrss/tx.cpp 433-463). That second render is what keeps memory at 80 MB against Python's 590 MB. With --float, which renders once, the C++ is 1.5x faster.",
+  "L --float output is not bit-exact. 16-35 samples per pass differ by about 1 ULP near zero (at most 4.5e-13). Every int16 WAV and every CE output is byte-identical.",
+  "A JPEG input gives a different picture ID (7b202aad vs edb7bb4e) because stb and libjpeg decode it differently. A PNG of the same picture gives a byte-identical .qrsp.",
+  "A FULL listen session uses about as much memory in C++ as in Python: 1263 MB against Python's 1290 MB main process (1529 MB for the whole tree, because Python receives in a child process). For a single receive the C++ uses 57% of Python's memory at FULL.",
+  "Python's FULL listen replay does not finish within 200 s. Its round-B search of the previous slot, which it had only half heard, took 131 s on its own. The C++ finishes the whole replay in 69 s.",
+  "sstvae-qrss receive refuses --store and --passband, and its help still says the store is 'not ported yet (plan stage 3)', although listen and decode already use the store.",
+  "The codec build links Qt6Network and Qt6Core for the model fetcher, which brings in 57 runtime libraries (92.5 MiB, ICU included). Its RUNPATH points into a different build tree (native/build/_deps).",
+  "The two implementations run different onnxruntime versions: 1.31.0 in the venv against 1.28.0 in the C++ (uv.lock has 1.28.0 and 1.24.3). The encoded .qrsp and the decoded PNGs still came out byte- and pixel-identical wherever the inputs matched.",
+  "Python receive uses more CPU time than wall time because of BLAS threads; the C++ receive is single-threaded. Python/C++ ratios are 4.5-6.4x on CPU time against 2-6x on wall time.",
+  "C++ receive peak memory depends only on the frame length: 54 MB for TINY, 143 MB for SHORT and 796 MB for FULL, at every SNR tested.",
+  "Two coincidences: the FULL PNGs differ in exactly 10 subpixels, each by 1, in both the CE and the L case. The C++ FLAC of the same samples is 4% smaller (159,219 vs 166,471 bytes).",
+  "The CLI has no separate blind mode. SHORT passes at -24 dB were still found by the preamble, and blind (TBD) detection only showed up in the FULL -32 dB case, which I identified by hooking the receiver with probe_method.py. That case is also where the C++ is furthest ahead: 5.8x on wall time."
+ ],
+ "notes": "**What agrees.** Every case agreed between the two implementations within the bars set in the task.\n- Encode from PNG: byte-identical.\n- Transmit int16 WAVs: byte-identical.\n- Receive: stdout identical, or differing only in the hash suffix of the pass uid, which hashes z's float bytes and is expected to differ.\n- FULL PNGs: within 1 grey level, PSNR 93-98 dB.\n- Decode, EM and retro: PNGs pixel-identical.\n- Listen tiles: f_hz, snr and mean_w match to 1e-5 or better.\n\n**Not measured.**\n- Python's FULL listen replay (over 200 s).\n- The x86_64 cross build.\n\n**Medians and run counts.** Any run over 30 s was run once. That applies to every Python FULL receive, Python EM and the C++ FULL listen. The C++ FULL receives and C++ EM ran 3 times. The CE SHORT -28 dB case ran once on each side as an extra point; -32 dB is the nothing-found case that ran 3 times.\n\n**Scratch directory.** /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/measure/\n- results.md is the full write-up. table.md holds the medians and results.jsonl every run.\n- logs/ keeps each run's stdout and stderr.\n- Scripts: mtime.c, mtime, bench.py, summarize.py, cmp_listen.py, cmp_store.py, psnr.py, mkmix.py, probe_method.py, envsize.py and loc.py.\n- The test WAVs, stores and the binary and profile copies (about 1 GB) were deleted.\n\nThe repository was not modified."
+}

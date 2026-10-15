@@ -1,0 +1,1149 @@
+{
+ "base": "2671a6b",
+ "lane1": {
+  "fixes": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1",
+   "branch": "worktree-wf_0f0c84a2-e4b-1",
+   "commit": "427789781b7ebbb75deef2f5fcdf27d6fd82247e",
+   "files": [
+    "native/apps/sstvae_qrss/receive.cpp",
+    "native/bindings/module/qrss/ltrack_timing.cpp",
+    "native/bindings/module/qrss/track.cpp",
+    "native/bindings/module/qrss/track_timing.cpp",
+    "native/core/qrss/acquire.cpp",
+    "native/core/qrss/acquire.hpp",
+    "native/core/qrss/ltrack_timing.cpp",
+    "native/core/qrss/ltrack_timing.hpp",
+    "native/core/qrss/simfile.cpp",
+    "native/core/qrss/simfile.hpp",
+    "native/core/qrss/slot.cpp",
+    "native/core/qrss/slot.hpp",
+    "native/core/qrss/track.cpp",
+    "native/core/qrss/track.hpp",
+    "native/core/qrss/track_timing.cpp",
+    "native/core/qrss/track_timing.hpp",
+    "native/tests/qrss/cli/test_cli.cpp",
+    "native/tests/qrss/gen_simfile_pins.py",
+    "native/tests/qrss/simfile_pins.hpp",
+    "native/tests/qrss/test_simfile.cpp",
+    "native/tests/qrss/test_slot.cpp",
+    "qrss_receive.py",
+    "sstvae/qrss/acquire.py",
+    "sstvae/qrss/channel.py",
+    "sstvae/qrss/ltrack.py",
+    "sstvae/qrss/receiver.py",
+    "sstvae/qrss/sequences.py",
+    "sstvae/qrss/track.py",
+    "tests/qrss_native/ltrack_timing.py",
+    "tests/qrss_native/track_timing.py",
+    "tests/test_qrss_acquire.py",
+    "tests/test_qrss_channel.py",
+    "tests/test_qrss_format.py",
+    "tests/test_qrss_lreceiver.py",
+    "tests/test_qrss_native_acquire.py",
+    "tests/test_qrss_native_api.py",
+    "tests/test_qrss_native_cli.py",
+    "tests/test_qrss_native_cli_receive.py",
+    "tests/test_qrss_native_ltrack_timing.py",
+    "tests/test_qrss_native_receiver.py",
+    "tests/test_qrss_native_slot.py",
+    "tests/test_qrss_native_track.py",
+    "tests/test_qrss_native_track_timing.py",
+    "tests/test_qrss_receiver.py",
+    "tests/test_qrss_track.py"
+   ],
+   "api": "// native/core/qrss/track_timing.hpp, namespace sstvae::qrss::track\nstruct FitTimingTries { types::Timing best; std::vector<types::Timing> tries; };   // fit_timing n_best=1 and n_best=args.n_best\nFitTimingTries fit_timing_tries(std::span<const std::complex<double>> z_d, int ch_fs, const frame::FrameSpec& spec, double t0_index, const FitTimingArgs& args = {}, FitTimingTrace* trace = nullptr);\nstruct TimingPeak { std::int64_t k = 0; double score = 0.0, zmax = 0.0, t0abs = 0.0, delta = 0.0; };\nstd::vector<types::Timing> timings_of(std::vector<TimingPeak> peaks, std::int64_t n_best, double sps, double step, double t0_index);\nFitTimingTries tries_of(std::vector<TimingPeak> peaks, std::int64_t n_best, double sps, double step, double t0_index);\n// native/core/qrss/ltrack_timing.hpp, namespace sstvae::qrss::ltrack\ntrack::FitTimingTries fit_timing_tries_l(std::span<const cplx> z_d, int ch_fs, const frame::FrameSpec& spec, double t0_index, const FitTimingLArgs& args = {}, track::FitTimingTrace* trace = nullptr);\n// Same signatures, new behaviour:\nstd::int64_t sstvae::qrss::slot::parse_slot(std::string_view text);   // q < 0 -> std::invalid_argument(\"slot <slot_iso(q)> is before 1970-01-01T00:00Z\"), with the time's isoformat() where slot_iso overflows (before year 1)\nsstvae::qrss::simfile load (qrss_simulate .npz): Error(\"ValueError\", \"simfile: fs <fs> is not a sample rate\") for fs <= 0; \"simfile: q <q> is a quarter hour before 1970-01-01T00:00Z\" for q < 0; fe not complex64 (n,): \"simfile: fe is <descr> of <ndim> dimensions, not complex64 (n,) as qrss_simulate.py writes it\"\nsstvae::qrss::acquire::acquire(...): a hint whose f is not finite (bare or in an (f, waveform) pair) is dropped before A2\nsstvae::qrss::track::known_symbols(spec, hdr_bits): header values are make_classes(spec, hdr_bits).mu at the header bits, so a wrong-length header is make_classes' refusal\ntrack::verify / ltrack::verify_l: blind whole-frame-line try uses fit_timing_tries(_l) once (best -> verify_track(fit=false), tries -> runners-up)\n// Python bindings\nsstvae_native.qrss.track_timing._fit_timing_tries(ch, ch_fs, path, spec, tmpl_fn=None, tau0_init=None, ppm_range=250.0, *, t0_index, tau_range=None, z_d=None, n_best=1) -> (Timing, Timing | list[Timing])\nsstvae_native.qrss.ltrack_timing._fit_timing_tries_l(ch, ch_fs, path, spec, tmpl_fn=None, tau0_init=None, ppm_range=250.0, *, t0_index, tau_range=None, z_d=None, n_best=1) -> (Timing, Timing | list[Timing])\n// Python reference additions: track._fit_timing_tries, ltrack._fit_timing_tries_l, acquire._finite_hint, TbdHit.f_hz is a functools.cached_property\n// sstvae-qrss receive: --image whose parent directory is missing -> \"--image <path>: <parent>: no such directory\" (exit 1) before receiving",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2",
+     "result": "no work to do (built from the final sources)"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss --output-on-failure -j2",
+     "result": "53/53 passed (23.6 s)"
+    },
+    {
+     "cmd": "tools/check_layering.py ; tools/check_includes.py",
+     "result": "layering ok (470 files), includes ok (471 files)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_receiver.py",
+     "result": "45 passed, 22 deselected (38.8 s)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_ltrack_timing.py",
+     "result": "29 passed, 3 deselected (52.6 s); 3 RuntimeWarnings from the pre-existing test_mix_phases (ltrack.py:956 on a NaN input)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_track_timing.py",
+     "result": "21 passed (48.8 s)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_acquire.py",
+     "result": "16 passed, 4 deselected (39.7 s)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_slot.py tests/test_qrss_native_cli_receive.py tests/test_qrss_native_track.py tests/test_qrss_native_api.py",
+     "result": "first run: 261 passed, 5 skipped, 4 failed, all 4 in test_qrss_native_api.py (q=-1 cases compared the API with qrss_transmit.py, which now refuses the slot at --slot parse). Fixed in 4277897; rerun of test_qrss_native_api.py: 52 passed, 2 skipped (6.4 s). The other three files all passed."
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_cli.py",
+     "result": "296 passed, 42 skipped (90.5 s; the skips are codec cases, build-qrss has SSTVAE_BUILD_CODEC=OFF)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_receiver_slot.py",
+     "result": "30 passed, 6 deselected (109 s; no tests added here)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_acquire_a12.py tests/test_qrss_native_acquire_tbd.py",
+     "result": "39 passed, 1 deselected (55.5 s)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_lchannel.py tests/test_qrss_lunits.py tests/test_qrss_native_infra.py tests/test_qrss_native_trackbase.py tests/test_qrss_native_ltrack.py",
+     "result": "307 passed, 4 deselected (43 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_receiver.py tests/test_qrss_lreceiver.py  (and without the flag)",
+     "result": "native 27 passed (4.2 s); Python 27 passed (7.3 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_smoke.py tests/test_qrss_spread.py tests/test_qrss_cwid.py tests/test_qrss_track.py tests/test_qrss_ltrack.py  (and without)",
+     "result": "native 37 passed (7.4 s); Python 37 passed (14.5 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_acquire.py tests/test_qrss_lacquire.py  (and without)",
+     "result": "native 50 passed (21.7 s); Python 50 passed (26.3 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_live.py tests/test_qrss_live_l.py  (and without)",
+     "result": "native 54 passed (15.7 s); Python 54 passed (20.5 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_multipass.py tests/test_qrss_em.py tests/test_qrss_rules.py tests/test_qrss_cli.py  (and without)",
+     "result": "native 62 passed (20.2 s); Python 62 passed (25.6 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_channel.py tests/test_qrss_format.py  (and without)",
+     "result": "native 85 passed (8.6 s); Python 85 passed (9.0 s)"
+    },
+    {
+     "cmd": "scratchpad ab.py with the 2671a6b package vs the edited one (CE SHORT, L SHORT, CE FULL, L FULL)",
+     "result": "ALL IDENTICAL: canonical bytes of the Acquisition (TbdHit.f_hz included), detections, and verify/verify_l results at 1500 Hz (signal) and 2050 Hz (noise)"
+    },
+    {
+     "cmd": "scratchpad bench_verify.py / bench_native_verify.py / bench_acq*.py (OMP/BLAS threads = 1)",
+     "result": "timings recorded in insights"
+    }
+   ],
+   "parity": "Bit-exact:\n- Python before vs after for items 4 and 5, comparing the 2671a6b package with the edited one. On CE SHORT, L SHORT, CE FULL and L FULL, these serialize to identical bytes: the whole Acquisition (every TbdHit including f_hz), the detections, and verify/verify_l at the signal line and at a noise line.\n- Inside each implementation, _fit_timing_tries(_l) is exactly (fit_timing n_best=1, fit_timing n_best=n), with the same types, compared at n = V, 3, 2 (ppm_range 50) and 1.\n- On a noise candidate, gate V calls verify_track in the same sequence in both implementations: [fit, fit, then V unfitted tries].\n- Refusal texts match word for word between Python and C++:\n  - parse_slot for q<0. The cases include 1969-12-31T23:45Z, the 1970 boundary, and the year-1 overflow, where the message falls back to isoformat.\n  - load_npz/simfile for fs<=0, fe stored as c16, and q<0, checked through the sstvae-qrss receive CLI parity cases.\n  - known_symbols refuses wrong-length headers with make_classes' own message, in Python, in C++ and in make_classes itself.\n  - _receive_pass_l gives receive_pass's refusal for a non-L frame, in Python and in the C++ row receive_pass.\n  - --image with no directory gives the same message from the script and the C++ CLI.\n- Non-finite hints: a NaN or inf hint mixed with good ones gives exactly the result of the good hints alone. This holds for the reference and for the C++ separately (\"mixed raw joint\", \"ce0 single aliases\").\n\nWithin tolerance:\n- The C++ tries pair is compared with the reference's to fit_timing's existing bars (_timing_close).\n- Native acquire with NaN hints is compared with the reference through the existing _acq_check and _det_check(hit_tol=1e-7, raw=True).\n- No new worst-case error appeared; every existing bar held.\n\nNot compared:\n- The old C++ was not rebuilt, so the C++ verify was not checked bit-for-bit before vs after. It is covered by the existing C++-vs-Python verify parity tests, the call-sequence spy, and every suite under --native-qrss=rx.\n- The C++ \"before\" timings are estimates (new verify plus the one call the change removed), not measurements of a before-build.\n- Codec cases were skipped because build-qrss has the codec off.",
+   "deviations": [
+    "The in-process transmit API (native/core/qrss/api.cpp) still refuses q < 0 with sequences.scrambler's 'q must fit in uint64, not -1', after the request's own refusals. It takes q as a number and never sees slot text. qrss_transmit.py now stops at its --slot parser with 'slot ... is before 1970-01-01T00:00Z'. tests/test_qrss_native_api.py now takes its expected answer from the script's outcome for the same request at Q_TEST, and checks the script's new refusal separately.",
+    "C++ TbdHit::f_hz() still refits the line on every call; only Python caches it (item 4 asked only for Python). The result is the same, and the refit runs 3-9 times per acquire at about 0.16 ms in Python.",
+    "--image: qrss_receive.py now refuses an extension PIL cannot map (Image.registered_extensions()) before receiving. receive.cpp mirrors only the missing-directory check, as the task said. The C++ keeps its existing PNG-only refusal (test_image_names_png_only), which is narrower than PIL's list."
+   ],
+   "shared_changes_needed": [
+    "native/apps/sstvae_qrss/receive.cpp: the directory check is inside the --image hunk as asked, but `#include <filesystem>` was added to the include block outside that hunk. The paths agent (W7 #106 fileio helper / Windows UTF-8 paths) may want this std::filesystem::is_directory(parent) call routed through their path conversion.",
+    "native/tests/qrss/cli/test_cli.cpp was not named but had to change: the transmit refusal pin for --slot 1969-12-31T23:45Z is now \"--slot '1969-12-31T23:45Z': slot 1969-12-31T23:45Z is before 1970-01-01T00:00Z\\n\". Otherwise ctest qrss_core_cli fails.",
+    "tests/test_qrss_native_api.py was not in the named list but broke from item 6, because it runs qrss_transmit.py --slot for q=-1. Fixed under the tests/test_qrss_*.py allowance (commit 4277897).",
+    "qrss_listen.py:181 calls sequences.parse_slot(args.slot) without the SystemExit wrapper that qrss_receive.py and qrss_simulate.py use. Any bad --slot, and now a pre-1970 one, ends in a ValueError traceback. Not changed here; it needs a 'parse_slot' wrapper like qrss_receive.py:58-63."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "verify and verify_l loop over `tms[1:]` assuming tms[0] is the best timing already tracked. In the L noise scenario it is not: a carrier estimate's runner-up outscores every first peak after segment refinement, so n_best=1's timing is tms[1]. The best is then tracked twice and the strongest runner-up (tms[0]) never. This was preserved for bit-identity and pinned.",
+     "evidence": "sstvae/qrss/track.py:1450, sstvae/qrss/ltrack.py:1301; tests/test_qrss_native_ltrack_timing.py test_fit_timing_tries_l asserts {('reference','noise',V),('native','noise',V)} are in the split set"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Before this change, _receive_pass_l given a CE frame failed with an obscure \"AttributeError: 'NoneType' object has no attribute 'fs'\". It now gives receive_pass's refusal.",
+     "evidence": "sstvae/qrss/receiver.py:330; tests/test_qrss_lreceiver.py::test_receive_pass_l_refuses_a_frame_that_is_not_l"
+    },
+    {
+     "kind": "python-bug",
+     "what": "No PassResult field the probes reached was a numpy scalar: cw.agrees was already a Python bool because cwid.match returns float(). Wrapping it in bool() is protection: json.dumps accepts np.float64 but refuses np.bool_, and `text is None and z > Z_ACCEPT` would give np.bool_ for a numpy z.",
+     "evidence": "sstvae/qrss/receiver.py:247; tests/test_qrss_receiver.py::test_pass_fields_are_plain_json"
+    },
+    {
+     "kind": "performance",
+     "what": "Item 4 (TbdHit.f_hz cached) saves under 1 ms per acquire. Line fits per acquire drop 6->3 on CE SHORT, 8->3 on L SHORT and 9->3 on CE FULL, at about 156 us each, against 0.8-2.3 s of acquire. Before vs after is within noise (CE SHORT 0.85 vs 0.85 s median). An earlier 3.15 -> 1.63 s reading was warm-up and CPU load, not this change. The docstring's 'thousands of reads' claim was corrected.",
+     "evidence": "scratchpad bench_acq.py/bench_acq2.py, OMP/BLAS threads 1: old ce-short min 0.838 s vs new 0.826 s; old ce-full min 1.616 s vs new 2.130 s (noise); one fit 155.7 us"
+    },
+    {
+     "kind": "performance",
+     "what": "Item 5 in Python (blind noise candidate, one thread), old -> new. Coarse timing time: CE SHORT 0.87-0.90 -> 0.62-0.79 s; L SHORT 1.00 -> 0.73-0.80 s; CE FULL 46.9 -> 35.8 s; L FULL 50.1 -> 37.9 s. Whole verify: CE SHORT 4.6-4.7 -> 4.3-4.7 s (noise dominates); L SHORT 2.71 -> 2.55 s; CE FULL 74.5 -> 63.1 s (-15%); L FULL 63.1 -> 50.6 s (-20%).",
+     "evidence": "scratchpad bench_verify.py: fit_timing x4 46.94 s vs fit_timing x2 23.48 + tries 12.27 s (CE FULL); fit_timing_l x4 50.11 s vs x2 24.34 + tries 13.53 s (L FULL)"
+    },
+    {
+     "kind": "performance",
+     "what": "Item 5 in C++ (new verify measured; old = new + the n_best=1 fit_timing it no longer runs). CE SHORT 0.86-0.99 s, saves 0.07 s (about 8%). L SHORT 0.66-0.76 s, saves 0.08-0.09 s (about 11%). CE FULL 8.33 s, saves 1.10 s (12%). L FULL 6.98 s, saves 1.33 s (16%). C++ vs Python gate V on noise: CE FULL 63.1/8.33 = 7.6x, L FULL 50.6/6.98 = 7.2x, CE SHORT about 5x, L SHORT about 3.6x.",
+     "evidence": "scratchpad bench_native_verify.py: ce-full verify 8.329 s, fit_timing n1 1.104 s; l-full verify_l 6.978 s, n1 1.331 s"
+    },
+    {
+     "kind": "performance",
+     "what": "Trade-off of the eager tries: a blind candidate that reaches the whole-frame-line try and passes on its best timing now pays for the runners-up's segment refinement, which the old code skipped. A lazy runner-up extraction would make that free: keep each carrier estimate's Z, Zl and x and pull k>=1 peaks on demand, rebuilding the list in carrier-estimate order to stay bit-identical. Not done.",
+     "evidence": "C++ fit_timing n_best=8 vs 1: CE SHORT 0.103 vs 0.071 s, L SHORT 0.162 vs 0.080 s, CE FULL 1.225 vs 1.104 s, L FULL 1.816 vs 1.331 s; Python SHORT 0.27-0.32 vs 0.20 s"
+    },
+    {
+     "kind": "simplification",
+     "what": "verify_track(fit=False, timing=best) gives exactly what verify_track(fit=True) gave on the blind line try, so one grid serves both. The C++ factoring (timing_peaks -> timings_of / tries_of) leaves fit_timing and fit_timing_tries as two-line wrappers over the shared grid.",
+     "evidence": "native/core/qrss/track_timing.cpp timings_of/tries_of; tests/test_qrss_native_track_timing.py::test_fit_timing_tries"
+    },
+    {
+     "kind": "process",
+     "what": "A refusal moved earlier in a script breaks every parity test that reached a later refusal through that script. test_qrss_native_api.py was not on the task's list and failed 4 cases. Lesson: grep for every test that reaches parse_slot through a script (`1969`, `q=-1`) before calling the slot change done.",
+     "evidence": "tests/test_qrss_native_api.py CASES with q=-1; fixed in 4277897"
+    },
+    {
+     "kind": "process",
+     "what": "Timings taken while other agents share the 4 CPUs were off by up to 4x (acquire 3.15 s vs 0.84 s pinned). Only pinned, repeated runs (OMP/BLAS threads 1, first run discarded) gave usable before/after numbers.",
+     "evidence": "ab_before.log 3.15 s vs bench_acq.py 0.838-1.01 s for the same CE SHORT acquire"
+    }
+   ],
+   "notes": "Commits on worktree-wf_0f0c84a2-e4b-1, not pushed:\n- ce73aff: the reference fixes and their C++ mirrors.\n- 9d3b5ba: the tests.\n- 4277897: the API parity test now handles the pre-1970 slot refusal, and the TbdHit.f_hz docstring quotes measured counts.\n\nAll nine items are done:\n1. bool(agrees), plus a JSON test over every PassResult field.\n2. _receive_pass_l refusal, tested in Python and against the C++ row receive_pass.\n3. Non-finite hints dropped, in Python and C++.\n4. f_hz cached.\n5. Gate V's blind coarse grid computed once, in both implementations.\n6. Pre-1970 slot refused at parse, in Python and C++.\n7. --image checked before receiving: Python checks the directory and the PIL extension, C++ the directory only.\n8. load_npz/simfile refusals, including C++ q<0.\n9. known_symbols uses make_classes' refusal.\n\nThe main repo's task list shows another agent's W7 paths and argparse tasks (#106-112), which also touch receive.cpp; see shared_changes_needed. Scratch scripts for the before/after runs and timings are in the session scratchpad: ab.py, bench_acq*.py, bench_verify.py, bench_native_verify.py, and old/ (the 2671a6b package)."
+  },
+  "fixes_review": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1",
+   "branch": "worktree-wf_0f0c84a2-e4b-1",
+   "commit": "73c1d3d1405f542abf007da7c694f3b380bf35f7",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tests/test_qrss_receiver.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/sstvae/qrss/receiver.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/qrss_receive.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/sstvae/qrss/channel.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tests/test_qrss_channel.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tests/test_qrss_native_track_timing.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tests/test_qrss_native_ltrack_timing.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/apps/sstvae_qrss/receive.cpp"
+   ],
+   "api": "No public API changes in this review. Reviewed as committed by the wave-7 agent: track_timing.hpp TimingPeak / fit_timing_tries(...) -> {best, tries}; ltrack_timing.hpp fit_timing_tries_l(...); bindings _fit_timing_tries / _fit_timing_tries_l; slot.cpp parse_slot throws \"slot <iso> is before 1970-01-01T00:00Z\" for q < 0; simfile load_npz throws ValueError for fe not <c8 (n,), fs <= 0, q < 0.",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2",
+     "result": "built (54 steps)"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss --output-on-failure -j2",
+     "result": "53/53 passed, 25 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_cli_receive.py tests/test_qrss_native_cli.py",
+     "result": "304 passed, 45 skipped, 156 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_track_timing.py tests/test_qrss_native_ltrack_timing.py tests/test_qrss_native_slot.py",
+     "result": "231 passed, 137 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_acquire.py tests/test_qrss_native_acquire_tbd.py tests/test_qrss_native_track.py tests/test_qrss_native_api.py",
+     "result": "114 passed, 2 skipped, 105 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_receiver.py tests/test_qrss_native_infra.py",
+     "result": "232 passed, 50 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_receiver_slot.py",
+     "result": "30 passed, 113 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' test_qrss_{receiver,smoke,channel,format}.py",
+     "result": "93 passed, 17 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' test_qrss_{lreceiver,spread,cwid,track,ltrack}.py",
+     "result": "56 passed, 12 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' test_qrss_{acquire,lacquire,rules,em,multipass}.py",
+     "result": "109 passed, 45 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' test_qrss_{live,live_l,cli}.py",
+     "result": "57 passed, 26 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' --native-qrss=rx test_qrss_{receiver,smoke,channel,format,lreceiver,spread,cwid}.py",
+     "result": "129 passed, 14 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' --native-qrss=rx test_qrss_{track,ltrack,acquire,lacquire,rules,em,multipass}.py",
+     "result": "129 passed, 39 s"
+    },
+    {
+     "cmd": "pytest -m 'not slow' --native-qrss=rx test_qrss_{live,live_l,cli}.py",
+     "result": "57 passed, 21 s"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (470), includes ok (471)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only on receive.cpp, track_timing.cpp, ltrack_timing.cpp, slot.cpp, simfile.cpp, acquire.cpp, track.cpp",
+     "result": "clean (including the _WIN32 separator branch)"
+    },
+    {
+     "cmd": "mutation checks: remove bool() in _cw_result; verify uses tms[0]; drop either non-finite-hint check (Python and C++ acquire.cpp); drop _receive_pass_l refusal; revert load_npz byte-order relaxation; drop the astype normalization",
+     "result": "every mutant fails a test now; the cw.agrees one survived the agent's test before the fix"
+    }
+   ],
+   "parity": "Old (2671a6b, via git archive) against new Python gives identical results on 6 captures: ce-tiny-15, l-tiny-noise, ce-short-12, l-short-12, ce-full-12 and l-full-12. That covers acquire, detections with TbdHit.f_hz, receive_slot passes, and gate V on noise at 1500/1531.3/2050/1180 Hz. Items 3, 4 and 5 are therefore pure refactors. The verify/verify_l timings are now pinned bitwise to [fit_timing(n_best=1)] + fit_timing(n_best=V)[1:] in both parity test files. The refusal texts are byte-identical between Python and C++ for: fe of <c16, <f4, |i1, 2-d and 0-d; fs of 0, 0.5, -0.5, False and int8 -1; q of -1, -1.0 and -0.5 (accepted on both sides); and --slot 1969-12-31T23:45Z. They do not match in three cases. (1) A big-endian member ('>c8' fe, '>i8' fs): Python reads it, while C++ refuses with \"npy: dtype '>X' is not supported\". This was already documented at the npz layer. (2) A uint64 q above int64: Python accepts it, while C++ gives OverflowError (pre-existing). (3) A non-PNG --image: C++ refuses it with its own PNG-only text (pre-existing deviation). The known_symbols wrong-length refusal agrees between C++ and Python for every bad shape probed.",
+   "deviations": [
+    "Big-endian .npz members: Python load_npz reads them, and after this review that includes a '>c8' fe again. The native reader refuses every multi-byte big-endian dtype ('npy: dtype '>c8' is not supported'). This was already documented in test_qrss_native_infra. It only arises for a file written by np.savez on a big-endian host.",
+    "On Windows, the native --image directory check prints the path with '/' separators where WindowsPath prints '\\'. It refuses the same paths. Python's text is not reachable from a POSIX test host.",
+    "A q that is a uint64 above int64: Python accepts it, while C++ gives 'OverflowError: npz: value does not fit int64'. This predates wave 7. save_npz never writes such a q."
+   ],
+   "shared_changes_needed": [
+    "When merging with the W7 paths branch, the new std::filesystem::is_directory(std::filesystem::path(parent)) in native/apps/sstvae_qrss/receive.cpp (the --image hunk) should go through that branch's util/fileio UTF-8 path helper. On MSVC, a narrow std::filesystem::path from a UTF-8 argv string is decoded in the ANSI code page, so a non-ASCII directory reads as missing."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "The premise of item 1 was false. cwid.match has returned a Python float since wave 4, in both implementations, so z > Z_ACCEPT was never an np.bool_ and json.dumps never failed on cw.agrees. The bool() is defensive. The agent's test could not fail: the mutant without bool() survived twice. It now stubs match to return np.float64.",
+     "evidence": "mutation run: removing bool() in sstvae/qrss/receiver.py _cw_result passed the agent's test; it fails the rewritten test_pass_fields_are_plain_json"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Wave 7's load_npz check fe.dtype != np.complex64 refused '>c8', which is complex64 in the other byte order. The refusal message even said 'fe is >c8 ... not complex64'. Before wave 7 the reference read such a file. Fixed with dtype.newbyteorder('='), then normalizing to native.",
+     "evidence": "probe: qrss_receive.py be-c8.npz -> 'ValueError: simfile: fe is >c8 of 1 dimensions, not complex64'; np.dtype('>c8').name == 'complex64'"
+    },
+    {
+     "kind": "python-bug",
+     "what": "check_image accepted an extension of a format Pillow can read but not write (.psd, .xpm, .gbr, ...). Image.save then raised KeyError after the whole receive.",
+     "evidence": "Image.registered_extensions()['.psd'] == 'PSD', 'PSD' not in Image.SAVE; new case in test_cli_checks_the_image_before_receiving"
+    },
+    {
+     "kind": "python-bug",
+     "what": "On Windows, the native --image directory check split on '/' only, so C:\\no\\pic.png got '.' as its parent and passed the check, which the change was meant to make up front.",
+     "evidence": "native/apps/sstvae_qrss/receive.cpp --image hunk (is_sep), mingw -fsyntax-only clean"
+    },
+    {
+     "kind": "performance",
+     "what": "Item 5 (one coarse timing grid in gate V) measured. Python, noise gate V: CE FULL 73.33 -> 59.29 s, L FULL 62.25 -> 51.39 s, CE SHORT 4.62 -> 4.09 s, L SHORT 2.61 -> 2.27 s (fit calls 4 -> 2). C++: the removed duplicate n_best=1 fit was 1.16 s for CE and 1.28 s for L FULL (0.07 s SHORT). Total native noise verify is 8.30 s for CE FULL and 7.19 s for L FULL, so Python is about 7x slower.",
+     "evidence": "scratchpad ab_run.py / cpp_verify_time.py timings, one run each on 4 shared CPUs"
+    },
+    {
+     "kind": "performance",
+     "what": "Item 4 (TbdHit.f_hz cached) saves about 1 ms on the receive path: spline fits went 13 -> 8 on CE FULL/SHORT and 6 -> 5 on L FULL. The '3816 calls' premise comes only from the test-only all_hits=True mode, where fits went 1790 -> 49 (1.80 -> 1.47 s).",
+     "evidence": "scratchpad fhz_count.py / fhz_all.py call counts"
+    },
+    {
+     "kind": "python-bug",
+     "what": "verify/verify_l never tracks the strongest timing tms[0] as a runner-up: it uses best + tries[1:]. On L noise, best is not tms[0], so the strongest grid peak can go untracked while best may be tracked twice. This is intended reference behaviour, kept and now pinned by the parity tests. It is worth a look in the reference.",
+     "evidence": "tests/test_qrss_native_ltrack_timing.py runners-up assertions; inferred from code sstvae/qrss/track.py _fit_timing_tries"
+    },
+    {
+     "kind": "python-bug",
+     "what": "make_classes broadcasts a length-1, scalar or (1,n) header on -v1 frames instead of refusing it, so known_symbols accepts those wrong-length headers in both implementations. This is a pre-existing quirk outside item 9's checks.",
+     "evidence": "scratchpad ks.py probe: identical outcomes in C++ and Python for every bad shape"
+    },
+    {
+     "kind": "python-bug",
+     "what": "api::slot_of still accepts a negative q while parse_slot now refuses one. Separately, qrss_listen's parse_slot path leaves the new ValueError uncaught (a traceback rather than SystemExit).",
+     "evidence": "inferred from code native/core/qrss/api.cpp slot_of, qrss_listen.py"
+    },
+    {
+     "kind": "process",
+     "what": "The agent's JSON test received its own SHORT pass at -15 dB in the fast tier (5.5 s), against CLAUDE.md's rule that SHORT receptions are slow. Reusing test_qrss_smoke's cached -6 dB pass costs nothing.",
+     "evidence": "tests/test_qrss_receiver.py test_pass_fields_are_plain_json, timed before and after"
+    }
+   ],
+   "notes": "I read all nine items line by line, re-ran the A/B claims and mutation-checked every new test. Items 2, 3, 6 and 9 and the C++ halves of 5 and 8 are correct, and their tests catch mutants. Item 1's premise was false and its test could not fail. Item 5's test did not pin which timings were tracked. Item 7 had a Windows hole in C++ and a gap for read-only formats in Python. Item 8 regressed '>c8'. All of these are fixed in 73c1d3d. In the CLI parity run, 45 skips: tests that need the codec or another platform; the reason was not re-checked this session. Scratch probes are in /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/rev and nothing there is committed. Not pushed.",
+   "findings": [
+    {
+     "what": "Item 1: test_pass_fields_are_plain_json could not fail. cwid.match already returns a float, so the mutant removing bool() survived. Rewritten to stub match with np.float64 on an unread-window pass. The receiver.py comment is corrected.",
+     "fixed": true
+    },
+    {
+     "what": "Item 5: the runners-up tests checked the number of tracked candidates but not which timings were tracked. They now pin cands[2:] bitwise to fit_timing(n_best=1) followed by fit_timing(n_best=V)[1:] for CE and L. The tms[0] mutant is caught.",
+     "fixed": true
+    },
+    {
+     "what": "The JSON test received a SHORT pass at -15 dB in the fast tier (5.5 s). It now shares the smoke test's cached -6 dB pass.",
+     "fixed": true
+    },
+    {
+     "what": "Item 7 (C++): on Windows the --image directory check split on '/' only, so C:\\no\\pic.png passed. Backslash is now a separator under _WIN32.",
+     "fixed": true
+    },
+    {
+     "what": "Item 7 (Python): check_image passed extensions of read-only Pillow formats (.psd, .xpm), which then failed in Image.save after the receive. These are now refused up front, with a test case.",
+     "fixed": true
+    },
+    {
+     "what": "Item 8: load_npz refused a '>c8' fe (complex64 written on a big-endian host) with a self-contradictory message, a regression against 2671a6b. It now reads either byte order and normalizes to native. The test is mutation-checked twice.",
+     "fixed": true
+    },
+    {
+     "what": "The new is_directory call in receive.cpp builds a narrow std::filesystem::path, which on MSVC is decoded in the ANSI code page. It needs the W7 paths branch's UTF-8 helper when merged (listed in shared_changes_needed).",
+     "fixed": false
+    }
+   ]
+  },
+  "acceptance": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1",
+   "branch": "worktree-wf_0f0c84a2-e4b-1",
+   "commit": "cc1c897971b4b32020c88fa382fc85537a60c487",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tools/gen_qrss_rx_reference.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/bindings/module/qrss/rx_api.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_pins.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-tiny-6.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-tiny-12-joint.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/l-tiny-6.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/l-tiny-12.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-short-12.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-short-20.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/l-short-12-joint.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/l-short-20.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-short-drift.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-short-tx-ppm.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/l-short-rx-ppm.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-l-neighbours.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_reference/ce-short-lead-in.json",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tests/test_qrss_native_acceptance.py"
+   ],
+   "api": "Python binding (new, native/bindings/module/qrss/rx_api.cpp, Registrar(\"rx_api\", 91)); no C++ core API was added or changed:\nsstvae_native.qrss.rx_api.receive_slot(cap, frames=(\"full\",), live_only=False, estimator=\"joint\", erase_s=(), round_b=True, max_candidates=None, budget_s=None, hints=(), old_edge_noise=False, old_gating=False) -> list[PassResult \"__type__\" dict]   # wraps api::receive_slot(const api::Capture&, const api::ReceiveConfig&) -> std::vector<types::PassResult>; GIL released; no Python fallback; the QRSS_OLD_* rules are arguments, never env\n  cap: frontend.Capture or anything with fe, q, t0_index, fs; frames: a name, FrameSpec, or a sequence of them; hints: f or (f, waveform); erase_s: [(a, b)]\nTool (tools/gen_qrss_rx_reference.py), imported by the test rather than copied:\nSCENARIOS: list[Scenario]; scenario(name) -> Scenario; receive_frames(sc) -> tuple[str, ...]\nsimulate(sc) -> (frontend.Capture, list[Signal])   # Signal(frame, waveform, f_hz, truth latents)\nsummarise(sc, cap, signals, passes) -> dict; compare(ref, got) -> (problems: list[str], noise: list[str]); BARS = {f_hz 0.01, tau0_ch 0.5, latent_snr_db 0.1, z_ref_rel 0.01, mean_w_db 0.1}\npins() -> dict; stale_pins(committed) -> list[str]; scenario_hash() -> str; source_hashes() -> dict (CRLF normalized)\nimport_closure() -> set[path]; unaccounted_imports() -> list[path]; PINNED, NOT_PINNED, ROOTS\nCLI: python tools/gen_qrss_rx_reference.py (--scenario NAME [..] | --all | --list) [--check]",
+   "tests": [
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q -s tests/test_qrss_native_acceptance.py",
+     "result": "19 passed in 23.8 s (13 scenarios, pin, import-cover, stale-message, references-present, plan-coverage, bar self-test)"
+    },
+    {
+     "cmd": "pytest --native-qrss=rx tests/test_qrss_native_acceptance.py",
+     "result": "6 passed, 13 skipped (scenario tests skip: the Python reference is substituted)"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=/nonexistent pytest tests/test_qrss_native_acceptance.py",
+     "result": "4 passed, 15 skipped (pin tests and scenarios need the module, per spec)"
+    },
+    {
+     "cmd": "mutation: ce-short-12.json passes[0].f_hz += 0.02, run -k ce-short-12, restore",
+     "result": "FAILED as required: 'f_hz ... difference 0.02 > 0.01'; restored, tree clean"
+    },
+    {
+     "cmd": "mutation: l-short-12-joint.json latent_snr_db -= 0.12, header.picture_id ^= 1, cw.text = K1ABD, run, restore",
+     "result": "FAILED as required, all three named; restored"
+    },
+    {
+     "cmd": "mutation: rx_pins.json hash of sstvae/qrss/track.py altered, run -k pins, restore",
+     "result": "FAILED as required: 'Python receiver changed; regenerate references: python tools/gen_qrss_rx_reference.py --all (sstvae/qrss/track.py changed)'; restored"
+    },
+    {
+     "cmd": "python tools/gen_qrss_rx_reference.py --all --check",
+     "result": "13/13 ok, rx_pins.json is current, exit 0 (~55 s)"
+    },
+    {
+     "cmd": "python tools/gen_qrss_rx_reference.py --scenario ce-tiny-6 --check (reference latent SNR perturbed +0.2)",
+     "result": "DIFFERS, exit 1; restored"
+    },
+    {
+     "cmd": "gen_qrss_rx_reference.py --list / --scenario nope / no args",
+     "result": "lists 13; exit 2 with the valid names; exit 2"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j2",
+     "result": "53/53 passed (21 s)"
+    },
+    {
+     "cmd": "pytest --native-qrss=rx -m 'not slow' tests/test_qrss_receiver.py",
+     "result": "6 passed, 55 deselected (header: stage rx, 417 substitutions, 63 from-import sites)"
+    },
+    {
+     "cmd": "pytest --native-qrss=rx -m 'not slow' tests/test_qrss_lreceiver.py",
+     "result": "21 passed, 8 deselected"
+    },
+    {
+     "cmd": "pytest --native-qrss=rx -m 'not slow' tests/test_qrss_smoke.py",
+     "result": "2 passed"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (471 files), includes ok (472 files)"
+    }
+   ],
+   "parity": "Tolerance against committed Python references, to the plan's bars; discrete fields exact. Exact: pass count and order, waveform, frame, the signal each pass is matched to, header (every field), cw {text, keying, agrees}; mean W bit for bit (difference 0). Within bars, worst measured over all 13 scenarios (bar in parentheses): f_hz 2.5e-12 Hz (0.01), tau0 6.6e-12 CH samples (0.5), latent SNR vs simulator truth 2.4e-10 dB (0.1), Z_ref 2.1e-8 relative (0.01, the tool's own extra bar), mean W 0 dB (0.1, extra). Every decision is far from its threshold: callsign read margins 8.9 to 20.1 against READ_LLR_MIN 6 where a call is read, 0.05/0.11 (well under 6) at -20 dB where none is; Z_match >= 18.3 against Z_ACCEPT 6; so a rounding-level difference cannot flip one. Each test first checks that its simulated capture matches the generator's (length, t0_index, power to 1e-6 relative, six samples to 1e-5), so a numpy/scipy/simulator change shows as that, not as a receiver failure. Not compared: picture pixels (latent SNR stands in for them), Python timing (not stored), the listener (stage 3).",
+   "deviations": [
+    "No change to receiver behaviour on either side; the C++ core is untouched. The new binding rx_api.receive_slot has no Python counterpart, so it has no substitution row and does not appear in the --native-qrss list; under --native-qrss=rx the 13 scenario tests skip (the reference would be substituted), and the pin tests still run.",
+    "The pin tests take the native fixture as the spec says, so a job with no module (the python CI job) never sees a stale pin. tools/gen_qrss_rx_reference.py --all --check is the module-free way to check (see shared_changes_needed).",
+    "Beyond the plan's bars the comparison also holds Z_ref within 1% and mean W within 0.1 dB, plus the capture fingerprint above. These are the tool's own additions, and the measured worst case for each sits orders of magnitude inside its bar.",
+    "sstvae/qrss/live.py is not pinned: it is the listener (stage 3) and not on the receive_slot path. wavio, hfchannel, codec and checkpoint are imported but excused in NOT_PINNED (capture_from_wav, simulate_audio, render.render and codec_id_from_onnx only), as are the package __init__ files. The test test_pins_cover_the_imports fails if any other new import appears.",
+    "Python receive times are printed by the tool but not stored in the reference JSON. A timing field would change on every regeneration and hide the real diff."
+   ],
+   "shared_changes_needed": [
+    ".github/workflows/ci.yml: nothing CI runs today notices a stale pin. The pin tests skip without the module, and the python job only checks gen_qrss_rx_config.py. Either add 'python tools/gen_qrss_rx_reference.py --all --check' to the python job next to the other QRSS --check steps (about 55 s on 4 CPUs, Python only), or run tests/test_qrss_native_acceptance.py in a job that has the QRSS-built module (about 25 s).",
+    "CLAUDE.md Commands: the QRSS non-slow tier gains 19 tests and about 25 s when the module is built (13 skip without it). tools/gen_qrss_rx_reference.py and native/tests/golden_qrss/rx_reference/ belong in the list of generated-and-committed artifacts with their regenerate rule: run --all after any Python receiver change.",
+    "No .gitattributes change is needed: the source hashes normalize CRLF to LF, so a Windows checkout (there is no eol rule for *.py) hashes the same as Linux."
+   ],
+   "insights": [
+    {
+     "kind": "performance",
+     "what": "C++ receive_slot against Python receive_slot on the same capture, budget_s=None, 4 shared CPUs, over three runs. TINY: C++ 0.76-1.2 s, Python 1.0-2.9 s. SHORT: 1.5-2.0 s against 3.7-5.1 s. Joint SHORT CE + L neighbour slot (2 passes): 2.9-3.2 s against 6.9-7.0 s. So the C++ is 1.5 to 2.6 times faster, most on the longer slots. Simulating a slot costs 0.0-0.5 s.",
+     "evidence": "pytest -s tests/test_qrss_native_acceptance.py timing lines; gen_qrss_rx_reference.py --all and --all --check printouts"
+    },
+    {
+     "kind": "numerics",
+     "what": "The whole receive chain agrees to rounding: f_hz within 2.5e-12 Hz, tau0 within 6.6e-12 CH samples, latent SNR within 2.4e-10 dB, and mean W bit for bit. The largest relative difference is Z_ref at 2.1e-8 on the CE passes, against about 1e-13 on L passes, which suggests a CE-side reduction order. Every bar is at least 1e7 times wider than what this machine needs, so the bars are sized for another platform or a later C++ change.",
+     "evidence": "measured, all 13 scenarios, test output '(within the bars)' lines"
+    },
+    {
+     "kind": "process",
+     "what": "Hashing pinned sources raw would make the staleness pin fail on every Windows checkout. .gitattributes has no eol rule for *.py, so git can check them out with CRLF. The hashes normalize CRLF to LF, so Linux hashes are unchanged and Windows matches.",
+     "evidence": ".gitattributes (no *.py rule); tools/gen_qrss_rx_reference.py source_hashes()"
+    },
+    {
+     "kind": "process",
+     "what": "A hand-written pin list goes stale without anyone noticing. The static AST import closure from receiver.py, channel.py and render.py found four modules the hand list had missed: picture, beaconfile, sstvae/modem/framing and golay. test_pins_cover_the_imports now fails when a new import is neither pinned nor excused.",
+     "evidence": "first unaccounted_imports() run during development"
+    },
+    {
+     "kind": "process",
+     "what": "QRSS_OLD_EDGE_NOISE and QRSS_OLD_GATING are environment variables that the Python rules read. If one is set in the shell, references written with it would silently encode the old rules. The generator clears both before it receives. The C++ API takes them only as arguments, so the two sides cannot disagree because of the environment.",
+     "evidence": "tools/gen_qrss_rx_reference.py _clean_rules_env; native/core/qrss/rx_api.hpp"
+    },
+    {
+     "kind": "simplification",
+     "what": "The tool compares each simulated neighbour's latents with channel._neighbour_symbols bit for bit before trusting them as truth: header bits are drawn first, then standard_normal data, unprecoded. If channel.py changes how it draws them, the tool stops with an error instead of reporting a wrong latent SNR.",
+     "evidence": "tools/gen_qrss_rx_reference.py _neighbour_truth"
+    },
+    {
+     "kind": "numerics",
+     "what": "At -20 dB, the CE and L SHORT scenarios still decode the header (polar-coded), but no CW callsign is read: the read margin is 0.05 and 0.11 against READ_LLR_MIN 6. The callsign read gives out about 8 dB before the header does, so cw=None is the expected reference value there, not a failure.",
+     "evidence": "scratch diag of cwid.read_ml margins; references ce-short-20.json and l-short-20.json"
+    }
+   ],
+   "notes": "Two commits on top of 73c1d3d: f7342f5 (WIP: tool, binding, references, pins, test) and cc1c897 (measured times in the test docstring). Nothing was pushed, no other worktree was created, and nothing under sstvae/, scripts/qrss_*.py or any other existing file was edited. The binding was picked up by the existing CMake glob in native/build-qrss without any CMake edit. The 13 scenarios: ce-tiny-6, ce-tiny-12-joint and l-short-12-joint (single waveform received with the default joint CE+L frames), l-tiny-6, l-tiny-12, ce-short-12, ce-short-20, l-short-20, ce-short-drift (1 Hz/min), ce-short-tx-ppm (+100 ppm TX), l-short-rx-ppm (-100 ppm RX), ce-l-neighbours (CE plus an equally strong L 60 Hz above, received jointly: 2 passes, the neighbour's call N7NBR read and its random header null), and ce-short-lead-in (10 s). Generating all references takes about 50 s; each scenario is under 7.5 s of Python. While the C++ runs, the test makes the Python receiver's functions raise (receive_slot, detect, candidates, receive_pass, acquire, track/verify, ltrack, demod.extract, ldemod.extract_l), so a scenario cannot pass by quietly running Python. The pin file holds 30 sources plus the scenario-section hash. The scenario section of the tool sits between '# --- scenarios: begin/end' markers, and editing it trips the pin as 'the scenario definitions ... changed'."
+  },
+  "acceptance_review": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1",
+   "branch": "worktree-wf_0f0c84a2-e4b-1",
+   "commit": "2937c0b",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tools/gen_qrss_rx_reference.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/tests/test_qrss_native_acceptance.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-1/native/tests/golden_qrss/rx_pins.json"
+   ],
+   "api": "Unchanged from the reviewed commit. The review touched no C++.\nsstvae_native.qrss.rx_api.receive_slot(cap, frames=(\"full\",), live_only=False, estimator=\"joint\", erase_s=(), round_b=True, max_candidates=None, budget_s=None, hints=(), old_edge_noise=False, old_gating=False) -> list[PassResult \"__type__\" dict]   # wraps api::receive_slot(const api::Capture&, const api::ReceiveConfig&)\nTool tools/gen_qrss_rx_reference.py: same functions as before. Two changes: PINNED adds sstvae/qrss/live.py, sstvae/wavio.py and qrss_receive.py, and wavio.py comes out of NOT_PINNED. _module_path now returns '/'-separated paths on every OS. _imports now also resolves importlib.import_module(\"sstvae.x\") and f\"{__package__}.x\" calls.",
+   "tests": [
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q tests/test_qrss_native_acceptance.py",
+     "result": "20 passed in 23.8 s (one new test: test_line_endings_are_not_a_change)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx tests/test_qrss_native_acceptance.py",
+     "result": "7 passed, 13 skipped (the scenario tests skip because the reference is substituted)"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=/nonexistent pytest -q tests/test_qrss_native_acceptance.py",
+     "result": "5 passed, 15 skipped"
+    },
+    {
+     "cmd": "python tools/gen_qrss_rx_reference.py --all --check (before any edit)",
+     "result": "13/13 ok with no noise, so Python matches itself exactly; rx_pins.json current; 71 s"
+    },
+    {
+     "cmd": "python tools/gen_qrss_rx_reference.py --all (after the pin edit)",
+     "result": "all 13 references came out byte-identical (git diff empty); only rx_pins.json changed (3 sources added; scenario hash unchanged)"
+    },
+    {
+     "cmd": "mutation: drop CRLF normalisation in source_hashes; separately, read the tool with read_bytes().decode in scenario_hash",
+     "result": "test_line_endings_are_not_a_change FAILS for both; the old CRLF assertion passed with the normalisation deleted. Restored."
+    },
+    {
+     "cmd": "mutation: l-tiny-6.json tau0_ch += 0.51; rx_pins.json hash of sstvae/wavio.py altered",
+     "result": "the scenario fails ('difference 0.51 > 0.5'); the pin test fails with 'Python receiver changed; regenerate references: ... (sstvae/wavio.py changed)'. Both restored."
+    },
+    {
+     "cmd": "probe: cwid.read_ml margins, z_match, every gate-V z_ref, and A2 p-values on the scenarios",
+     "result": "read margins 8.91-20.05 where a call is read (READ_LLR_MIN 6), 0.05/0.11 at -20 dB; z_match >= 18.33 (Z_ACCEPT 6); no verify z_ref within 2 of Z_ACCEPT; A2 p 2e-66 against pfa 1e-7 at -20 dB. The agent's threshold-distance claims hold."
+    },
+    {
+     "cmd": "probe: ce-short-lead-in simulated with and without lead_in_s",
+     "result": "difference has unit power over [t0-10, t0-1] s and zero elsewhere, so the lead-in is really in the capture"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j2",
+     "result": "53/53 passed (20 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_receiver.py tests/test_qrss_smoke.py tests/test_qrss_native_acceptance.py; same for tests/test_qrss_lreceiver.py",
+     "result": "15 passed, 13 skipped; 21 passed. Header line: stage rx, 417 substitutions, 63 from-import sites"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_receiver.py tests/test_qrss_lreceiver.py tests/test_qrss_smoke.py (no flag)",
+     "result": "29 passed"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (471 files), includes ok (472 files)"
+    }
+   ],
+   "parity": "Re-measured on this machine, all 13 scenarios, C++ against the committed Python references:\n- Worst errors: f_hz 2.3e-12 to 2.5e-12 Hz, tau0 6.6e-12 CH samples, latent SNR 2.4e-10 dB, Z_ref 1.75e-8 relative, mean W 0.\n- Exact: pass count, pass order, waveform, frame, the matched signal, header, and cw text, keying and agrees.\n\nThe bars are the plan's and none was loosened: f_hz 0.01 Hz, tau0 0.5 CH samples, latent SNR 0.1 dB. The tool adds two of its own: Z_ref 1% relative and mean W 0.1 dB.\n\nGenerated data is reproducible:\n- `--all --check` reports every scenario as exactly equal (\"ok\" with no noise lines).\n- A second `--all` from scratch rewrote all 13 JSONs byte-identical.\n\nProbes confirmed the discrete decisions sit far from their thresholds (see tests). Not compared: picture pixels (latent SNR stands in for them), uid, Python timing.",
+   "deviations": [
+    "No behaviour change on either side. The review edited only the tool, the test and the pins file.",
+    "PINNED now includes three sources that feed no reference: sstvae/qrss/live.py, sstvae/wavio.py and qrss_receive.py. The agent had left live.py and wavio.py out (and excused wavio in NOT_PINNED) because the references do not run them. But the brief names 'the rx config sources', and gen_qrss_rx_config.py's MODULES include live.py; frontend.hpp uses rxconfig::live::ALIGN and HALO, and frontend.cpp mirrors live.StreamFE. wavread.cpp mirrors wavio.read_wav, and receive.cpp mirrors qrss_receive.py. The plan says every module stage 2 mirrors is hashed. Cost: a listener-only edit to live.py now trips the pin, and regenerating changes nothing but the hash."
+   ],
+   "shared_changes_needed": [
+    "Correction to the reviewed report: CI does already check a stale pin. native-build.yml's 'Python suite against the C++ core' step (`pytest -q --native`) runs on Linux, macOS arm64 and Windows with the pybind module built, and SSTVAE_BUILD_QRSS is ON by default. So it runs tests/test_qrss_native_acceptance.py, the pin tests and all 13 scenarios, about 25 s. The python job (no module) still does not, and adding `python tools/gen_qrss_rx_reference.py --all --check` there (about 70 s) remains optional.",
+    "CLAUDE.md's Commands section should add tools/gen_qrss_rx_reference.py and native/tests/golden_qrss/rx_reference/ as generated-and-committed artifacts, with the rule to run --all after any change to a pinned Python source. The pins now include live.py, wavio.py and qrss_receive.py. Unchanged from the agent's report apart from that list."
+   ],
+   "insights": [
+    {
+     "kind": "process",
+     "what": "Before this review, the acceptance file would have failed only on Windows, and it does run on Windows in CI (native-build's `pytest --native` has QRSS on). The import closure used str() of a pathlib relative path, which gives backslashes there and matches nothing in PINNED. A test also asserted that a .py file has no CRLF, and Git for Windows checks .py files out with CRLF. Any helper that compares repo paths as strings should build them '/'-separated, as the tool now does.",
+     "evidence": "gen_qrss_rx_reference.py _module_path (old: str((base / '__init__.py').relative_to(ROOT))); test_stale_pins_name_what_moved's `assert b\"\\r\\n\" not in data`; .gitattributes has no rule for *.py"
+    },
+    {
+     "kind": "process",
+     "what": "The original CRLF check could not fail. It replaced LF with CRLF and back inside the test itself, so the source_hashes normalisation it claimed to cover was never called. The replacement test runs source_hashes and scenario_hash on a CRLF copy of the tree, and fails when either normalisation is removed.",
+     "evidence": "mutation: delete .replace(b'\\r\\n', b'\\n') in source_hashes: the old test passes, the new one fails"
+    },
+    {
+     "kind": "process",
+     "what": "A hand-written static import walk misses importlib.import_module. channel.py reaches ce and frontend that way, so the closure that keeps PINNED honest could not see them. Both happen to be pinned for other reasons, so nothing was missed yet. The walk now resolves import_module with a literal or a trailing f-string constant.",
+     "evidence": "sstvae/qrss/channel.py:220, :352"
+    },
+    {
+     "kind": "performance",
+     "what": "Whole-slot receive_slot, C++ (rx_api, conversions included) against Python, same capture, one quiet run each (load about 1.3-2.3, 4 shared CPUs). Speedup 2.0-3.0x: least on the joint L slot (2.0), most on CE SHORT and the neighbour slot (2.9-3.0). Per scenario, Python against C++: ce-tiny-6 2.0 / 0.86 s, ce-tiny-12-joint 2.3 / 0.96, l-tiny-6 1.6 / 0.67, l-tiny-12 3.1 / 1.13, ce-short-12 4.6 / 1.54, ce-short-20 4.2 / 1.47, l-short-12-joint 4.1 / 2.03, l-short-20 5.0 / 1.76, ce-short-drift 4.4 / 1.87, ce-short-tx-ppm 4.5 / 1.74, l-short-rx-ppm 4.5 / 1.66, ce-l-neighbours 9.4 / 3.11, ce-short-lead-in 4.7 / 1.61. The agent's '1.5 to 2.6, most on the longer slots' did not follow from its own ranges; the docstring now has these figures.",
+     "evidence": "pytest -s output of test_scenario, and gen_qrss_rx_reference.py --all timings, 2026-10-14"
+    },
+    {
+     "kind": "python-bug",
+     "what": "At -20 dB, CE SHORT's whole-slot search (A3) passes a second hit about 11 Hz below the signal (z 26 against the signal's 342), a ghost. Both implementations drop it the same way. It is a near-ghost decision that the -20 dB scenarios exercise, not a false pass.",
+     "evidence": "acquire.acquire on ce-short-20: tbd hits at 1499.991 Hz (z 342) and 1488.803 Hz (z 26.2)"
+    }
+   ],
+   "findings": [
+    {
+     "what": "On Windows, `_module_path` returned str(Path.relative_to(ROOT)), which uses backslashes there. Every closure path then failed to match PINNED, so test_pins_cover_the_imports would fail. _imports' relative-import resolution, which only replaces '/', would also break. The file runs on Windows in native-build CI. Fixed: paths are built '/'-separated from the dotted module name.",
+     "fixed": true
+    },
+    {
+     "what": "test_stale_pins_name_what_moved asserted `b\"\\r\\n\" not in rules.py`, which fails on a Git for Windows CRLF checkout. Its CRLF check also re-implemented the normalisation instead of calling source_hashes, so it could not fail. Replaced by test_line_endings_are_not_a_change, which runs source_hashes and scenario_hash on a CRLF copy of the tree and the tool. Mutation-checked: dropping either normalisation fails it.",
+     "fixed": true
+    },
+    {
+     "what": "Pins left out sources the C++ mirrors. live.py: the brief named 'the rx config sources', which include live.py; frontend.cpp mirrors live.StreamFE and uses rxconfig::live ALIGN and HALO. wavio.py: wavread.cpp mirrors read_wav, yet it was excused in NOT_PINNED. qrss_receive.py: receive.cpp mirrors it. All three added and rx_pins.json regenerated; the references came out byte-identical and the scenario hash is unchanged.",
+     "fixed": true
+    },
+    {
+     "what": "The import closure did not see importlib.import_module, which channel.py uses for ce and frontend. Fixed, with an assertion in test_pins_cover_the_imports.",
+     "fixed": true
+    },
+    {
+     "what": "The tool wrote references and pins in text mode, so a regeneration on Windows would write CRLF and show every line as changed. They are now written with newline='\\n'.",
+     "fixed": true
+    },
+    {
+     "what": "Comment inaccuracies, corrected: NOT_PINNED said QRSS uses 'only dsp and beacon' from sstvae.modem, but framing and golay are pinned too. The agent's timing conclusion ('1.5 to 2.6 times, most on the longer slots') did not follow from its numbers; the docstring now gives a per-scenario measurement (2.0-3.0x).",
+     "fixed": true
+    },
+    {
+     "what": "The agent's report said nothing in CI notices a stale pin. That is wrong: native-build.yml's `pytest -q --native` builds the module with QRSS on three OSes and runs this file. Corrected in shared_changes_needed; no code change.",
+     "fixed": false
+    },
+    {
+     "what": "Verified with no change needed:\n- Generator determinism: --check exact, and a second --all byte-identical.\n- The lead-in is really in the capture.\n- The decision margins the docstring claims (read margins, z_match, gate z_ref, A2 p).\n- The mutation checks: a bar crossed fails its scenario; a moved hash fails the pin test.\n- The binding copies the capture before releasing the GIL and builds no Python objects without it.\n- The booby trap keeps the Python receiver out of the compared run.",
+     "fixed": false
+    }
+   ],
+   "notes": "The review commit is 2937c0b, on top of the agent's cc1c897, in the same worktree and branch.\n\nScope: the reviewed work is the last two commits, f7342f5 and cc1c897. I skimmed the earlier reference-fix commits in 2671a6b..HEAD only for behaviour changes on valid inputs: TbdHit.f_hz cached, non-finite hints dropped, verify/verify_l running the coarse timing grid once, slot q < 0 refused, and --image checked up front. A prior review (73c1d3d) had covered them; the generator's exact self-agreement and the C++ match on all 13 scenarios are consistent with them, and I did not re-run their A/B tests.\n\nThe C++ was not touched, so no rebuild was needed. ctest is 53/53 and the named suites are green with and without --native-qrss=rx.\n\nOpen judgement call: pinning live.py means a listener-only edit (stage 3) now trips \"Python receiver changed; regenerate references\" even though the references do not change. The plan and the brief call for pinning everything stage 2 mirrors, so I followed them; dropping live.py again is one line in PINNED plus a pins regeneration if Jeff prefers fewer alarms."
+  }
+ },
+ "lane2": {
+  "a7": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2",
+   "branch": "worktree-wf_0f0c84a2-e4b-2",
+   "commit": "8fe5b4421d7a7475c6abf610802199326a044804",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/tests/test_qrss_native_calibration.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/tests/qrss/test_calibration.cpp"
+   ],
+   "api": "No public C++ API was added; this stage adds tests only. The new ctest is qrss_core_calibration, from native/tests/qrss/test_calibration.cpp. It uses existing entry points:\nacq::spectrogram(std::span<const std::complex<double>>, double fs, std::span<const double> starts)\nacq::cfar_normalise(const Grid<float>&)\nacq::tbd_viterbi(const Grid<float>&).z\nacq::tbd_gumbel(int64 n_frames)\nacq::frame_len(double fs)\nThe pytest file reuses the existing rows of tests/qrss_native/{acquire_stats,acquire_tbd,acquire_a12}.py and test_qrss_native_receiver._apply_rows.",
+   "tests": [
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=.../native/build-qrss/python PYTHONPATH=<wt> timeout 200 python -m pytest -q -s tests/test_qrss_native_calibration.py -m 'not slow'",
+     "result": "3 passed in 15.3 s. A-7 subsample: max|dZ| 0, bitwise, at all 4 lengths. A3 production: 72 channels, mean Z 19.035 against Gumbel 18.999, 0 hits, p_value 1.99e-16 relative. A1: 0 of 2,496,260 cells differ; 2998 cells past at 1e-3 (1.20 of nominal) and 359 at 1e-4 (1.44)."
+    },
+    {
+     "cmd": "... pytest -q -s -m slow 'tests/test_qrss_native_calibration.py::test_a7_measure_on_the_cpp[896]'",
+     "result": "passed, 110 s. Bitwise. mu 47.3064 / beta 0.5882 (200 captures); 47.3068 / 0.6013 over 400 against committed 47.307 / 0.601. Tails 0.87 / 0.25. 273.5 ms per capture in the reference, 138.8 ms in C++."
+    },
+    {
+     "cmd": "... pytest -q -s -m slow 'test_a7_measure_on_the_cpp[31]' '[132]' '[331]'",
+     "result": "3 passed, 62 s total. Bitwise. Over 400 captures: 31 -> 9.8443 / 0.7023 (committed 9.845 / 0.702); 132 -> 18.6368 / 0.6267 (18.637 / 0.627); 331 -> 28.9237 / 0.6244 (28.924 / 0.624). Tails at the 10% and 1% points, 200 captures: 1.07/0.33, 1.00/0.50, 0.92/0.08."
+    },
+    {
+     "cmd": "... pytest -q -s -m slow tests/test_qrss_native_calibration.py::test_a6_a2_tail_on_the_cpp",
+     "result": "passed, 9.7 s. 1,050,840 cells per scale. Lambda relative error: k=1 1.8e-12, k=2 2.3e-14, k=5 4.8e-15, k=10 3.1e-15. Every count equal. Of nominal at 1e-3 / 1e-4: k1 0.90/0.66, k2 0.85/0.71, k5 0.80/0.89, k10 0.89/0.96. Combined p 3.5e-14 relative; at 1e-2/1e-3/1e-4, 0.68/0.71/0.72 of nominal. Reference 7.1 s, C++ 2.2 s."
+    },
+    {
+     "cmd": "... pytest -q -s -m slow 'tests/test_qrss_native_calibration.py::test_noise_slots_on_the_cpp[short-1]'",
+     "result": "passed, 133 s. C++ 30 slots in 86.8 s: 0 passes, 0 A2, 0 A3 hits, 1113 channels, mean Z 18.917 against 18.999. Reference 5 slots in 46 s, identical."
+    },
+    {
+     "cmd": "... pytest -q -s -m slow 'tests/test_qrss_native_calibration.py::test_noise_slots_on_the_cpp[short-2]'",
+     "result": "passed, 110 s. C++ 30 slots: 0 passes, 1 A2 hit (seed 5046), 1 gate-V candidate refused, 0 A3 hits, 1128 channels, mean Z 18.949. The reference ran 5 + 1 flagged slots (seed 5046) and matched: A2 p 4.9368e-8 on both."
+    },
+    {
+     "cmd": "... pytest -q -s -m slow 'tests/test_qrss_native_calibration.py::test_noise_slots_on_the_cpp[tiny]'",
+     "result": "passed, 120-137 s. C++ 40 slots in 77.8 s: 0 passes, 0 A2, 0 A3 hits, 1453 channels, mean Z 10.207 against 10.250. Reference 10 slots in 59 s, identical."
+    },
+    {
+     "cmd": "... pytest -q -s --native-qrss=rx -m 'not slow' tests/test_qrss_acquire.py -k 'a6 or a7'",
+     "result": "7 passed in 3.5 s. Header: 'QRSS against the C++ port, stage rx (415 substitutions, 63 from-import sites, modules acquire, acquire_a12, acquire_stats, acquire_tbd, ...)'."
+    },
+    {
+     "cmd": "... pytest -q -s --native-qrss=rx -m slow tests/test_qrss_acquire.py::test_a7_measure_tbd_gumbel ::test_a6_a2_tail_on_noise ::test_lead_in_span_on_noise",
+     "result": "3 passed in 50.7 s (42.8 s, 2.5 s and 5.3 s). test_a7_measure_tbd_gumbel printed n=31 mu 9.884 beta 0.691; 132: 18.645 / 0.630; 331: 28.917 / 0.615; 896: 47.306 / 0.588. Its tails were 1.07/0.33, 1.00/0.50, 0.92/0.08 and 0.87/0.25, identical to the reference's."
+    },
+    {
+     "cmd": "ninja -C native/build-qrss -j2 && ctest -R qrss_core -j2",
+     "result": "54/54 passed in 36 s. The new qrss_core_calibration took 15.6 s, 487 checks."
+    },
+    {
+     "cmd": "ctest qrss_core_calibration with a planted mutant (E scaled by 1.01 before the -1)",
+     "result": "Failed at every length: mean Z 6 / 12 / 14 / 16 standard errors out, and the 10% tail failed at 132 / 331 / 896. Reverted."
+    },
+    {
+     "cmd": "python tools/check_includes.py; python tools/check_layering.py",
+     "result": "includes ok (472 files); layering ok (471 files)"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_native_calibration.py with no module / under --native-qrss=rx",
+     "result": "All tests skip, with the reason given (module unavailable / parity tests skip under --native-qrss)."
+    }
+   ],
+   "parity": "**Bit-exact**\n- **A3 statistic.** Spectrogram, CFAR and Viterbi Z match on the A-7 procedure: 1,600 captures, 9,600 Z values, every length, max|dZ| 0.\n  - The fast subsample gives the same: 20 captures per length.\n- **Production A3.** Z, n_frames, centre_hz and the path arrays (t_s, f_hz, weight) match bitwise.\n- **A1.** carrier_line_stats float32 stat: 0 of 2,496,260 cells differ. The bar allowed a 1-ulp flip in up to 1e-5 of cells.\n- **End to end.**\n  - Per noise slot, the same counts on both sides: passes, A2 hits, A3 hits, gate-V candidates and n_frames.\n  - A3 Z on every channel matches bitwise.\n  - Compared on 21 slots: 5 + 5 SHORT, 10 TINY, plus the flagged seed 5046.\n\n**Tolerance**\n- **A3 p_value:** 1.99e-16 relative worst (bar 1e-12, gumbel_p's numpy SIMD exp).\n- **A2 Lambda:** 1.8e-12 relative worst, at k=1 (bar 1e-9).\n- **A2 combined p:** 3.5e-14 relative.\n- **A2 hit on the noise slot:** p 7.5e-15 relative, f_hz difference 0.\n- **Exceedance counts:** every A1 and A2 count is identical on both sides.\n\n**Against the committed constants (C++)**\n- 200 captures: mu within 0.04 and beta within 2.2% of the committed values, at every length. The bar was 0.1 / 10%.\n- 400 captures, the values the constants were fitted to: mu within 0.0007 and beta within 0.0003.\n- Python-free ctest on independent noise: every mean within 1.06 standard errors and every sd within 1.24.\n- No calibration constant moves.\n\n**Not compared**\n- The ctest's splitmix/Box-Muller noise is never run through Python. It checks only against the committed constants.\n- Under --native-qrss=rx the reference's own A-6/A-7 tests were run, all passing: test_a7_measure_tbd_gumbel prints numbers identical to the reference's, and test_a6_a2_tail_on_noise and the a6/a7 fast tests pass.",
+   "deviations": [],
+   "shared_changes_needed": [],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "TBD_GUMBEL_MU[0] = 9.845 does not round the reference's own measurement. Pooling seeds 1000+31 and 2000+31 (2,400 Z) gives mu 9.8443 in Python and C++ alike, which rounds to 9.844. Harmless: 0.0007 is far inside any bar. The other three constants round correctly (18.6368, 28.9237, 47.3068).",
+     "evidence": "tests/test_qrss_native_calibration.py::test_a7_measure_on_the_cpp[31] prints 'Over 400 (2400 Z): mu=9.8443 beta=0.7023 (committed 9.845, 0.702)'; scratch py_moments.py gives the same from pure Python"
+    },
+    {
+     "kind": "python-bug",
+     "what": "A3's Gumbel-by-moments fit is strongly conservative in the far tail.\n- Exceedance at the committed 1% point is 0.08 to 0.50 of nominal over 200 captures (0.17 to 0.38 over 400).\n- On 100 noise slots, 0 of 3,694 channels were at p < 1e-3.\n- So A3's real false-alarm rate at TBD_PFA is below nominal, perhaps 3 to 10x below. That costs sensitivity. It is not a safety problem.",
+     "evidence": "test_a7_measure_on_the_cpp tails: n=31 0.33, 132 0.50, 331 0.08, 896 0.25 (200 captures); 0.33/0.38/0.21/0.17 over 400"
+    },
+    {
+     "kind": "python-bug",
+     "what": "A1's frozen threshold is mildly anti-conservative at 1e-4, at 1.44x nominal. At 1e-3 it is 1.20x. Identical on both sides; the reference test allows a factor of 2. A2 is conservative: per-scale tails 0.66 to 0.96 of nominal, combined p 0.68 to 0.72.",
+     "evidence": "test_a6_a1_tail_on_the_cpp: 2998 and 359 of 2,496,260 cells; test_a6_a2_tail_on_the_cpp output"
+    },
+    {
+     "kind": "python-bug",
+     "what": "False A2 hits do occur on noise with joint CE+L listening: 1 in 100 slots (SHORT seed 5046, p 4.94e-8 against A2_PFA 1e-7, at 2687.44 Hz). Both implementations agree on it. Gate V refused its candidate, so no pass resulted. The end-to-end false-pass rate rests on gate V and the header, not on A2's PFA alone.",
+     "evidence": "test_noise_slots_on_the_cpp[short-2]; scratch a2_seed.py: reference p 4.936803895688459e-08, C++ 4.936803895688422e-08"
+    },
+    {
+     "kind": "performance",
+     "what": "Per calibration capture the C++ is 2.0 to 2.4x faster: 11.7->4.9, 40.7->21.1, 101.1->51.0, 273.5->138.8 ms.\n- By stage at 896 frames: Viterbi 9.4x (133->14 ms), spectrogram 1.3x (40->31), CFAR only 1.1x (60->53).\n- CFAR is now the dominant C++ stage. It does a per-frame median over 2000 bins plus the local spectral shape, so it is where the next speedup is.\n- numpy noise generation is 27% of the C++ capture time.\n- test_a7_measure_tbd_gumbel under --native-qrss=rx: 42.8 s against about 85 s for the reference.",
+     "evidence": "scratch stage_time.py (20 captures per length); test_a7_measure_on_the_cpp timings"
+    },
+    {
+     "kind": "performance",
+     "what": "One noise slot, SHORT + L_SHORT, joint:\n- receive_slot: 1.45 s C++ against 3.51 s Python (2.4x).\n- acquire: 1.24 s against 3.16 s.\n- all-channel TBD: 0.08 s against 0.49 s (6x).\nC++ acquire costs the same 1.24 s on a TINY slot (136 s of audio) as on a SHORT one (542 s). Its cost is length-independent, so the length-dependent stages are not where to look first.",
+     "evidence": "scratch slot_time.py: 'short cpp: receive_slot 1.45 s, prepare 0.29 s, acquire 1.24 s, tbd 0.08 s'; 'tiny cpp: ... acquire 1.24 s'"
+    },
+    {
+     "kind": "numerics",
+     "what": "A 1% scale error in the CFAR normalisation moves mean Z by 0.16 at 31 frames and 0.79 at 896. That is 6 to 16 standard errors in a 470-capture Python-free sample. A calibration check by moments therefore has teeth even without a bitwise oracle. A 0.1% error, at about 1.6 standard errors, would need the bitwise comparison.",
+     "evidence": "mutation of native/tests/qrss/test_calibration.cpp (E*1.01-1): mean Z 10.409 vs 10.250, 48.442 vs 47.654"
+    },
+    {
+     "kind": "process",
+     "what": "A slow test run by node id without -m slow is silently deselected ('1 deselected', exit 0 through a pipe), because pyproject's addopts deselects slow. Always pass -m slow together with the node id.",
+     "evidence": "first run of test_noise_slots_on_the_cpp[tiny] printed only '1 deselected in 0.09s'"
+    },
+    {
+     "kind": "process",
+     "what": "Two hazards in background work:\n- A background waiter `until ! pgrep -f \"ninja -C ... sstvae_native\"` never exits, because pgrep -f matches the waiter's own command line. Wait on a pid or a marker file instead.\n- The scratchpad is shared between concurrent agents. Another agent's build log overwrote mine, so keep a per-task subdirectory.",
+     "evidence": "task b6g7nop2y still running long after ninja finished; build1.log overwritten (summary)"
+    },
+    {
+     "kind": "process",
+     "what": "The 60 SHORT noise slots do not fit one 3-minute node id. Each slot costs about 2.8 s C++ plus 5-9 s on the reference, and half of that is _listen re-running acquisition to count A2/A3, since the typed C++ receive_slot does not expose its acquisition. They were split into short-1 and short-2, 30 each. A receive_slot binding that returned its Acquisition would halve the cost.",
+     "evidence": "first [short] run timed out at 200 s; halves 110-133 s"
+    }
+   ],
+   "notes": "The A-7 false-alarm recheck is complete and no calibration constant moves. On the committed procedure the C++ A3 statistic is the reference's bit for bit, and the committed TBD_GUMBEL_* reproduce from the C++ within 0.0007 (mu) and 0.0003 (beta).\n\n**How to run**\n- Slow tests need `-m slow` together with the node id; without it they are silently deselected.\n- Slow node ids, each under 2.5 minutes:\n  - tests/test_qrss_native_calibration.py::test_a7_measure_on_the_cpp[31|132|331|896] (4-110 s)\n  - ::test_a6_a2_tail_on_the_cpp (10 s)\n  - ::test_noise_slots_on_the_cpp[short-1|short-2|tiny] (110-137 s)\n- Fast tier: 3 tests, 15 s.\n- Environment: SSTVAE_NATIVE_MODULE_DIR=<wt>/native/build-qrss/python and PYTHONPATH=<wt>.\n\n**What the tests check**\n- **Native calls are counted.** Every capture reaches spectrogram, cfar_normalise and tbd_viterbi exactly once. Production track_before_detect is counted, as are carrier_line_stats/a1_threshold and preamble_channel/_preamble_sums/preamble_p.\n- **The slot path is checked by spies.** Every receive_slot call carries typed=True. The per-pass q.receiver.prepare/receive_pass bindings are reached only by _listen's own prepare. acquire and TBD are each called once per slot.\n- **The reference also runs every C++ capture that had a hit**, not just the subsample.\n\n**New ctest**\nnative/tests/qrss/test_calibration.cpp, run as qrss_core_calibration (15.6 s), checks the same statistic with no Python. It is picked up by the existing glob, so no CMake edit was needed.\n\n**Commits**\nTwo commits on worktree-wf_0f0c84a2-e4b-2: 57998b5 (WIP) and 8fe5b44 (final). Nothing pushed.\n\n**Scratch scripts**\nIn /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/a7cal/: py_moments.py, cpp_z.py, slot_time.py, a2_seed.py, stage_time.py."
+  },
+  "paths": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2",
+   "branch": "worktree-wf_0f0c84a2-e4b-2",
+   "commit": "2a07000",
+   "files": [
+    "native/core/util/fileio.hpp (new)",
+    "native/core/qrss/pypath.hpp (new)",
+    "native/core/qrss/pypath.cpp (new)",
+    "native/bindings/module/qrss/fspath.hpp (new)",
+    "native/tests/qrss/test_paths.cpp (new)",
+    "native/tests/qrss/gen_paths_pins.py (new)",
+    "native/tests/qrss/paths_pins.hpp (new, generated)",
+    "native/tests/qrss/test_argparse.cpp (new)",
+    "native/tests/qrss/gen_argparse_pins.py (new)",
+    "native/tests/qrss/argparse_pins.hpp (new, generated)",
+    "tests/test_qrss_native_paths.py (new)",
+    "native/apps/sstvae_qrss/argparse.hpp",
+    "native/apps/sstvae_qrss/argparse.cpp",
+    "native/apps/sstvae_qrss/main.cpp",
+    "native/apps/sstvae_qrss/receive.cpp (only the pathlib_str and --just-ce/--just-l hunks)",
+    "native/apps/sstvae_qrss/common.cpp",
+    "native/apps/sstvae_qrss/codec/receive_image.cpp",
+    "native/core/qrss/api.cpp",
+    "native/core/qrss/beaconfile.cpp",
+    "native/core/qrss/npz.hpp",
+    "native/core/qrss/npz.cpp",
+    "native/core/qrss/simfile.cpp",
+    "native/core/qrss/wav.cpp",
+    "native/core/qrss/wavread.cpp",
+    "native/core/qrss/codec/codec.hpp",
+    "native/core/qrss/codec/codec.cpp",
+    "native/bindings/module/qrss/api.cpp",
+    "native/bindings/module/qrss/infra.cpp",
+    "native/bindings/module/qrss/picture.cpp",
+    "native/bindings/module/qrss/receiver_slot.cpp",
+    "native/bindings/module/qrss/tx.cpp",
+    "native/bindings/module/qrss/types.cpp",
+    "native/bindings/module/qrss/codec/api.cpp",
+    "native/bindings/module/qrss/codec/codec.cpp",
+    "native/bindings/module/qrss/codec/render.cpp",
+    "tests/test_qrss_native_cli.py",
+    "tests/test_qrss_native_receiver_slot.py"
+   ],
+   "api": "// native/core/util/fileio.hpp (header-only, sstvae_core include path, no <windows.h>), namespace sstvae::util\nstd::optional<std::u16string> utf16_of(std::string_view utf8);   // PEP 529 utf-8/surrogatepass; nullopt if not WTF-8\nstd::string utf8_of(std::u16string_view utf16);                  // a lone surrogate as its 3 bytes\nstd::optional<std::wstring> wide_of(std::string_view utf8);      // _WIN32 only\nstd::string utf8_of(std::wstring_view wide);                     // _WIN32 only\nstruct FileCloser; using File = std::unique_ptr<std::FILE, FileCloser>;\nFile open_file(const std::string& path, const char* mode);       // _wfopen on Windows, fopen on POSIX; errno EINVAL (NUL), EILSEQ (Windows, not UTF-8)\nstd::optional<std::filesystem::path> fs_path(const std::string& path);\nstd::string path_text(const std::filesystem::path& p);\nbool exists(const std::string& path); bool is_file(const std::string& path); bool is_dir(const std::string& path);\nstd::vector<std::string> list_dir(const std::string& dir, std::error_code& ec);\nbool remove_file(const std::string& path, std::error_code& ec);  // refuses a directory\nbool replace_file(const std::string& from, const std::string& to, std::error_code& ec);\n// native/core/qrss/pypath.hpp (sstvae_qrss; one copy for the CLI and the codec glue), namespace sstvae::qrss::pypath\nstd::pair<std::string, std::vector<std::string>> split(std::string_view text);\nstd::string join(const std::string& root, const std::vector<std::string>& parts);\nstd::string pathlib_str(std::string_view text);\nstd::string pathlib_name(std::string_view text);\nstd::string pathlib_suffix(std::string_view text);\nstd::string child(std::string_view dir, const std::string& name);\nstd::string with_name(std::string_view p, const std::string& name);      // invalid_argument \"<p> has an empty name\"\nstd::size_t stderr_text(std::string_view text, bool final, std::string& out);  // Python's sys.stderr (backslashreplace) of os.fsdecode(text), streamable\n// native/core/qrss/npz.hpp\nstruct npz::FileError : std::runtime_error { std::string verb; std::string path; int err; };   // \"cannot open|read|write <path>\"\n// native/apps/sstvae_qrss/argparse.hpp\nArgParser& ArgParser::exclusive(const std::vector<std::string>& flags, bool required = false);  // add_mutually_exclusive_group; logic_error for empty/unknown/positional/help/required option\n// native/bindings/module/qrss/fspath.hpp, namespace sstvae_bindings::qrss::fspath\nstruct FsPath { py::object name; std::string bytes; };\nFsPath fs_path(const py::handle& obj);        // os.fspath + PyUnicode_FSConverter (open()'s reading)\nFsPath pathlib_path(const py::handle& obj);   // pathlib.Path(obj)'s reading (bytes -> TypeError)\nFsPath str_path(const py::handle& obj);       // fs_path(str(obj))\npy::str fs_text(const std::string& bytes);    // os.fsdecode\n[[noreturn]] void raise_os_error(int err, const py::handle& name);\n[[noreturn]] void raise_text(PyObject* type, const std::string& text);\n[[noreturn]] void raise_runtime_error(const std::string& before, const std::string& path_bytes, const std::string& after = {});\n// The Python-facing path arguments (npz/npy, save/load_pass, read_wav/_read_wav, capture_from_wav, receive_wav, write_wav/write_wav_float/PassAudio.write_wav, api.read_source, picture.load_qrsp, codec: codec_id_from_onnx, resolve_onnx, source_sha256, load_image, encode_picture, api.open_encoder/encode_file, codec_render.decoder_codec_id/render) now take str, bytes or os.PathLike exactly as the reference function they substitute does.",
+   "tests": [
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j2 --output-on-failure",
+     "result": "56/56 passed (29 s); includes new qrss_core_paths (230 checks) and qrss_core_argparse (229 checks)"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q -m 'not slow' tests/test_qrss_native_paths.py",
+     "result": "19 passed, 4 skipped (the codec-only tests) in 22 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python pytest -q -m 'not slow' tests/test_qrss_native_paths.py",
+     "result": "23 passed in 29 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q -m 'not slow' tests/test_qrss_native_cli.py",
+     "result": "297 passed, 42 skipped (codec-only) in 71 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python pytest -q -m 'not slow' tests/test_qrss_native_cli.py",
+     "result": "338 passed, 1 skipped (a without-codec check) in 165 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q -m 'not slow' tests/test_qrss_native_cli_receive.py",
+     "result": "8 passed, 3 skipped, 3 deselected in 37 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python pytest -q -m 'not slow' tests/test_qrss_native_cli_receive.py tests/test_qrss_native_codec.py",
+     "result": "131 passed, 1 skipped in 56 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q -m 'not slow' tests/test_qrss_native_receiver_slot.py --durations=40",
+     "result": "before: 30 passed, 6 deselected in 104.0 s; after: 16 passed, 20 deselected in 32.6 s (34 s wall)"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q -m 'not slow' tests/test_qrss_native_api.py tests/test_qrss_native_paths.py",
+     "result": "68 passed, 6 skipped in 31 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python pytest -q -m 'not slow' tests/test_qrss_native_api.py",
+     "result": "51 passed in 17 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest -q -m 'not slow' tests/test_qrss_native_{infra,types,tx,tx_audio,picture,beaconfile,render}.py",
+     "result": "316 passed in 77 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_receiver.py",
+     "result": "4 passed, 55 deselected"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_lreceiver.py tests/test_qrss_smoke.py",
+     "result": "22 passed, 8 deselected in 5 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_live.py tests/test_qrss_live_l.py",
+     "result": "54 passed, 3 deselected in 19 s"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (479 files); includes ok (481 files) after adding <cstddef> to fspath.hpp"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only -Wall -Wextra on pypath.cpp, main.cpp, test_paths.cpp, receive.cpp, npz.cpp, wavread.cpp; probes with <windows.h> first and fileio.hpp first (#ifdef max #error); probe_open.exe (non-ASCII and lone-surrogate open/list/rename/remove) linked",
+     "result": "all clean; no min/max leak. wine is not installed, so probe_open.exe was built but not run"
+    },
+    {
+     "cmd": "mutation checks",
+     "result": "stderr_text accepting surrogates on POSIX: 3 checks fail; stderr_text not waiting on a cut-short sequence: 5 fail; fileio refusing ED A0..BF: THREE digest fails; argparse conflict check before the value check: 2 fail; CLI without the stderr filter: test_cli_receive[not-utf8] fails"
+    }
+   ],
+   "parity": "Bit-exact:\n- Every path binding: what it opens, returns and raises (OSError subclass, errno, filename, text) matches the reference, for str, bytes and Path forms, at a non-ASCII name and on Linux at a non-UTF-8 name (b\"caf\\xe9-\\xff\\xfe\"). Written files match byte for byte (npz/npy, .qrsp, beacon files, WAVs).\n- sstvae-qrss receive (.npz and WAV, plus a missing file named as pathlib prints it) and transmit (WAV): stdout, stderr and status equal the scripts' at those names. The transmitted WAV meets the CLI test's bar.\n- UTF-8 to UTF-16 conversion: SHA-256 digests against CPython over every code point, every 1- and 2-byte string, every 3-byte string starting E0..EF, and a 4-byte family.\n- pathlib str/name/suffix against PurePosixPath on 41 texts.\n- stderr_text against Python's stderr encoding over the same byte families, with a POSIX digest and a Windows digest.\n- argparse mutually exclusive groups: usage line, status and stderr on 6 parsers and 55 command lines pinned from CPython 3.13. receive's \"[--just-ce | --just-l]\" and \"argument --just-l: not allowed with argument --just-ce\" are held against qrss_receive.py.\n- The codec bindings at such names (model directory, image, encoder, decoder) give exactly what the same files give at a plain name; test_qrss_native_codec.py holds those to the reference.\n\nTolerance: nothing new. receiver_slot keeps its existing bars.\n\nNot compared:\n- The Windows branches (wmain/CommandLineToArgvW, _wfopen, the Windows stderr digest) were only cross-compiled, not run: no wine.\n- A non-UTF-8 locale's fs encoding.",
+   "deviations": [
+    "On Windows, sstvae-qrss spells paths with POSIX slashes (pathlib's PurePosixPath); Python's WindowsPath prints backslashes. Messages naming a path differ in their separators only. This was already the case and is now in one place, pypath.hpp.",
+    "MinGW builds split the wide command line with CommandLineToArgvW, because wmain needs -municode, which would be a CMake edit. Its split differs from the CRT's (and so from Python's sys.argv) only for consecutive double quotes inside a quoted argument. MSVC builds use wmain, which is the CRT's own split.",
+    "On Windows, a bytes path that is not UTF-8 gives errno EILSEQ (OSError) in the native bindings; Python's os.fsdecode raises UnicodeDecodeError first. A name from the Windows command line is always WTF-8, so only a hand-built bytes argument reaches this.",
+    "sstvae-qrss writes UTF-8 bytes to stdout and does not change the console code page. Python on a Windows console writes through WriteConsoleW.",
+    "stdout carries a non-UTF-8 name's raw bytes. That matches the scripts under the C/POSIX locale or in UTF-8 mode, which is this machine's default. Under any other locale the scripts' stdout is strict and they die with UnicodeEncodeError; the native does not imitate the crash. stderr matches in every locale (backslashreplace, via pypath::stderr_text).",
+    "The native opens an ONNX model in a directory whose name is not UTF-8. The reference fails there with onnxruntime's TypeError, because InferenceSession takes the path as a strict pybind11 str. test_codec_model_paths records this.",
+    "capture_from_wav and receive_wav use str(path) as the reference does, so a bytes path becomes the file named \"b'...'\" in both. This is matched on purpose, not fixed."
+   ],
+   "shared_changes_needed": [
+    "native/core/images/images.cpp:45: replace `std::ifstream in(path, std::ios::binary)` with `util::open_file(path, \"rb\")` plus fread. On Windows an ifstream on a narrow UTF-8 string uses the ANSI code page, so a non-ASCII image path fails there today.",
+    "native/core/images/images.cpp:590: replace `stbi_write_png(path.c_str(), ...)` with `stbi_write_png_to_func` writing into `util::open_file(path, \"wb\")`. Same Windows non-ASCII failure.",
+    "native/core/codec/codec.cpp:87 and native/core/codec/grad_session.cpp:31: replace `std::wstring wpath(path.begin(), path.end())` with `util::wide_of(path)`, refusing nullopt. Widening byte by byte mangles any non-ASCII UTF-8 model path on Windows.",
+    "native/core/checkpoint/checkpoint.cpp (fs::path built from std::string at lines 105, 112, 120 and 221, and the .string() calls): use `util::fs_path(...)` / `util::path_text(...)`. On Windows, fs::path(std::string) reads the narrow string in the ANSI code page.",
+    "Optional: move fileio.hpp's out-of-line bodies into native/core/util/fileio.cpp listed in sstvae_core's sources (a CMake edit), if header-only is unwanted."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "qrss_transmit.py writes the WAV and then dies with UnicodeEncodeError printing 'wrote <name>' when the name is not UTF-8 and the locale is a non-C UTF-8 locale. Its stdout is strict there; only the C/POSIX locale or UTF-8 mode makes it surrogateescape.",
+     "evidence": "PYTHONIOENCODING=utf-8 python -c \"print('\\udce9')\" -> UnicodeEncodeError; docstring of tests/test_qrss_native_paths.py"
+    },
+    {
+     "kind": "python-bug",
+     "what": "The reference codec cannot load a model from a directory whose name is not UTF-8. picture.codec_id_from_onnx and onnxruntime's InferenceSession take the path as a strict pybind11 str and raise TypeError. The C++ opens it.",
+     "evidence": "tests/test_qrss_native_paths.py::test_codec_model_paths[not-utf8]: onnxruntime_inference_collection.py:778 TypeError: incompatible constructor arguments"
+    },
+    {
+     "kind": "python-bug",
+     "what": "receiver.capture_from_wav and receive_wav call str(path), so a bytes path becomes the literal file name \"b'...'\". The native matches this on purpose.",
+     "evidence": "tests/test_qrss_native_paths.py::test_capture_from_wav (FileNotFoundError, filename == str(f))"
+    },
+    {
+     "kind": "numerics",
+     "what": "Python's sys.stderr is always 'backslashreplace', whatever PYTHONIOENCODING or the locale say. A name that is not UTF-8 therefore prints as '\\udcXX' escapes on stderr but as raw bytes on stdout (under the C locale). The native needed a stderr filter (pypath::stderr_text through a streambuf in main.cpp) to match. Without it, the first side-by-side run failed.",
+     "evidence": "python -c 'import sys; print(sys.stderr.errors)' -> backslashreplace under PYTHONIOENCODING=utf-8:surrogateescape; test_cli_receive[not-utf8] failed before the filter"
+    },
+    {
+     "kind": "numerics",
+     "what": "Windows file names need WTF-8, not UTF-8: a lone surrogate must survive as its 3 bytes, as Python's surrogatepass does. MultiByteToWideChar maps these to U+FFFD, so fileio.hpp carries its own converter, pinned to CPython by digests.",
+     "evidence": "native/tests/qrss/test_paths.cpp; mutation forbidding ED A0..BF fails the THREE digest"
+    },
+    {
+     "kind": "performance",
+     "what": "receive_slot measured per scenario: the typed C++ slot takes 0.6-1.4 s against the Python reference's 1.8-4.1 s (about 2.5-3x). The fast tier's cost is dominated by the reference, not the C++.",
+     "evidence": "/tmp/claude-0/pt/time_slot.py: ce-tiny 0.89 vs 2.62 s, joint 1.36 vs 4.10 s, l-tiny 0.68 vs 2.06 s, noise 0.78 vs 1.80 s"
+    },
+    {
+     "kind": "performance",
+     "what": "CLI receive, C++ against the script: TINY .npz 1.4 s vs 2.9 s; TINY transmitted WAV 3.5 s vs 8.4 s; 4 s noise WAV 0.025 s vs 1.1 s, which is mostly interpreter start-up.",
+     "evidence": "measured side by side while building tests/test_qrss_native_paths.py"
+    },
+    {
+     "kind": "process",
+     "what": "The receiver_slot fast tier went from 104 s to 33 s. It keeps typed CE, L and joint scenarios (the joint one also in Python mode with spies), the typed-stays-typed assertions, and qrss_receive.py's whole caller with every _SLOT_ROWS reached (10.6 s, kept fast). It also keeps the rules, the stubbed orchestration, receive_wav, capture_from_wav and the WAV reader. Moved to slow: the 9 other scenarios, dets_given, ce_resid_ratio, finish_receive (12 s), scenarios_reach_the_rules and threads.",
+     "evidence": "pytest --durations: before 30 passed in 104.00 s; after 16 passed in 32.61 s"
+    },
+    {
+     "kind": "process",
+     "what": "The codec tree's first build (160 steps, -j2) took 9.5 min, just under the 600 s cap. A later lane touching core headers would be safer reusing it incrementally than reconfiguring.",
+     "evidence": "time ninja -C native/build-qrss-codec sstvae-qrss sstvae_native: real 9m27s"
+    },
+    {
+     "kind": "simplification",
+     "what": "Mutually exclusive groups in argparse.hpp replaced about 120 lines of receive.cpp emulation (usage rewriting, abbreviation matching, error-order heuristics) with one exclusive() call. The parser now raises the conflict at the same point CPython's take_action does: after type/choices, before the missing-required and unrecognized errors.",
+     "evidence": "git diff 8fe5b44 -- native/apps/sstvae_qrss/receive.cpp; native/tests/qrss/test_argparse.cpp 229 checks"
+    }
+   ],
+   "notes": "All five items are done and committed on top of the base in three commits: 7118327 (WIP), 96557ff (WIP) and 2a07000 (final). Nothing is pushed. Both trees build clean, and every test run listed passes.\n\n1. **Paths.**\n   - Every file site in core/qrss (including codec/) and apps/sstvae_qrss now goes through util::open_file (fileio.hpp). That header does not include <windows.h>.\n   - core/util needed nothing beyond the new header itself, and core/io does not exist.\n   - Every path binding reads its argument as the reference function it substitutes does:\n     - open()'s reading (fs_path: str, bytes or os.PathLike, PyUnicode_FSConverter with surrogateescape on POSIX).\n     - pathlib's reading for model paths (bytes gives TypeError).\n     - str(path) where the reference uses that.\n   - C++ errors naming a file are decoded with os.fsdecode, never strictly.\n   - The CLI takes UTF-8 arguments on Windows (wmain on MSVC, CommandLineToArgvW on MinGW). Its stderr goes through a filter so non-UTF-8 names print as Python's stderr prints them.\n   - The new tests/test_qrss_native_paths.py covers every binding plus sstvae-qrss receive (WAV and .npz) and transmit (WAV), side by side with the scripts.\n   - mingw cross-compile probes pass, with <windows.h> first and with fileio.hpp first. wine is not available here, so the open probe (probe_open.exe) was built but not run.\n2. **pathlib_str** has one copy, in core/qrss/pypath (part of sstvae_qrss), used by the CLI and the codec glue. receive.cpp's diff touches only the pathlib_str and group hunks.\n3. **argparse mutually exclusive groups.** ArgParser::exclusive is added, and receive.cpp's emulation is dropped. Usage and error text match Python 3.13, checked by the pinned ctest and by test_qrss_native_cli*.py against qrss_receive.py.\n4. **test_dispatch.** The not-built subcommands are now derived from the binary's --help and the qrss_*.py scripts, not pinned.\n5. **receiver_slot fast tier.** It went from 104 s to 33 s. The whole-caller reach assertion over every _SLOT_ROWS stays in the fast tier."
+  },
+  "paths_review": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2",
+   "branch": "worktree-wf_0f0c84a2-e4b-2",
+   "commit": "a42696a",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/core/qrss/pypath.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/core/qrss/pypath.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/apps/sstvae_qrss/common.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/apps/sstvae_qrss/argparse.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/apps/sstvae_qrss/transmit.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/apps/sstvae_qrss/main.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/bindings/module/qrss/codec/api.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/bindings/module/qrss/codec/codec.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/tests/qrss/gen_paths_pins.py",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/tests/qrss/paths_pins.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/native/tests/qrss/test_paths.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_0f0c84a2-e4b-2/tests/test_qrss_native_paths.py"
+   ],
+   "api": "// native/core/qrss/pypath.hpp (namespace sstvae::qrss::pypath), added by this review:\nstd::u32string fs_decode(std::string_view text);   // os.fsdecode: surrogateescape on POSIX, surrogatepass (PEP 529) on Windows\nstd::string fs_str(std::string_view text);         // that str as the port carries a Python str (UTF-8, surrogates as 3 bytes); for text arguments, never for a name to open\n// changed text only:\nstd::string with_name(std::string_view p, const std::string& name);   // std::invalid_argument \"PosixPath('<p>') has an empty name\"\n// unchanged signature, now built on fs_decode's decoder (output bit-identical, digests hold):\nstd::size_t stderr_text(std::string_view text, bool final, std::string& out);",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2; timeout 600 ninja -C native/build-qrss-codec -j2",
+     "result": "both trees build clean"
+    },
+    {
+     "cmd": "cd native/build-qrss && timeout 200 ctest -R qrss_core",
+     "result": "56/56 passed, 60.7 s (shared CPUs, codec build running beside it)"
+    },
+    {
+     "cmd": "cd native/build-qrss-codec && timeout 200 ctest -R qrss -j2",
+     "result": "57/57 passed, 33.8 s"
+    },
+    {
+     "cmd": "native/build-qrss/tests/test_qrss_core_paths",
+     "result": "ok: qrss_paths (242 checks), 0.7 s"
+    },
+    {
+     "cmd": "mutation checks on pypath.cpp (SURROGATES=true on POSIX; cp<<6 mask 0x3F->0x1F; fs_str low-byte mask; doubled escape in fs_decode; F4 upper bound dropped; E0 lower bound dropped)",
+     "result": "all caught by test_qrss_core_paths; 0x0F->0x1F lead mask and with_name's fs_decode are equivalent mutants (bit 4 of E0..EF is 0; a no-name path is always '.', '/' or '//')"
+    },
+    {
+     "cmd": "g++ probe: pypath.cpp compiled with the Windows branch (#ifdef _WIN32 -> #if 1) against paths_pins STDERR_*_WINDOWS / DECODE_*_WINDOWS and the fs_str round trip",
+     "result": "0 mismatches (no wine on this machine; this checks the Windows decoder's arithmetic, not a Windows build)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only on pypath.cpp, common.cpp, argparse.cpp, transmit.cpp, test_paths.cpp",
+     "result": "clean"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python timeout 200 pytest -q tests/test_qrss_native_paths.py",
+     "result": "20 passed, 4 skipped (codec), 28.3 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest -q tests/test_qrss_native_paths.py",
+     "result": "24 passed, 37.7 s"
+    },
+    {
+     "cmd": "pytest -q tests/test_qrss_native_paths.py -k encoded_surrogate, with transmit.cpp's old parse_slot(slot_text) and then common.cpp's old repr(path) put back",
+     "result": "fails on each (EOFError line vs the --slot refusal; '\\ud800.qrsp' vs '\\udced\\udca0\\udc80.qrsp'); passes with the fix"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest -q tests/test_qrss_native_cli.py -m 'not slow' -k transmit_matches",
+     "result": "96 passed, 40.9 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest -q tests/test_qrss_native_cli.py -m 'not slow' -k 'not transmit_matches'",
+     "result": "242 passed, 1 skipped (encode-without-codec), 115.5 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python timeout 200 pytest -q tests/test_qrss_native_cli.py -m 'not slow' -k 'dispatch or without_the_codec or beacon_matches or transmit_help'",
+     "result": "69 passed, 21.2 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest -q tests/test_qrss_native_cli_receive.py -m 'not slow'",
+     "result": "10 passed, 1 skipped, 39.9 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest -q tests/test_qrss_native_receiver_slot.py -m 'not slow'",
+     "result": "16 passed, 28.1 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest -q tests/test_qrss_native_{beaconfile,api,infra,types,tx,picture}.py -m 'not slow'",
+     "result": "345 passed, 32.6 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest -q tests/test_qrss_native_codec.py tests/test_qrss_native_calibration.py -m 'not slow'",
+     "result": "124 passed, 18.8 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python timeout 200 pytest tests/test_qrss_{receiver,lreceiver,smoke,live,live_l}.py --native-qrss=rx -m 'not slow' (one file per run)",
+     "result": "4 + 20 + 2 + 37 + 17 passed; header line 'QRSS against the C++ port, stage rx (416 substitutions, 63 from-import sites, ...)' confirmed"
+    },
+    {
+     "cmd": "python3 native/tests/qrss/gen_paths_pins.py (twice), git diff",
+     "result": "reproducible: second run identical; only the six new DECODE_* lines differ from the committed W7 header"
+    },
+    {
+     "cmd": "python3 tools/check_layering.py && python3 tools/check_includes.py",
+     "result": "layering ok (479 files), includes ok (481 files)"
+    },
+    {
+     "cmd": "side-by-side argv probe: sstvae-qrss transmit vs qrss_transmit.py with ED A0 80 in --slot, the input name, --segment, --freq, --waveform, --ook=; beacon with a missing name holding ED A0 80 FF",
+     "result": "status and last stderr line identical in all 8 (argparse lines differ only in the program name)"
+    }
+   ],
+   "parity": "Bit-exact, by SHA-256 digest against CPython 3.13.16. pypath::fs_decode is checked over every 1- and 2-byte string, every 3-byte string E0..EF, and the F0..F4 4-byte family, with both decoders: surrogateescape is run in the ctest on POSIX, and surrogatepass-then-escape is checked by a Linux probe of the Windows branch. stderr_text is unchanged and its digests still hold. Exact string checks: repr(os.fsdecode(name)) in str(OSError) and in argparse's invalid int, float and choice and ignored-explicit-argument messages. The transmit --slot refusal is checked side by side against the script on real argv bytes. The ctest suites, CLI parity, paths parity, receiver_slot, file-handling and calibration fast tiers pass on both builds, and the rx suites pass under --native-qrss=rx. No tolerances were added or loosened. Not compared: the Windows build itself (no wine here; mingw syntax check only), and help text (a documented W7 deviation).",
+   "deviations": [
+    "On POSIX, a --callsign, --grid or --codec-id containing a surrogate's UTF-8 bytes (ED A0..BF xx) is still read as one surrogate by the core validators (morse, header, pynum::invalid_int_literal). Both implementations refuse it, but the refusal text can differ: the length rule against the character rule, and '\\ud800' against '\\udced\\udca0\\udc80'. Fixing this means passing pypath::fs_str to the validators while keeping the raw bytes for the messages that print the argument verbatim (api.cpp 'the beacon file is for X, not Y', stderr_text). I left it alone because nothing reaches the air from it.",
+    "Python's stdout is 'strict' under a non-C UTF-8 locale such as en_US.UTF-8, so a script that prints a non-UTF-8 file name fails there with UnicodeEncodeError. sstvae-qrss writes the bytes. stderr is written as UTF-8 whatever the locale's encoding. Both are documented in main.cpp."
+   ],
+   "shared_changes_needed": [
+    "native/apps/sstvae_qrss/receive.cpp:291-302 (another agent is editing this file): give slot::parse_slot / the --start parser pypath::fs_str(*s), and the refusal repr pytext::repr(pypath::fs_decode(*s)), as transmit.cpp now does. Today sstvae-qrss receive --slot $'2025-10-01\\xed\\xa0\\x8000:00Z' is accepted (ED A0 80 is read as fromisoformat's date/time separator), but qrss_receive.py refuses it.",
+    "native/core/images/images.cpp: read_file opens std::ifstream(path), and save_png calls stbi_write_png(path.c_str()). Both are narrow on Windows, so a non-ANSI name fails there. Use util::open_file plus stbi_write_png_to_func (or STBIW_WINDOWS_UTF8).",
+    "native/core/codec/codec.cpp:87 and native/core/codec/grad_session.cpp:31: std::wstring wpath(path.begin(), path.end()) widens each byte, so any non-ASCII model path is wrong on Windows. Use util::wide_of(path).",
+    "native/core/checkpoint/checkpoint.cpp: fs::path(std::string), .string(), and getenv of USERPROFILE/LOCALAPPDATA are ANSI on Windows. A model cache under a non-ANSI profile directory is unreachable. Use wide or UTF-8 conversions (util::fs_path / path_text)."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "The CLI found a real accept/refuse split: datetime.fromisoformat takes any single code point as the date/time separator. A C++ decoder that reads ED A0 80 as one surrogate turns bytes Python sees as three escapes into a valid separator, so sstvae-qrss transmit wrote a WAV for a --slot that qrss_transmit.py refuses. Any parser handed argv must see the str sys.argv holds (os.fsdecode), not the bindings' surrogatepass form.",
+     "evidence": "python: fromisoformat('2026-10-09\\ud80006:00+00:00') -> 2026-10-09 06:00+00:00, and the escaped form -> 'Invalid isoformat string'. The pre-fix C++ went past the slot and failed on the input instead (EOFError line). Test: tests/test_qrss_native_paths.py::test_cli_encoded_surrogate_argv"
+    },
+    {
+     "kind": "numerics",
+     "what": "One repo-wide UTF-8 convention cannot serve both directions on POSIX. The bindings need surrogatepass, where a str's lone surrogate becomes 3 bytes. Python's argv and file names use surrogateescape, where those same 3 bytes are 3 escapes. A message mixing raw-byte paths with str-form text cannot be rendered unambiguously, which is why the fix is per call site: fs_decode for reprs, fs_str for parsers, and raw bytes for opening files and for verbatim printing.",
+     "evidence": "native/core/qrss/pytext.hpp:11-15 already documented the ED A0..BF exception; native/core/qrss/pypath.hpp fs_decode/fs_str"
+    },
+    {
+     "kind": "numerics",
+     "what": "Python's sys.stdout error handler depends on the locale. It is surrogateescape in UTF-8 mode and under C, POSIX or C.UTF-8 (the coercion targets), and strict under en_US.UTF-8. This sandbox runs in the POSIX locale, so every local measurement saw surrogateescape. A claim that holds 'under a UTF-8 locale' would have been wrong on a typical desktop.",
+     "evidence": "LC_ALL=C.UTF-8 PYTHONUTF8=0 python3 -c 'import sys; print(sys.stdout.errors)' -> surrogateescape; CPython config_get_stdio_errors returns L\"strict\" otherwise"
+    },
+    {
+     "kind": "process",
+     "what": "Mutation testing found two equivalent mutants, which shows where a test cannot reach rather than where it is weak. The 3-byte lead mask 0x0F vs 0x1F is equivalent (bit 4 of E0..EF is zero). with_name's fs_decode is also equivalent, because a path with no name is always '.', '/' or '//'. Every other pypath mutant failed the digest tests.",
+     "evidence": "test_qrss_core_paths under six mutants: four caught by family digests, two survive by construction"
+    },
+    {
+     "kind": "process",
+     "what": "The Windows-only branch of a byte decoder can be checked on Linux by compiling a copy with the #ifdef forced on and comparing against Python-generated pins. With no wine available, this was the only execution of the surrogatepass arithmetic before a Windows CI job.",
+     "evidence": "scratchpad probe: pypath.cpp with '#ifdef _WIN32' -> '#if 1', 0 mismatches against STDERR_*_WINDOWS and DECODE_*_WINDOWS"
+    },
+    {
+     "kind": "performance",
+     "what": "Fast-tier wall times on 4 shared CPUs after the fixes. The CLI file has to be split to stay under 200 s.",
+     "evidence": "test_qrss_native_cli.py fast: 40.9 s (transmit cases) + 115.5 s (rest); paths 37.7 s (codec build); receiver_slot 28.1 s; cli_receive 39.9 s; ctest qrss_core 56 tests 60.7 s with a build running beside it, 33.8 s at -j2 on the idle codec tree"
+    },
+    {
+     "kind": "simplification",
+     "what": "stderr_text's decoder and fs_decode are now one function (fs_unit), so the stderr escapes and the reprs cannot disagree about which bytes form a code point. The old stderr_text had its own copy of the bounds table.",
+     "evidence": "native/core/qrss/pypath.cpp fs_unit; the stderr digests are unchanged after the refactor"
+    }
+   ],
+   "notes": "Review of W7 (2671a6b..2a07000) and the A-7 recheck; fixes are in commit a42696a on the same branch. Everything I read line by line other than the fixed items was correct: util/fileio.hpp (UTF-16 surrogatepass, _wfopen, NUL/EINVAL, remove_file refusing a directory), the fspath.hpp bindings, the file sites in infra/types/tx/receiver_slot/api/picture/npz/wav/simfile, the codec glue's model paths, argparse's mutually exclusive groups (matches 3.13 take_action, usage and error order; 19 argv probes match except help text), test_dispatch_every_script, and the receiver_slot fast/slow split. The A-7 recheck holds up. tests/test_qrss_native_calibration.py compares Z bit for bit and the Gumbel constants to within 0.002 over 2400 Z. The ctest test_calibration.cpp draws an independent sample within 4 standard errors, and its TIMEOUT of 120 s against about 16 s measured is generous enough. Smaller things noted but not changed: types.cpp keeps a stale <fstream> include; util::list_dir sorts by bytes, while Python sorts by str, and the two differ only for names with surrogate escapes; the CLI's err stream is not tied to cout, so the interleaving on a shared terminal can differ; and stderr_text's held-back partial sequence is dropped if the process exits through std::exit mid-message. I did not touch receive.cpp; its matching --slot/--start fix is listed under shared_changes_needed.",
+   "findings": [
+    {
+     "what": "On POSIX, str(OSError)'s file name (common.cpp OsError) and argparse's invalid int/float/choice and ignored-explicit-argument values (argparse.cpp) took repr via pytext::decode, which reads a name's ED A0..BF xx bytes as one surrogate. They printed 'x\\ud800.qrsp' where the scripts print 'x\\udced\\udca0\\udc80.qrsp'. Both now use repr(pypath::fs_decode(...)), which is os.fsdecode.",
+     "fixed": true
+    },
+    {
+     "what": "sstvae-qrss transmit accepted a --slot that qrss_transmit.py refuses: with ED A0 80 between date and time, the C++ decoded a single surrogate, which fromisoformat accepts as the separator. Python holds three escapes and refuses. The slot is now parsed from pypath::fs_str(slot_text).",
+     "fixed": true
+    },
+    {
+     "what": "The same --slot/--start accept/refuse split exists in receive.cpp:291-302. Not changed because another agent owns that file; listed in shared_changes_needed.",
+     "fixed": false
+    },
+    {
+     "what": "pypath::with_name's ValueError text was '/ has an empty name'; pathlib says \"PosixPath('/') has an empty name\". The codec glue only passes .onnx names, so this path is unreachable from it. Fixed, with a test over every no-name path.",
+     "fixed": true
+    },
+    {
+     "what": "The codec bindings' translated() (codec/api.cpp, codec/codec.cpp) gained a catch of std::runtime_error in W7. pybind11's value_error, type_error and the like derive from it, so any of them thrown inside would have surfaced as RuntimeError. pybind11's builtin_exception is now rethrown before that catch. No current lambda throws one; this is hardening.",
+     "fixed": true
+    },
+    {
+     "what": "main.cpp's comment said Python's stdout is surrogateescape 'under a UTF-8 locale'. It is strict under en_US.UTF-8, and surrogateescape only in UTF-8 mode or under C, POSIX or C.UTF-8; stderr's encoding is also the locale's. Comment corrected; the behaviour difference is recorded as a deviation.",
+     "fixed": true
+    },
+    {
+     "what": "On POSIX, --callsign, --grid and --codec-id holding ED A0..BF xx still give a different refusal text (one surrogate against three escapes). Both implementations refuse. Left as a documented deviation because a clean fix needs separate str and byte forms through api.cpp's verbatim messages.",
+     "fixed": false
+    },
+    {
+     "what": "Windows narrow-path sites outside the QRSS scope: images.cpp (ifstream, stbi_write_png), codec.cpp:87 and grad_session.cpp:31 (byte-wise wstring), and checkpoint.cpp (narrow fs::path, getenv). Listed in shared_changes_needed.",
+     "fixed": false
+    }
+   ]
+  }
+ }
+}

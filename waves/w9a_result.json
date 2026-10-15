@@ -1,0 +1,1045 @@
+[
+ {
+  "label": null,
+  "value": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1",
+   "branch": "worktree-wf_cf5767ef-ab8-1",
+   "commit": "367414d",
+   "files": [
+    "native/core/qrss/source.hpp",
+    "native/core/qrss/listener.hpp",
+    "native/core/qrss/listener.cpp",
+    "native/core/qrss/codec/listener_render.hpp",
+    "native/core/qrss/codec/listener_render.cpp",
+    "native/bindings/module/qrss/listener.cpp",
+    "native/bindings/module/qrss/codec/listener_render.cpp",
+    "native/tests/qrss/test_listener.cpp",
+    "native/tests/golden_qrss/listener_pins.json",
+    "tools/gen_qrss_listener_pins.py",
+    "tests/qrss_native/_listener.py",
+    "tests/test_qrss_native_listener.py"
+   ],
+   "api": "// native/core/qrss/source.hpp (namespace sstvae::qrss::live), text as given\nstruct Chunk { std::vector<double> x; double t_end = 0.0; };\nclass Source { virtual std::optional<Chunk> next(double timeout_s) = 0; virtual bool eof() const = 0; virtual std::string name() const = 0; };\n\n// native/core/qrss/listener.hpp (namespace sstvae::qrss::live)\ninline constexpr double CLOSE_PACKER_S = 30.0;\nclass SeamError : public std::runtime_error { SeamError(std::string type_name, const std::string& text); const std::string& type_name() const noexcept; };\nstd::string error_name(const std::exception& e);   // Python exception name for a C++ one\nstd::string error_text(const std::exception& e);   // f\"{type(e).__name__}: {e}\"\nclass Renderer { using Warn = std::function<void(const std::string&)>;\n  virtual std::optional<std::string> load(std::optional<std::int64_t> codec_id, const Warn& warn) = 0;\n  virtual std::optional<std::string> check(std::optional<std::int64_t> codec_id) = 0;\n  virtual images::Picture render(std::span<const double> S, std::span<const double> W, std::int64_t mode, std::optional<std::int64_t> codec_id) = 0; };\nusing CandidatesFn = std::function<std::vector<types::Detection>(const receiver::Prepared&, Selection, std::span<const acquire::Hint>)>;\nusing DetectFn = std::function<std::vector<types::Detection>(const receiver::Prepared&, Selection, const receiver::DetectOptions&)>;\nusing ReceiveSlotFn = std::function<std::vector<types::PassResult>(const receiver::Prepared&, Selection, const receiver::SlotOptions&)>;\nusing FinishFn = std::function<FinishResult(std::span<const cf> x, std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, const api::ReceiveConfig&, std::span<const types::Detection> dets, std::span<const acquire::Hint> hints)>;\nusing AssociateFn = std::function<associate::Result(const types::PassResult&, store::Store&)>;\nstruct Seams { std::function<double()> clock; std::function<void(const std::string& line)> log; CandidatesFn candidates; DetectFn detect; ReceiveSlotFn receive_slot; FinishFn finish; NoiseFn noise; AssociateFn associate; std::shared_ptr<Renderer> renderer; bool old_edge_noise = false; bool old_gating = false; bool low_priority = true; DialGuard dial_guard = DIAL_GUARD_S; };   // empty seam = the C++ implementation\nclass LiveListener {\n  LiveListener(std::string state_dir, LiveConfig cfg = {}, std::shared_ptr<store::Store> store = nullptr, std::shared_ptr<passband::PassbandStore> passband = nullptr, Seams seams = {});\n  ~LiveListener();   // close()\n  const std::string& state_dir() const; const LiveConfig& config() const; const std::vector<frame::FrameSpec>& specs() const; const std::vector<frame::FrameSpec>& selection() const; bool joint() const; double dur() const;\n  FeRing& ring(); DialLog& dial(); double clock() const;\n  std::optional<std::string> busy() const; double now() const; std::optional<double> audio_end() const; std::optional<std::int64_t> next_index() const;\n  std::string source() const; void set_source(std::string name);\n  std::vector<std::string> lines() const; std::vector<std::int64_t> finished() const; std::vector<SlotState> slots() const; std::vector<Tile> done_tiles() const; std::optional<std::string> codec_error() const; std::vector<std::int64_t> recovering() const; std::vector<Tile> tiles() const;\n  void log(const std::string& msg); void write_state(bool listening = true);\n  void feed(std::span<const double> x, double t_end); double backfill(double now); std::vector<std::int64_t> recover(double now, double hours = RECOVER_HOURS);\n  double progress(std::int64_t q) const; std::vector<std::int64_t> active_slots(double now) const; bool step(double now);\n  std::vector<acquire::Hint> hints(std::int64_t q, std::optional<std::int64_t> dial); double interval(std::int64_t q, double now) const;\n  std::optional<Tile> match(std::int64_t q, double f_hz, std::optional<std::int64_t> dial = std::nullopt, const std::string& waveform = \"CE\") const;\n  bool finish_idle() const; bool idle() const; bool wait_idle(std::optional<double> timeout_s = std::nullopt) const; std::optional<double> replay_end() const;\n  void close();   // idempotent; waits for receives in flight, runs nothing queued, then the packer (CLOSE_PACKER_S)\n};\nvoid run(LiveListener& listener, Source& source, bool realtime, const std::atomic<bool>* stop = nullptr);\n\n// native/core/qrss/codec/listener_render.hpp (namespace sstvae::qrss::codec; codec build only)\nclass ListenerRenderer : public live::Renderer { explicit ListenerRenderer(std::string precision = \"fp32\", std::optional<std::string> model = std::nullopt, checkpoint::Fetcher fetcher = nullptr); bool loaded() const; std::optional<std::int64_t> decoder_codec_id() const; std::optional<std::string> error() const; std::optional<std::string> model() const; };\nstd::shared_ptr<live::Renderer> listener_renderer(const live::LiveConfig& cfg, checkpoint::Fetcher fetcher = nullptr);   // null when !cfg.render\n\n// Python: sstvae_native.qrss.listener\nLiveListener(state_dir, cfg=None, store=None, passband=None, log=None, *, clock=None, candidates=None, detect=None, receive_slot=None, finish=None, noise=None, associate=None, renderer=None, old_edge_noise=None, old_gating=None, low_priority=True, dial_guard=None)\n  .feed .step .write_state(listening=True) .log .backfill .recover(now, hours) .tiles() .active_slots ._progress ._interval ._hints ._match .idle() ._finish_idle() .wait_idle(timeout=None) .replay_end() .close() .clock()\n  .lines .now .audio_end .busy .codec_error .source (rw) .finished .done_tiles .slots .recovering .next_index .dur .joint .cfg .specs .selection .dir .ring .dial\nrun(listener, source, realtime, stop=None); Renderer (base); ListenerRenderer(precision=\"fp32\", model=None) with .loaded .decoder_codec_id .error .model (codec build)",
+   "tests": [
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j2",
+     "result": "62/62 passed (qrss_core_listener included, 3.8 s; --repeat until-fail:8 on qrss_core_listener also passed)"
+    },
+    {
+     "cmd": "SSTVAE_REQUIRE_CODEC=1 QRSSTVAE_MODEL_DIR=/home/user/qrss-data/models timeout 200 ctest --test-dir native/build-qrss-codec -R 'qrss_core_(listener|codec)'",
+     "result": "2/2 passed"
+    },
+    {
+     "cmd": "pt.sh -q tests/test_qrss_native_listener.py -m 'not slow' (build-qrss)",
+     "result": "18 passed, 1 skipped (codec renderer test: no codec in this tree) in 79.7 s; slowest test 12.4 s"
+    },
+    {
+     "cmd": "NATIVE_TREE=build-qrss-codec SSTVAE_REQUIRE_CODEC=1 QRSSTVAE_MODEL_DIR=/home/user/qrss-data/models pt.sh -q tests/test_qrss_native_listener.py -m 'not slow' -k 'codec or provisional or bookkeeping'",
+     "result": "3 passed (codec renderer pixels equal the reference's)"
+    },
+    {
+     "cmd": "pt.sh -q tests/test_qrss_live.py -m 'not slow'",
+     "result": "37 passed in 30.4 s"
+    },
+    {
+     "cmd": "pt.sh -q tests/test_qrss_live.py -m 'not slow' --native-qrss=rx",
+     "result": "37 passed in 17.8 s"
+    },
+    {
+     "cmd": "pt.sh -q tests/test_qrss_live_l.py -m 'not slow'",
+     "result": "17 passed, 3 deselected in 3.0 s"
+    },
+    {
+     "cmd": "pt.sh -q tests/test_qrss_live_l.py -m 'not slow' --native-qrss=rx",
+     "result": "17 passed, 3 deselected in 2.1 s"
+    },
+    {
+     "cmd": "pt.sh -q tests/test_qrss_native_live.py -m 'not slow'",
+     "result": "26 passed, 5 deselected (wave 8's live rows unaffected)"
+    },
+    {
+     "cmd": "python tools/gen_qrss_listener_pins.py --check",
+     "result": "up to date"
+    },
+    {
+     "cmd": "python tools/check_layering.py",
+     "result": "layering ok (516 source files checked)"
+    },
+    {
+     "cmd": "python tools/check_includes.py",
+     "result": "includes ok (518 files) after adding <cstdlib> to listener.cpp for std::llabs (it first reported that one)"
+    },
+    {
+     "cmd": "test_qrss_core_listener against a mutated listener_pins.json (8 edits: a call argument, a step result, a log line, a tile field, state.json, listener.log, a picture value, the expired tiles)",
+     "result": "all 8 caught, each naming where the texts part"
+    },
+    {
+     "cmd": "mutation: listener.cpp job_failed retiring the slot on a live-receive exception (the reference's behaviour)",
+     "result": "3 checks fail in the refresh-exception test; reverted"
+    },
+    {
+     "cmd": "mutation: close() detaching the live worker instead of joining",
+     "result": "'close: waits for the receive in flight' and 'one receive' fail; reverted"
+    }
+   ],
+   "parity": "Byte-identical, compared side by side with frozen time.time() (tests/test_qrss_native_listener.py, 18 scenarios). The C++ seams look up the patched receiver.* functions at each call, and finish is the C++ finish_receive over them.\n- Compared in every scenario: every receiver call with its arguments, the step results, lines, the log sink, Tile.to_json of every tile, finished, slots, busy, codec_error, now and audio_end.\n- Also compared: state.json's text, listener.log's text, PNG pixels, the store tree (_store.compare_trees), the passband files, and that no stray tmp files are left.\n- Scenarios covered:\n  - merge by band centre, and finish then restart;\n  - a refused preamble rechecked, and acquisition kept once final;\n  - the late join's hint search;\n  - a slot on two dials, and hints moved by a dial change (ws None, (CE,L), (L,));\n  - one signal across the waveform switch;\n  - ghosts of a neighbouring slot and the headerless SNR cut;\n  - a provisional picture redrawn when a header arrives;\n  - passes filed in the store;\n  - recover and backfill from the passband store;\n  - feed resync, early audio and digital silence;\n  - run() replayed to its end;\n  - log rotation;\n  - a bad state.json;\n  - background workers with close() in flight.\n\nctest without Python: native/tests/golden_qrss/listener_pins.json holds 7 scenarios. The C++ matches the calls, steps, sink, lines and tiles JSON, state.json, listener.log, picture sizes and values, the restart's read-back and the expired tiles, all exactly.\n\nTolerance, the real receiver (each listener on its own receiver), TINY CE and TINY L heard half and then whole:\n- bar: f_hz within 0.1 Hz, snr within 0.3 dB, received within 0.02, other fields equal;\n- measured on the replay below: f_hz differs by about 1e-12 Hz (CE 1500.008956004102 against ...101, L 1509.5343824484357 against ...436) and snr by about 7e-13 dB.\n\nCodec tree (SSTVAE_REQUIRE_CODEC=1): the ListenerRenderer's tile PNGs equal render.load/render.render's pixel for pixel, and a picture of another codec is refused with the reference's note.\n\nNot compared:\n- finish_process (the reference's end-of-slot child process);\n- run() in realtime mode against a wall clock;\n- the refresh-exception path, which differs by design and is tested C++-only;\n- Windows newline behaviour.",
+   "deviations": [
+    "A live receive (refresh) that throws is logged once per slot and message, and the slot is received again at its next refresh. The reference's worker sets done=True (the slot's tiles are lost after one bad receive), and its synchronous mode raises the exception out of step(). In the C++ an exception never leaves step(). An end-of-slot receive that throws still retires the slot, as in the reference.",
+    "An unreadable state.json, or one whose structure is not the reference's (not a dict, 'finished' holding non-integers, ...), starts the listener fresh. The reference swallows only OSError/ValueError at the read (live.py:794-797) and raises AttributeError/TypeError/ValueError from its constructor for the rest.",
+    "idle() is exact: a worker takes a job and marks itself busy in one locked step. The reference does jobs.get() and then sets _busy (live.py:1069-1070), so idle() can read true in between and a replay can run ahead of a receive.",
+    "Two passes applied to one tile in one receive draw it once (the later pass's picture), so image_rev is one lower than the reference's in that case.",
+    "state.json is strict JSON: a non-finite float is written as null. The reference's json.dumps writes NaN/Infinity for any field it does not guard (it guards only snr_db and z_ref).",
+    "LiveConfig.finish_process (the end-of-slot receive in a child process) is not ported: there is one finish worker thread, since a C++ receive needs no process to run beside another. The `finish` seam stands in for live.finish_receive.",
+    "live.DIAL_GUARD_S is a seam (Seams::dial_guard / dial_guard= kwarg) rather than a module constant read at call time. The reference's tests set it at run time, and a compiled listener cannot see that.",
+    "Files are written with '\\n' on every platform. The reference opens listener.log with open(path, 'a') and writes state.json with write_text, both in text mode, so it writes CRLF on Windows.",
+    "Binding only: the store must be the C++ Store (tests/qrss_native/_store.store_class facade), not a duck-typed object. A passband argument is rebuilt as a C++ PassbandStore from its path or .root and options. Records the Python seams returned are handed back as the original objects, found by content fingerprint; a pass given a known header comes back as copy.copy with .header set. Any other record comes back as an rx_types dict, while the receivers get a real receiver.Prepared.",
+    "run(): the reference held listener.lock across feed+step. In the C++ every public method takes the lock itself, and a replay waits with wait_idle() rather than polling idle() every 50 ms."
+   ],
+   "shared_changes_needed": [
+    "native/core/images/images.cpp: add `#define STBIW_WINDOWS_UTF8` directly after `#define STB_IMAGE_WRITE_IMPLEMENTATION` (line 32, before `#include \"stb_image_write.h\"`). images::save_png calls stbi_write_png(path.c_str(), ...), and without the define stb uses fopen with the ANSI code page on Windows. The listener writes tiles/.<id>.<pid>.png.tmp under state_dir through save_png, so on Windows a state directory with non-ASCII characters writes no pictures. Every other C++ file site already goes through util/fileio's UTF-8 paths (wave 7)."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "idle() race in the reference's worker: it takes the job from the queue and only then sets _busy[name]. idle() checks that the queue is empty and _busy is None, so it can return True in between, and run()'s replay ('while not listener.idle()') can feed and step past a receive that is about to start.",
+     "evidence": "sstvae/qrss/live.py:1069-1070 (job, s = jobs.get(); self._busy[name] = ...) against idle() at live.py:1085"
+    },
+    {
+     "kind": "python-bug",
+     "what": "_load_previous catches only OSError/ValueError. A state.json that parses but has another structure raises from the LiveListener constructor and the listener cannot start: a top-level list gives AttributeError on st.get, 'finished': ['x'] gives ValueError outside the try, and a tile that is not a dict gives AttributeError.",
+     "evidence": "sstvae/qrss/live.py:794-801"
+    },
+    {
+     "kind": "python-bug",
+     "what": "recover() treats a uid head as a slot number when head.lstrip('-').isdigit(), then calls int(head). That raises ValueError for '--5', and for heads like '\u00b2' that str.isdigit accepts but int() rejects. So one odd uid in the store makes recover() raise.",
+     "evidence": "sstvae/qrss/live.py:965-966"
+    },
+    {
+     "kind": "python-bug",
+     "what": "In synchronous mode (what the tests drive) an exception in a live receive propagates out of step(). In background mode the worker logs it and sets done=True, so one bad refresh loses the slot's tiles for good. The C++ retries the slot instead; mutation-tested by restoring the reference's behaviour in job_failed, which fails 3 checks.",
+     "evidence": "native/tests/qrss/test_listener.cpp test_a_refresh_exception_is_retried; mutation result recorded in tests"
+    },
+    {
+     "kind": "python-bug",
+     "what": "state.json can contain NaN or Infinity, which is not strict JSON: json.dumps(st, indent=1) uses allow_nan=True, and only snr_db and z_ref are guarded. Readers that are not Python (the app's window) would reject the file.",
+     "evidence": "inferred from code: sstvae/qrss/live.py write_state (live.py:831)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "listener.log and state.json are written in text mode, so on Windows the reference writes CRLF. Its files are then not byte-identical to its own POSIX output, or to the C++ port's.",
+     "evidence": "sstvae/qrss/live.py:787 open(path, 'a'), live.py:831 tmp.write_text(...)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "images::save_png (stbi_write_png with no STBIW_WINDOWS_UTF8) is the one C++ file site the wave 7 UTF-8 path work missed. A listener state directory with non-ASCII characters would write no tile pictures on Windows.",
+     "evidence": "native/core/images/images.cpp:32-33 and 589-593; grep finds no WINDOWS_UTF8 anywhere in native/"
+    },
+    {
+     "kind": "performance",
+     "what": "Whole-listener TINY replay, run() over live.WavSource, 78 s of audio at -12 dB, synchronous mode, best of 2, machine shared by three agents. CE: Python 7.94 s wall / 12.69 s CPU against C++ 2.93 s / 2.88 s, which is 2.7x wall and 4.4x CPU. L: Python 11.92 s / 21.09 s against C++ 3.34 s / 3.28 s, which is 3.6x and 6.4x. The tiles agree to about 1e-12 Hz and 1e-12 dB. Python's CPU exceeds its wall time because numpy's BLAS is threaded; the C++ figure includes chunks pulled from a Python source under the GIL.",
+     "evidence": "scratchpad/w9a/measure.py CE 2 and L 2"
+    },
+    {
+     "kind": "performance",
+     "what": "feed() latency for 0.25 s chunks. With nothing else running: Python p50 566 us / p95 680 us, C++ p50 110 us / p95 234 us. While a real background receive runs: Python p50 898 us / p95 2340 us / max 4893 us (the GIL is shared with the worker), C++ p50 226 us / p95 340 us / max 568 us. In the ctest, with a stubbed receive held in flight: p50 97 us, p95 150 us, max 250 us.",
+     "evidence": "scratchpad/w9a/measure_bg.py; test_qrss_core_listener stdout"
+    },
+    {
+     "kind": "performance",
+     "what": "Size: listener.cpp is 1931 lines plus a 441-line header, against about 1000 lines of live.py LiveListener+run. The pybind layer is 947 lines because it must hand Python seams back their own objects and keep the GIL out of the listener's lock.",
+     "evidence": "git diff --stat 136c208 HEAD"
+    },
+    {
+     "kind": "numerics",
+     "what": "The ctest pins carry audio that is a closed form, exact in float64 on both sides: 1e-3*((k+7919 s)*2654435761 mod 2^32 / 2^32 - 0.5). It replaces numpy random draws, so the pins cross with no RNG dependence. The fake codec's picture value depends on int(sum(wt)); its weight plane is all ones (50600 = 253*200), so the pairwise and sequential sums agree exactly.",
+     "evidence": "tools/gen_qrss_listener_pins.py audio(); native/tests/qrss/test_listener.cpp audio() and FakeRenderer"
+    },
+    {
+     "kind": "simplification",
+     "what": "Comparing whole outputs as text (state.json, listener.log, json.dumps of the tiles and of each call record) with a frozen clock gave strong parity for little code. Once time.time() was frozen and the receivers were seams that look up the patched module functions at each call, every stub scenario matched byte for byte. The ctest replays the same records from JSON with a 15-line Script stub.",
+     "evidence": "tests/test_qrss_native_listener.py snapshot()/same(); native/tests/qrss/test_listener.cpp Script"
+    },
+    {
+     "kind": "process",
+     "what": "A module constant that the reference's tests reassign at run time (live.DIAL_GUARD_S) cannot be seen by a native port, so it has to become a seam. The same holds for module functions the tests monkeypatch (receiver.*, live.finish_receive), which is why the C++ seams look them up at each call rather than capturing them at construction.",
+     "evidence": "native/core/qrss/listener.hpp Seams::dial_guard; tests/qrss_native/_listener.py receivers()"
+    },
+    {
+     "kind": "process",
+     "what": "The real receivers need a real receiver.Prepared, not the rx_types dict: Python code reads prep.fe and prep.q as attributes. The first binding draft failed with \"'dict' object has no attribute 'fe'\", fixed by prep_py building receiver.Prepared. A ghost scenario with FULL frames made a stub keyed on prep.q raise KeyError for the neighbouring slot, which is the slot the ghost cut exists for.",
+     "evidence": "native/bindings/module/qrss/listener.cpp prep_py; tests/test_qrss_native_listener.py ghost scenario"
+    },
+    {
+     "kind": "process",
+     "what": "The headerless SNR cut (HEADERLESS_MAX_SNR_DB = -6) makes a strong TINY test signal vanish without a trace: the log said '1 pass(es)' and the tile list was empty. A benchmark at 0 dB SNR therefore measured nothing until it was moved to -12 dB. Any benchmark or test of TINY frames must stay under -6 dB.",
+     "evidence": "first measure.py run: 'frame over, 1 pass(es)' with tiles []"
+    }
+   ],
+   "notes": "Wave 9a is finished and committed. Commits, in order:\n- f9c0b6f: core (WIP)\n- 9ff048e: bindings and codec renderer (WIP)\n- 6f3dade: parity tests and binding fixes (WIP)\n- 1f851f0: ctest and pins (WIP)\n- 6fdf813: final, adds <cstdlib> for check_includes\n- 367414d: binding comment fix\n\nNothing pushed.\n\nNo CMake edits were needed, because the core, binding and ctest globs pick the new files up. The ctest gets argv[1] = native/tests/golden_qrss, where listener_pins.json lives. Regenerate it with `PYTHONPATH=. python tools/gen_qrss_listener_pins.py`; `--check` reports a stale file.\n\nThe ctest has a check::Watchdog at 110 s, under the ctest TIMEOUT of 120, naming steps through check::current_step. It covers:\n- the 7 pinned scenarios;\n- the refresh exception, logged once and retried;\n- three threads (feeding, stepping, and reading plus write_state) while the background workers receive with sleeping stubs;\n- feed, step and readers while a receive is held on a latch, then close() waiting for it: the receive is applied, nothing queued runs, and a second close() returns at once;\n- the destructor with a receive in flight;\n- run() replays, synchronous and background, and one with stop set.\n\nNone of the parity tests is marked slow: the slowest takes 12.4 s and the real-receiver tests 5.5 s and 9.7 s, all under 40 s.\n\nBoth build trees (native/build-qrss and native/build-qrss-codec) are current with HEAD. The codec tree's listener.cpp object may predate the include-only change; the code is identical.\n\nThe scratch measurement scripts are in /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/w9a/ (measure.py and measure_bg.py) and are not committed.\n\nThe known unrelated failure, tests/test_qrss_format.py::test_morse_table_matches_the_spec_sim, was not run."
+  }
+ },
+ {
+  "label": null,
+  "value": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2",
+   "branch": "worktree-wf_cf5767ef-ab8-2",
+   "commit": "d501f75bf9209c863c6f6f3a14080b2e69b91aac",
+   "files": [
+    "native/core/qrss/source.hpp",
+    "native/core/qrss/sources.hpp",
+    "native/core/qrss/sources.cpp",
+    "native/bindings/module/qrss/sources.cpp",
+    "tests/qrss_native/sources.py",
+    "tests/test_qrss_native_sources.py",
+    "native/tests/qrss/gen_sources_pins.py",
+    "native/tests/qrss/sources_pins.hpp",
+    "native/tests/qrss/test_sources.cpp",
+    "native/core/util/fileio.hpp",
+    "native/core/qrss/dirlock.cpp",
+    "native/core/qrss/pynum.hpp",
+    "native/core/qrss/pynum.cpp",
+    "tools/gen_qrss_unicode_tables.py",
+    "native/core/qrss/pyunicode_tables.hpp",
+    "native/tests/qrss/gen_pynum_unicode_pins.py",
+    "native/tests/qrss/pynum_unicode_pins.hpp",
+    "native/tests/qrss/test_pynum_unicode.cpp",
+    "native/tests/qrss/test_fileio_errno.cpp",
+    "tests/test_qrss_native_pynum.py",
+    "native/core/qrss/decode.hpp",
+    "native/core/qrss/decode.cpp",
+    "native/core/qrss/codec/decode.hpp",
+    "native/core/qrss/codec/decode.cpp",
+    "native/apps/sstvae_qrss/decode.hpp",
+    "native/apps/sstvae_qrss/decode.cpp",
+    "native/apps/sstvae_qrss/codec/decode_image.cpp",
+    "native/apps/sstvae_qrss/main.cpp",
+    "native/apps/sstvae_qrss/argparse.hpp",
+    "native/apps/sstvae_qrss/argparse.cpp",
+    "native/CMakeLists.txt",
+    "native/tests/qrss/gen_decode_pins.py",
+    "native/tests/qrss/decode_pins.hpp",
+    "native/tests/qrss/test_decode.cpp",
+    "native/tests/qrss/gen_argparse_nargs_pins.py",
+    "native/tests/qrss/argparse_nargs_pins.hpp",
+    "native/tests/qrss/test_argparse_nargs.cpp",
+    "tests/test_qrss_native_decode.py"
+   ],
+   "api": "// native/core/qrss/source.hpp (namespace sstvae::qrss::live) -- the exact text given\nstruct Chunk { std::vector<double> x; double t_end = 0.0; };\nclass Source { virtual std::optional<Chunk> next(double timeout_s) = 0; virtual bool eof() const = 0; virtual std::string name() const = 0; };\n// native/core/qrss/sources.hpp (namespace sstvae::qrss::live)\nusing Clock = std::function<double()>;  using Sleep = std::function<void(double)>;\ninline constexpr double STAMP_HOLD_S = rxconfig::live::STAMP_HOLD_S;  // 5.0\nclass Stamper { explicit Stamper(double hold_s = STAMP_HOLD_S); std::vector<Chunk> push(std::vector<double> x, double t); std::vector<Chunk> flush(); double hold_s() const; };\nclass InputHandle { static InputHandle standard_input(); static InputHandle from_fd(int fd); static InputHandle from_native(std::intptr_t handle); std::intptr_t native() const; };\nstruct StreamOptions { std::string fmt = \"f32\"; double chunk_s = 0.25; double hold_s = STAMP_HOLD_S; Clock clock; };\nclass StreamSource final : Source { using Options = StreamOptions; explicit StreamSource(InputHandle in = InputHandle::standard_input(), Options opt = {}); std::optional<Chunk> next(double timeout_s) override; bool eof() const override; std::string name() const override; void close(); std::exception_ptr error() const; };  // non-copyable; reader thread; unbounded queue\nstruct WavOptions { double speed = 0.0; double chunk_s = 1.0; Clock clock; Sleep sleep; std::optional<std::string> shown_as; };\nclass WavSource final : Source { using Options = WavOptions; WavSource(const std::string& path, double start_unix, Options opt = {}); WavSource(std::vector<double> x, const std::string& path, double start_unix, Options opt = {}); next/eof/name; const std::vector<double>& samples() const; const std::vector<wav::Warning>& warnings() const; double start() const; };\n// native/core/util/fileio.hpp (namespace sstvae::util)\ninline int errno_of(const std::error_code& ec);                  // generic/system/Win32 code -> the errno an OSError carries\ninline std::error_code errno_code_of(const std::error_code& ec); // the same as a generic-category code\ninline bool replace_file(const std::string& from, const std::string& to, std::error_code& ec);  // Windows: MoveFileExW retried ~1 s on ERROR_ACCESS_DENIED / ERROR_SHARING_VIOLATION\n// native/core/qrss/pynum.hpp: py_int(text, base) / py_float(text) now accept every Unicode whitespace and Nd digit as int()/float() do (unchanged signatures)\nstd::optional<PyInt> py_int(std::string_view text, int base);  std::optional<double> py_float(std::string_view text);\n// native/core/qrss/decode.hpp (namespace sstvae::qrss::decode) -- qrss_decode.py's helpers, no codec\nclass Refusal : public std::runtime_error;                       // SystemExit(message)\nclass PyException : public std::runtime_error { const std::string& cls() const noexcept; };\nstd::string py_upper(std::string_view text);                     // str.upper(), full case mapping, surrogate escapes kept\nstd::string py_hex(std::int64_t v, int width);  std::string py_hex(std::string_view decimal, int width);\nstd::string py_str(const pyjson::Value& v);  std::string py_repr(const pyjson::Value& v);\nstruct PictureKey { std::string callsign; pynum::PyInt picture_id; };\nPictureKey parse_key(std::string_view s);\nstd::string member_wave(store::Store& store, const pyjson::Value& uid);\ndouble acc_mean_w_db(const store::Accumulator& acc);\nstd::vector<std::string> acc_lines(const store::Accumulator& acc, store::Store* store = nullptr);\nstruct Planes { std::vector<double> S, W; std::int64_t mode = 0; };   // 3 * 52800 each, canonical row-major\nPlanes planes_from_pass(const types::PassResult& p);\nPlanes planes_from_accumulator(const store::Accumulator& acc);\nstd::string pass_line(const types::PassResult& p);\n// native/core/qrss/codec/decode.hpp (namespace sstvae::qrss::codec) -- needs SSTVAE_BUILD_CODEC\nimages::Picture render_planes(const OpenDecoder& decoder, const decode::Planes& planes);\nimages::Picture render_accumulator(const OpenDecoder& decoder, const store::Accumulator& acc);\n// native/apps/sstvae_qrss/decode.hpp (namespace sstvae::qrss::cli::decode_image) -- the codec hook\nstruct PictureRequest { std::string output; std::optional<std::string> model; std::string precision; bool any_codec = false; };\nstruct PictureRenderer { std::optional<std::string> (*refusal)(const PictureRequest&); int (*render)(const qrss::decode::Planes&, std::int64_t codec_id, const PictureRequest&, std::ostream& out, std::ostream& err); };\nPictureRenderer picture_renderer();  struct RegisterPictureRenderer { explicit RegisterPictureRenderer(PictureRenderer r); };\n// native/apps/sstvae_qrss/argparse.hpp (namespace sstvae::qrss::cli)\nArgParser& ArgParser::optional_positional(const std::string& name, const std::string& help = {});  // nargs='?', last positional only\n// CLI: sstvae-qrss decode [-h] [--key KEY | --pass PASS_FILE | --list] [--store STORE] [--em ROUNDS] [--retro] [--passband PASSBAND] [--frame FRAME] [--any-codec] [--model MODEL] [--precision {fp32,fp16,int8}] [--old-edge-noise] [output]\n// Python binding: sstvae_native.qrss.sources (Stamper, StdinSource/StreamSource, WavSource) self-registered; rows in tests/qrss_native/sources.py",
+   "tests": [
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -j2 --output-on-failure (all)",
+     "result": "88/88 passed, 70.8 s (includes new qrss_core_decode 139 checks, qrss_core_argparse_nargs 406 checks, qrss_core_sources, qrss_core_pynum_unicode, qrss_core_fileio_errno; existing qrss_core_argparse 229 checks still pass)"
+    },
+    {
+     "cmd": "SSTVAE_REQUIRE_CODEC=1 QRSSTVAE_MODEL_DIR=/home/user/qrss-data/models timeout 200 ctest --test-dir native/build-qrss-codec -j2 (all)",
+     "result": "89/89 passed, 72.8 s"
+    },
+    {
+     "cmd": "mutation: argparse.cpp '--' rule without the nargs='?' clause, rebuild test_qrss_core_argparse_nargs",
+     "result": "9 of 403 checks FAILED (restored afterwards)"
+    },
+    {
+     "cmd": "pytest -q tests/test_qrss_native_decode.py (plain tree, no codec half)",
+     "result": "6 passed, 1 skipped (test_png_only needs the codec), 52 s"
+    },
+    {
+     "cmd": "SSTVAE_REQUIRE_CODEC=1 QRSSTVAE_MODEL_DIR=... pytest -q -m 'not slow' tests/test_qrss_native_decode.py -k 'not side_by_side' (codec tree)",
+     "result": "5 passed, 62.5 s"
+    },
+    {
+     "cmd": "SSTVAE_REQUIRE_CODEC=1 QRSSTVAE_MODEL_DIR=... pytest -q -m 'not slow' tests/test_qrss_native_decode.py -k side_by_side (codec tree)",
+     "result": "2 passed, 86 s (PNG pixels equal on every rendered case)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_sources.py tests/test_qrss_native_pynum.py tests/test_qrss_native_cli.py (plain)",
+     "result": "343 passed, 42 skipped, 104 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_cli_receive.py tests/test_qrss_native_paths.py (plain)",
+     "result": "28 passed, 7 skipped, 3 deselected, 65 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_store.py tests/test_qrss_native_passband.py (plain)",
+     "result": "31 passed, 37 s"
+    },
+    {
+     "cmd": "SSTVAE_REQUIRE_CODEC=1 ... pytest -q -m 'not slow' tests/test_qrss_native_cli_receive.py (codec tree)",
+     "result": "10 passed, 1 skipped, 3 deselected, 61 s"
+    },
+    {
+     "cmd": "SSTVAE_REQUIRE_CODEC=1 ... pytest -q -m 'not slow' tests/test_qrss_native_cli.py (codec tree)",
+     "result": "338 passed, 1 skipped, 134 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_cli.py tests/test_qrss_multipass.py",
+     "result": "34 passed, 5 deselected, 14.7 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_cli.py tests/test_qrss_multipass.py",
+     "result": "34 passed, 5 deselected, 14.5 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_native_sources.py tests/test_qrss_native_pynum.py tests/test_qrss_native_decode.py",
+     "result": "1 passed, 52 skipped (parity files skip by design under the flag: 'parity tests compare with the Python reference')"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (529 files), includes ok (531 files)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -Wall -Wextra -c: core/qrss/decode.cpp, core/qrss/codec/decode.cpp, apps/sstvae_qrss/decode.cpp, apps/sstvae_qrss/codec/decode_image.cpp, apps/sstvae_qrss/argparse.cpp, tests/qrss/test_decode.cpp, tests/qrss/test_argparse_nargs.cpp",
+     "result": "all compile, no warnings"
+    }
+   ],
+   "parity": "decode, side by side (tests/test_qrss_native_decode.py), on a store written by the Python Store and one written by the C++ Store (the two writers' trees and uids identical): exit status and stdout byte-exact in every case -- 21 store cases per writer (--list, --key in upper/lower case and 0x form, --em 0 / -1, a mode-C picture with an L member and an EM-round member, a FULL pass with a merged foreign accumulator, a member whose pass file is gone (\"?\"), a codec-0007 picture with and without --any-codec, --pass of CE short/full, L l-short and a header-less pass, the render step's refusals: missing model dir, a dir without decoders, output dir missing, output is a directory), 57 shared refusal cases (parse_key: no colon, empty call, non-hex, empty id, quotes, whitespace/underscores/0x_/+/negative/40-digit ids, \u00df and ligature and Greek upper-casing, full-width/Arabic/NBSP digits, surrogate-escaped bytes, every one of the 1525 code points str.upper() changes in one key -> the same ENAMETOOLONG OSError line; --pass missing/dir/empty/text/.npy/bad zip/no meta; store under a file; 21 argparse errors including every '--' position), and 24+5 hand-edited accumulator indexes (modes 5/-1/-3/-4, uid int/None/list/dict/missing-file/'/'/'.', z_ref int/bool/str/None/list/dict/missing, etc.). stderr: SystemExit text exact; usage errors by the message after 'error: '; tracebacks by the last line (bad zip by class only). Directory listing after each run identical. Codec tree: PNG pixels identical (np.array_equal, 480x640x3) for every rendered case at fp32 and fp16; PNG bytes not compared (stb vs Pillow). Plain tree: stdout exact up to the render step, where the script (pointed at a missing model dir) and the subcommand both stop. ctest pins from CPython 3.13 / numpy: 19 str.upper strings, 13 hex formats, 20 parse_key results, 15 acc_lines cases (lines or exception text), 7 --pass lines (incl. NaN/inf/0/negative mean), 69 argparse nargs='?' command lines (status, stderr, parsed values) and 3 usage lines. Numerics: mean W and medians are 10*log10 by libc where the script uses numpy; equal at the printed 2 decimals in every case run (not compared beyond the print). Sources and pynum parity: as in commits a89dbeb/59bd840 (Stamper bit-exact; pynum exhaustive over Unicode spaces and Nd digits). Not compared: --em/--retro (refused), int8 precision (no int8 model in the test dir), '.' callsigns across implementations, --help body wrapping (the usage words are compared).",
+   "deviations": [
+    "--em ROUNDS > 0 or --retro with --key: refused as an argparse error (exit 2, 'sstvae-qrss decode: error: --em and --retro are not in this build yet; use qrss_decode.py') once the picture is found, where the script would run EM / the retro search; so --retro's own refusals (no passband store, --frame l-*, unknown frame) are never reached. With --pass or --list both are ignored exactly as the script does.",
+    "A picture name whose extension is not .png/.apng is refused at the render step (exit 1, '<out>: sstvae-qrss decode writes PNG only ...'), where Pillow writes that format (or raises ValueError 'unknown file extension' for none); the native image layer writes PNG only.",
+    "Without the codec half (SSTVAE_BUILD_CODEC=OFF) every picture is refused at the render step (exit 1) after all the lines and refusals the script prints first.",
+    "PNG bytes differ (stb's encoder vs Pillow's); pixels are identical.",
+    "--help is laid out at 78 columns, not the terminal width (the existing argparse layer's deviation); the usage words are the script's.",
+    "A --key picture ID beyond int64 whose index file actually exists is refused ('past the 64-bit IDs sstvae-qrss's store keys; use qrss_decode.py'); neither store implementation can write such a key, and a missing one is 'no picture' as in Python.",
+    "member_wave on a damaged (non-zip) pass file returns '?' where the script's pass_info may raise zipfile.BadZipFile, which it does not catch (inferred from code, not exercised).",
+    "Callsigns containing '.': the C++ store names an accumulator <stem>.json, store.py uses Path.with_suffix which truncates at the last '.', so such pictures are not found across implementations (see shared_changes_needed: store.py is the one that is wrong).",
+    "PassResult.load of a malformed npz: a missing member is KeyError with numpy's text; other malformed members end with types::PassResult::from_npz's own ValueError/TypeError text, which can differ from what numpy/json would raise (only the missing-meta case is compared).",
+    "mean W: 10*log10 from libc where the script uses numpy (could differ only on a 2-decimal rounding boundary)."
+   ],
+   "shared_changes_needed": [
+    "native/core/qrss/store.cpp: delete the local `int code_of(const std::error_code& ec)` (line 139) and call `util::errno_of(ec)` at its three uses (lines 295, 300, 676: file_error(\"cannot remove\"/\"cannot replace\"/\"cannot create\", ...)).",
+    "native/bindings/module/qrss/passband.cpp: delete the local `int errno_of(const std::error_code&)` (line 67) and call `util::errno_of(ec)` at line 74 (fspath::raise_os_error(...)).",
+    "native/core/qrss/passband.cpp: every `throw FileError(ec, ...)` (lines 127, 159, 228, 259, 263, 314, 333, 337) should carry `util::errno_code_of(ec)` (or FileError's constructor should apply util::errno_of once), so a Win32 code from rawfile.cpp's win_code() (line 40) reaches Python as the errno an OSError would carry.",
+    "APPLIED HERE, not named by the task, please review: native/apps/sstvae_qrss/argparse.{hpp,cpp} -- new ArgParser::optional_positional (nargs='?'), usage prints '[name]', the first '--' is taken by a pending nargs='?' positional even as the last argument, positional() throws std::logic_error after an optional positional; stale 'Unicode digits and spaces' line removed from the 'Not reproduced' comment. Pinned by native/tests/qrss/test_argparse_nargs.cpp; existing test_argparse.cpp unchanged and passing.",
+    "APPLIED HERE, not named by the task, please review: native/CMakeLists.txt -- inside `if(TARGET sstvae_qrss_codec)` the explicit target_sources(... apps/sstvae_qrss/codec/receive_image.cpp) is replaced by file(GLOB _qrss_cli_codec_sources CONFIGURE_DEPENDS apps/sstvae_qrss/codec/*.cpp) + target_sources(sstvae_qrss_cli PRIVATE ${_qrss_cli_codec_sources}), so decode_image.cpp (and a later listen_image.cpp) build without another edit.",
+    "native/apps/sstvae_qrss/subcommand.hpp line 11: the comment 'receive.cpp, listen.cpp, decode.cpp later (plan stages 2c and 3)' is stale -- receive.cpp and decode.cpp exist; only listen.cpp is later.",
+    "Reference lane, sstvae/qrss/store.py Store._acc_paths (lines 335-337): `stem.with_suffix(\".json\")` / `.with_suffix(\".npz\")` truncates key_name at its last '.' (the beacon alphabet contains '.'): ('K1.AB', 1) -> acc/K1.json, and two callsigns differing only after their last '.' share one accumulator. Should be `stem.parent / (stem.name + \".json\")` and `+ \".npz\"`, which is what the C++ store already does; existing stores with such names would need renaming."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "store.py names accumulator files with Path.with_suffix, which cuts key_name at the last '.'; callsigns may contain '.', so 'K1.AB' and 'K1.CD' pictures with the same ID share acc/K1.json, and the C++ store (which appends) cannot find them in a Python-written store.",
+     "evidence": "sstvae/qrss/store.py:336-337; native/core/qrss/store.cpp acc_paths appends '.json'"
+    },
+    {
+     "kind": "python-bug",
+     "what": "qrss_decode.py --key with a long callsign crashes with a traceback (OSError ENAMETOOLONG) instead of 'no picture': Python 3.13's Path.exists() swallows only ENOENT/ENOTDIR/EBADF/ELOOP and re-raises everything else.",
+     "evidence": "tests/test_qrss_native_decode.py case key-every-upper; qrss_decode.py:166"
+    },
+    {
+     "kind": "python-bug",
+     "what": "member_wave catches (OSError, KeyError, ValueError) only; a damaged pass file makes np.load raise zipfile.BadZipFile, so one corrupt .npz in the store crashes --list and --key for every picture that has it as a member.",
+     "evidence": "inferred from code: qrss_decode.py:58-63, store.pass_info -> np.load"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Live StdinSource's reader thread dies on a read error or a raising clock with nothing queued, so chunks() waits forever and never reports the end; the C++ StreamSource ends the stream instead and exposes error().",
+     "evidence": "native/core/qrss/sources.hpp:27-31 (commit a89dbeb), parity test in tests/test_qrss_native_sources.py"
+    },
+    {
+     "kind": "python-bug",
+     "what": "parse_key accepts negative picture IDs ('K1:-1') and prints them as '-0000001' (the sign inside the :08x width) in 'no picture ...'; harmless, but no valid key is negative.",
+     "evidence": "native/tests/qrss/decode_pins.hpp KEYS 'K1:-1'; test case key-negative"
+    },
+    {
+     "kind": "performance",
+     "what": "sstvae-qrss decode vs qrss_decode.py on the same store (best of 3): --list 0.030 s vs 1.131 s; --key full render at fp32 0.578 s vs 1.679 s; fp16 0.620 s vs 1.599 s. The script's time is mostly imports and model load.",
+     "evidence": "measured with subprocess timing in the codec tree, 2026-10-14"
+    },
+    {
+     "kind": "performance",
+     "what": "Binary size (RelWithDebInfo, with debug info): sstvae-qrss 62.4 MB plain, 68.4 MB with the codec glue.",
+     "evidence": "ls -l native/build-qrss/sstvae-qrss native/build-qrss-codec/sstvae-qrss"
+    },
+    {
+     "kind": "numerics",
+     "what": "acc_lines' mean W is numpy's mean of the heard float32 W widened to float64 then log10; the per-segment median is a float32 median; the --pass line takes np.mean of float32 w (pairwise float32 sum) before max(.,1e-30) -- NaN survives max() because max(nan, 1e-30) returns its first argument, printing '+nan'. Reproduced via npsum and pinned.",
+     "evidence": "native/tests/qrss/decode_pins.hpp PASSES (nan, inf, -1.0 cases)"
+    },
+    {
+     "kind": "simplification",
+     "what": "str.upper() is a 1525-entry generated table (full case mapping incl. SpecialCasing expansions like \u00df->SS, \u0149->\u02bcN); lower_bound over it plus pass-through of invalid UTF-8 bytes reproduces surrogate-escape behaviour with no ICU dependency.",
+     "evidence": "tools/gen_qrss_unicode_tables.py UPPER; test case key-every-upper compares all 1525 through the OSError path"
+    },
+    {
+     "kind": "process",
+     "what": "argparse nargs='?' semantics are subtle in CPython 3.13: the first '--' is dropped only inside a positional's match, an optional positional still to fill takes a trailing '--' (value None), and a zero-width match before an option is deferred. Generating 69 command-line pins from CPython and mutation-testing the rule (9 failures) was cheaper than reasoning it out.",
+     "evidence": "native/tests/qrss/gen_argparse_nargs_pins.py; mutation run 9 of 403 checks failed"
+    },
+    {
+     "kind": "process",
+     "what": "Side-by-side CLI tests on stores need a plain-tree mode: point the script at a nonexistent model directory so it stops at render.load exactly where the codec-less subcommand refuses the picture, then compare stdout exactly; with the codec, compare everything plus pixels. Copy the store per side (not symlink) and compare the directory tree after, since Store() creates directories.",
+     "evidence": "tests/test_qrss_native_decode.py check()"
+    },
+    {
+     "kind": "process",
+     "what": "Win32 trap: a seam type named Sleep in the live namespace shadows ::Sleep for unqualified calls; the Windows close path calls ::Sleep explicitly. Also a nested Options struct with member initializers cannot be a default argument inside its own class, hence StreamOptions/WavOptions at namespace scope.",
+     "evidence": "native/core/qrss/sources.cpp:322; sources.hpp:151-152"
+    },
+    {
+     "kind": "process",
+     "what": "The sandbox refuses shell variables and compound commands in the worktree; smoke comparisons were run from a scratch Python script with literal paths. The codec-tree decode file took 188 s before trimming the edited-accumulator --key cases to five; split by -k it is 62 s + 86 s.",
+     "evidence": "pytest timings in this session"
+    }
+   ],
+   "notes": "Three commits on worktree-wf_cf5767ef-ab8-2 (base 136c208), not pushed:\n- a89dbeb: audio sources.\n- 59bd840: shared utilities (errno_of, the Windows replace_file retry, pynum Unicode).\n- d501f75: the decode subcommand.\n\nTwo edits fall outside the task's named files. Both are applied, additive, and listed in shared_changes_needed for review:\n- argparse.{hpp,cpp}: optional_positional.\n- native/CMakeLists.txt: globs apps/sstvae_qrss/codec/*.cpp.\n\nThe codec tree native/build-qrss-codec is now configured and built. It uses the plain tree's options plus -DSSTVAE_BUILD_CODEC=ON -DSSTVAE_ONNXRUNTIME_DIR=/home/user/sstvae/native/build/_deps/onnxruntime_prebuilt-src.\n\n--em/--retro refusal: it comes after the 'no picture' check, so a missing key still gets the script's own refusal. The refusal's text and exit status are checked by test_em_and_retro_are_refused.\n\nThe new ctests are qrss_core_decode and qrss_core_argparse_nargs. Their pins come from generators, which must be re-run from the repository root if the cases change:\n- native/tests/qrss/gen_decode_pins.py: reads qrss_decode.py itself.\n- native/tests/qrss/gen_argparse_nargs_pins.py: reads CPython's argparse.\n\ntests/test_qrss_native_decode.py skips without the binary. It needs QRSSTVAE_MODEL_DIR (or qrss_helpers' default directory) holding the v5 decoder at fp32 and fp16 for the codec tree; SSTVAE_REQUIRE_CODEC=1 turns that skip into a failure. Run its fast tier in two halves (-k side_by_side, then -k 'not side_by_side') to stay under 3 minutes each in the codec tree.\n\nThe wave-8 store and passband call sites (code_of, the binding's errno_of, FileError(ec, ...)) were left alone because they are not this lane's files. The exact edits are in shared_changes_needed.\n\nInsights from the earlier commits that I could not re-quote with numbers here: the tolerance of the resampled read_wav path, and the Stamper's held NaN (refused with 'cannot convert float NaN to integer'). They are in the sources and pynum parity tests (tests/test_qrss_native_sources.py, tests/test_qrss_native_pynum.py)."
+  }
+ },
+ {
+  "label": null,
+  "value": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1",
+   "branch": "worktree-wf_cf5767ef-ab8-1",
+   "commit": "10d22c0",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1/native/core/qrss/listener.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1/native/core/qrss/listener.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1/native/tests/qrss/test_listener.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1/native/tests/golden_qrss/listener_pins.json",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1/tools/gen_qrss_listener_pins.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-1/tests/test_qrss_native_listener.py"
+   ],
+   "api": "No public API changed in the review. Every change is private or behind the existing interface. The lane's API stands as committed:\nsstvae::qrss::live::LiveListener(std::string state_dir, LiveConfig cfg = {}, std::shared_ptr<store::Store> store = nullptr, std::shared_ptr<passband::PassbandStore> passband = nullptr, Seams seams = {});\nvoid LiveListener::feed(std::span<const double> x, double t_end);\nbool LiveListener::step(double now);\nstd::vector<acquire::Hint> LiveListener::hints(std::int64_t q, std::optional<std::int64_t> dial);   // now reads store.due before taking the listener lock\nstd::vector<Tile> LiveListener::tiles() const; std::optional<std::string> busy() const; std::vector<std::string> lines() const;\nvoid write_state(bool listening = true); double backfill(double now); std::vector<std::int64_t> recover(double now, double hours = RECOVER_HOURS);\nbool idle() const; bool finish_idle() const; bool wait_idle(std::optional<double> timeout_s = std::nullopt) const; void close();\nvoid run(LiveListener& listener, Source& source, bool realtime, const std::atomic<bool>* stop = nullptr);\nstd::string error_name(const std::exception& e); std::string error_text(const std::exception& e);   // error_text now = error_name + \": \" + str(e)\nNew private members: struct LiveListener::DueRead { std::vector<store::Due> due; std::optional<std::string> error; }; DueRead read_due(std::int64_t q) const; hints_locked(q, dial, const DueRead&).",
+   "tests": [
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core",
+     "result": "62/62 passed (70.6 s). qrss_core_listener now has 133 checks, including the new store-held regression test"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss-codec -R 'qrss_core_(listener|render)'",
+     "result": "2/2 passed"
+    },
+    {
+     "cmd": "mutation: store.due read under mu_ (both read_due call sites in candidates_for collapsed into the lock), then test_qrss_core_listener",
+     "result": "FAILED as intended: 'feed() and step() did not wait for it (worst 7.68 s)'. Restored afterwards"
+    },
+    {
+     "cmd": "mutation: job_failed retires a refresh (if(false)), then test_qrss_core_listener",
+     "result": "FAILED as intended: received 1 time, wanted 3"
+    },
+    {
+     "cmd": "mutation: refresh error logged every time, then test_qrss_core_listener",
+     "result": "FAILED as intended: said 2 times, wanted 1"
+    },
+    {
+     "cmd": "mutation: text 'a later pass is due at' changed, against the pre-review pins and parity file",
+     "result": "SURVIVED both (16/16 parity, ctest ok). Coverage gap, now closed"
+    },
+    {
+     "cmd": "same mutation, after the new pins (due_hint_ce, due_hint_joint) and test_a_later_pass_due_through_the_refresh",
+     "result": "FAILED as intended in the ctest pins and in the parity test"
+    },
+    {
+     "cmd": "mutation: 'store failed: ' + e.what() (the pre-review code)",
+     "result": "FAILED as intended in test_a_store_that_fails_keeps_the_tile: \"store failed: KeyError: 'callsign'\" against the reference's \"store failed: 'callsign'\""
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss/python pytest tests/test_qrss_native_listener.py",
+     "result": "20 passed, 1 skipped (codec not built in this tree), 37.7 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=native/build-qrss-codec/python pytest tests/test_qrss_native_listener.py",
+     "result": "21 passed, 58.6 s. Before the test fix, the codec-renderer test failed here because the C++ cache had no model and huggingface_hub's did"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_live.py (plain / --native-qrss=rx)",
+     "result": "37 passed (33.9 s) / 37 passed (16.9 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_live_l.py (plain / --native-qrss=rx)",
+     "result": "17 passed, 3 deselected (2.9 s) / 17 passed, 3 deselected (2.0 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_live.py",
+     "result": "26 passed, 5 deselected (20.7 s)"
+    },
+    {
+     "cmd": "python tools/gen_qrss_listener_pins.py --check",
+     "result": "up to date (regenerated with the 2 new scenarios)"
+    },
+    {
+     "cmd": "python tools/check_layering.py; python tools/check_includes.py",
+     "result": "layering ok (516 files); includes ok (518 files)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only on listener.cpp, test_listener.cpp, and a probe that includes <windows.h> first and then listener.hpp, with #ifdef max #error",
+     "result": "clean"
+    },
+    {
+     "cmd": "uncommitted fuzz probe (random stub scenarios through both listeners, sync mode; odd seeds use a real Store and real PassResults with each listener's own associate, then store trees compared): FUZZ_N=40 / 30 / 120 on new seed bases",
+     "result": "190/190 identical (lines, tiles, state.json, listener.log, pictures, calls, store trees). Covers stored (header) / provisional notes, codec mismatch, provisional pictures (47 seeds with pictures). Probe deleted, not committed"
+    }
+   ],
+   "parity": "Byte-identical in sync mode (the reference's synchronous listener against the C++ with the same stubs): every receiver call and its arguments, step results, log lines and the sink, tiles (to_json), state.json and listener.log text, tile pictures pixel for pixel, and the store trees (via _store.compare_trees, which tolerates its documented log10 last-place difference). This holds over the parity file's 21 tests, 9 ctest pin scenarios (2 new), and 190 fuzz seeds. Real receiver (TINY CE/L): tolerance as the lane reported (f_hz within 0.1 Hz, snr within 0.3 dB), unchanged by this review. Codec renderer: pixel-identical given the same decoder file. Not compared: background-mode interleavings (only their invariants are checked: feed/step never wait on a receive or on the store, close semantics). Also not compared is an accumulator JSON whose structure is not a dict of lists of dicts: there the store implementations differ (see shared_changes_needed).",
+   "deviations": [
+    "Unchanged from the lane, still documented in listener.hpp: an exception in a live refresh is logged once per (slot, message) and the slot is retried. The reference retires it, and in sync mode raises it out of step().",
+    "Unchanged: an unreadable state.json, or one with an unexpected structure, starts the listener fresh. The reference raises from its constructor.",
+    "Unchanged: idle() is exact.",
+    "Unchanged: state.json is strict JSON, writing null where the reference writes NaN.",
+    "New, threads only: store.due(q) is read before the listener lock is taken, not under it, so a concurrent association can land between the read and the hints' use. In sync mode there is no difference (fuzz-confirmed).",
+    "New, threads only: refresh() takes elapsed and progress before the capture read, not with it. The reference holds one lock across all three. The C++ read runs unlocked, so this is the conservative order. Same in sync mode.",
+    "Removed from listener.hpp: a false claim that 'two passes applied to one tile in one receive draw it once (image_rev counts one fewer)'. The C++ renders each pass before applying the next, exactly as the reference does."
+   ],
+   "shared_changes_needed": [
+    "Store::due (native/core/qrss/store.cpp, wave 8 store lane; also edited by the wave 9a reference-fixes lane) against store.due in sstvae/qrss/store.py. When an accumulator JSON is not a dict of lists of dicts, the reference raises TypeError out of due() and the C++ skips the file silently. Measured cases: members=5, meta=[1,2], meta=\"str\", meta=null, members={...}, a member that is an int, a uid that is an int. Through the listener, the reference logs \"hints: <str(e)>\" and gets no store hints for any picture; the C++ keeps the other accumulators' hints. Recommended fix, a reference-fixes item: add TypeError to store.due's except tuple, so one malformed file cannot hide every picture's later passes. The alternative is to make the C++ raise math::TypeError with Python's text. Either needs a parity row; the probe is in scratchpad w9a_rv/due_probe.py."
+   ],
+   "insights": [
+    {
+     "kind": "process",
+     "what": "Threads only: the lock order between the listener and the store was the one real concurrency bug. Store holds its recursive root mutex for a whole association (npz writes and fsync), and the listener called store.due while holding its own lock. feed() was then coupled to disk I/O in the other worker, which the header claimed could not happen. Nothing caught it because every test stubs the store out or runs it synchronously.",
+     "evidence": "new ctest test_the_store_is_never_waited_on_under_the_lock; mutation measured feed() blocked 7.68 s (the holder's timeout) against <1 ms fixed"
+    },
+    {
+     "kind": "process",
+     "what": "A user-visible log line ('a later pass is due at ...') had no oracle anywhere. The pins and the 16 parity tests all passed with the text changed, because every hints scenario called _hints directly or joined late. The new pin and parity scenarios drive it through the live refresh.",
+     "evidence": "mutation 3 survived the ctest and test_qrss_native_listener.py before the review and fails both after"
+    },
+    {
+     "kind": "numerics",
+     "what": "Python's f\"...: {e}\" on a KeyError prints the key's repr only, while the port's KeyError what() includes the 'KeyError: ' prefix. error_text already stripped it, but four other sites (hints:, store failed:, renderer load/check/render) used what() directly.",
+     "evidence": "test_a_store_that_fails_keeps_the_tile: \"store failed: 'callsign'\" (reference) against \"store failed: KeyError: 'callsign'\" (pre-review C++)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "store.due catches only (OSError, KeyError, ValueError) per accumulator. A structurally malformed accumulator raises TypeError out of due(), and LiveListener._hints logs it and drops the store's hints for every picture, not just the bad one.",
+     "evidence": "scratchpad w9a_rv/due_probe.py: 7 of 10 malformed shapes raise TypeError in Python, while the C++ returns []"
+    },
+    {
+     "kind": "process",
+     "what": "The codec-renderer parity test let the C++ resolve its own model cache while Python used huggingface_hub's. So it failed rather than skipped wherever only the HF cache holds the model, which is this machine without SSTVAE_MODEL_CACHE. It now hands the C++ the exact decoder file the reference loaded, which also makes the 'same artifact' claim literal.",
+     "evidence": "tests/test_qrss_native_listener.py test_the_codec_renderer_draws_the_references_pictures: failed with 'no v5-decoder-fp32.onnx in /root/.cache/sstvae/models' before, passes after"
+    },
+    {
+     "kind": "performance",
+     "what": "feed() latency while a receive is in flight, measured by the ctest: p50 ~100 us, p95 ~130-230 us, max 0.25-1.5 ms per 0.25 s chunk. The full listener parity file runs in 37.7 s, 58.6 s with the codec tree. qrss_core_listener runs in 3.7 s.",
+     "evidence": "test_qrss_core_listener output: 'feed() during a receive: p50 98.2 us, p95 201.7 us, max 1503.9 us (120 chunks of 0.25 s)'"
+    },
+    {
+     "kind": "process",
+     "what": "A random-scenario fuzz of both listeners was the most productive probe: 190 seeds identical, including real stores. It needs real PassResult dataclasses on store seeds, because the Python store calls p.save()/asdict(). Duck-typed stubs then fail only on the Python side and read as false divergences.",
+     "evidence": "first store-fuzz runs diverged with \"store failed: '_Pass' object has no attribute 'save'\" and \"asdict() should be called on dataclass instances\", both probe artifacts"
+    }
+   ],
+   "notes": "Findings, in addition to the list above:\nA (fixed) Store lock waited on under the listener lock: hints_locked called store_->due(q) with mu_ held, from the live worker's candidates_for, from finish(), and from hints(). The store's root mutex is held by associate() for a whole transaction, so feed()/step()/tiles() in the app thread blocked behind the end-of-slot worker's association writes. Fix: read_due() outside mu_, result passed into hints_locked. Regression ctest added and mutation-checked.\nB (fixed, minor) refresh() read elapsed/progress after capture_read, which runs unlocked. Audio fed in between counted toward the tile's progress without being in its receive. Both are now read before the read.\nC (fixed, documentation) listener.hpp's departure bullet 'two passes applied to one tile in one receive draw it once' was false and is removed.\nD (fixed) str(e) texts: 'hints: ', 'store failed: ', and the renderer's load/check/render notes used what(). A pyjson::KeyError's what() carries a 'KeyError: ' prefix that Python's str(e) lacks. py_str_of() now serves all of them, and error_text uses it.\nE (fixed, coverage) 'a later pass is due at' (the live refresh's hint path) was covered by no pin and no parity test. Added pin scenarios due_hint_ce and due_hint_joint, the parity test test_a_later_pass_due_through_the_refresh (CE, joint, and a store whose due() raises TypeError in both implementations), and test_a_store_that_fails_keeps_the_tile.\nF (fixed, test) The codec-renderer parity test depended on the C++ model cache, so it failed with only the HF cache present. It now gives the C++ the reference's resolved decoder file.\nG (not fixed, other lane) Store::due swallows structural TypeErrors that Python's store.due raises. See shared_changes_needed.\nChecked and found OK: GIL discipline in the binding (every core call is nogil; seams take the GIL), close/destructor with a receive in flight, sink delivery outside the lock, state.json key order and ensure_ascii, render generation and png_mu ordering, and MinGW include order with windows.h first.\nAccepted residual edges, background mode only: a picture written for generation g can sit on disk briefly after a newer update bumps the generation, until the newer render overwrites it; close() waits up to CLOSE_PACKER_S on the packer, as specified.\nNot committed: the fuzz and due probes (copies in /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/w9a_rv/)."
+  }
+ },
+ {
+  "label": null,
+  "value": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3",
+   "branch": "worktree-wf_cf5767ef-ab8-3",
+   "commit": "0be27ca0aafa3789155f2b7c69924bee7e261298",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/sstvae/qrss/store.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/sstvae/qrss/associate.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/sstvae/qrss/frontend.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/sstvae/qrss/live.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/store.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/store.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/associate.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/associate.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/rawfile.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/rawfile.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/passband.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/passband.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/live.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/core/qrss/live.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/bindings/module/qrss/store.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/bindings/module/qrss/associate.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/bindings/module/qrss/passband.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/qrss/test_store.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/qrss/test_associate.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/qrss/test_passband.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/qrss/test_live.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/qrss/gen_store_pins.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/qrss/store_pins.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/golden_qrss/live_pins.json",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/native/tests/golden_qrss/rx_pins.json",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tools/gen_qrss_live_pins.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tests/test_qrss_multipass.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tests/test_qrss_frontend.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tests/test_qrss_live.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tests/test_qrss_native_store.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tests/test_qrss_native_associate.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tests/test_qrss_native_passband.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3/tests/test_qrss_native_live.py"
+   ],
+   "api": "// store (native/core/qrss/store.hpp)\ndouble Store::median_w(std::int64_t g, std::int64_t n = SENT) const;   // np.median of W over group g's first n sent latents in air order (rule 1 gates on the pass's own prefix)\nrawfile::Signature Store::signature(const std::string& path) const;    // os.stat (mtime_ns, size); FileError when it cannot be stat'ed\nstruct Store::Cached { ZWPtr zw; rawfile::Signature sig; };            // the LRU now keeps each pass with the signature it was read at; a changed file is read again\nstruct Store::LightEntry { PassInfo info; rawfile::Signature sig; };\n// prov_add(uid, nullopt) makes \"c_<uid>\", or \"c_<uid>_<n>\" (smallest free n >= 2) when that file exists; it never writes over a cluster\n// due(): an accumulator that cannot be read gives no rows (not partial ones)\n// temporary names \".<name>.<pid>.<thread id>.tmp\"; an empty $HOME counts as unset\n// rawfile (native/core/qrss/rawfile.hpp)\nstruct rawfile::Signature { std::int64_t mtime_ns = 0; std::uint64_t size = 0; bool operator==(const Signature&) const = default; };\nstd::optional<rawfile::Signature> rawfile::signature(const std::string& path, std::error_code& ec);\n// associate (native/core/qrss/associate.hpp)\nstruct Corr { double t = 0.0; std::int64_t M = 0; };                   // `numpy` flag removed (the reference's t is a Python float now)\nstruct Validation { bool ok = true; pyjson::Value details; };          // `t_numpy` flag removed; a merge's log writes \"accepted\" as true/false\n// passband (native/core/qrss/passband.hpp)\ninline constexpr double PB_TMP_AGE_S = 3600.0;                         // expire() deletes the store's temporaries older than this, by the wall clock\n// PassbandStore(...): fs <= 0 (from its arguments or meta.json) throws std::invalid_argument before meta.json is written\n// pack_hour: one at a time; temp \"fe_<hour>.flac.<pid>.<thread>.tmp\"; FLAC fsynced before the swap; refuses if the raw mtime moved or an in-process write reached the hour\n// write_capture: the gain comes from the finite samples' peak\n// read: a raw hour shorter than an hour reads as unwritten (mask 0) past its end\n// hour_of(name): ASCII digits only, nothing after the extension\n// live (native/core/qrss/live.hpp)\nvoid FeRing::write(std::int64_t n0, std::span<const std::complex<float>> x);   // the part behind the window (n0 < end - n) is dropped; a non-empty write to a 0-sample ring throws std::out_of_range\n// capture_prepare(...) and finish_gate(...) / FinishGate::heard: 0.0 for an empty frame slice (was NaN); mean_of returns 0.0 for an empty span\n// parse_dial_text: lines that raised OverflowError in the reference (an infinite dial, a time past float's range) are skipped by both\n// Tile::to_json: strict JSON (non-finite floats null), byte-identical to json.dumps(tile.to_json())\n// test binary: test_qrss_core_live now takes the golden dir as argv[1] (reads native/tests/golden_qrss/live_pins.json)\n// Python reference (sstvae/qrss/live.py), new module-level helpers (no new constants, so rx_config.hpp is unchanged)\ndef _share_heard(ok, origin: int, k1: int) -> float\ndef _finite_or_none(v)",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2",
+     "result": "built clean"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core --output-on-failure",
+     "result": "61/61 passed (39 s); test_qrss_core_live has 277 checks, reading live_pins.json"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 python -m pytest -q -p no:cacheprovider tests/test_qrss_native_store.py tests/test_qrss_native_associate.py",
+     "result": "45 passed"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=... timeout 200 python -m pytest -q -p no:cacheprovider tests/test_qrss_native_passband.py tests/test_qrss_native_live.py",
+     "result": "47 passed"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=... timeout 200 python -m pytest -q -p no:cacheprovider tests/test_qrss_native_acceptance.py",
+     "result": "20 passed (pins current after tools/gen_qrss_rx_reference.py --all)"
+    },
+    {
+     "cmd": "timeout 200 python -m pytest -q -p no:cacheprovider -m 'not slow' tests/test_qrss_live.py tests/test_qrss_live_l.py",
+     "result": "72 passed, 3 deselected in 24.5 s"
+    },
+    {
+     "cmd": "timeout 200 python -m pytest -q -p no:cacheprovider -m 'not slow' tests/test_qrss_multipass.py tests/test_qrss_frontend.py",
+     "result": "69 passed, 1 deselected in 11.8 s"
+    },
+    {
+     "cmd": "timeout 200 python -m pytest -q -p no:cacheprovider -m 'not slow' tests/test_qrss_em.py tests/test_qrss_cli.py",
+     "result": "12 passed, 15 deselected in 19.0 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=... timeout 200 python -m pytest -q -p no:cacheprovider --native-qrss=rx -m 'not slow' tests/test_qrss_live.py tests/test_qrss_live_l.py",
+     "result": "72 passed, 3 deselected in 17.1 s"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=... timeout 200 python -m pytest -q -p no:cacheprovider --native-qrss=rx -m 'not slow' tests/test_qrss_multipass.py tests/test_qrss_frontend.py",
+     "result": "66 passed, 3 skipped, 1 deselected in 7.9 s. The 3 skips are new frontend tests that spy on the Python PassbandStore's internals; test_passband.cpp pins the same behaviour."
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=... timeout 200 python -m pytest -q -p no:cacheprovider --native-qrss=rx -m 'not slow' tests/test_qrss_em.py tests/test_qrss_cli.py",
+     "result": "12 passed, 15 deselected in 13.7 s"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (508 files), includes ok (509 files)"
+    },
+    {
+     "cmd": "python tools/gen_qrss_live_pins.py --check; python tools/gen_qrss_rx_config.py --check; native/tests/qrss/gen_store_pins.py (regenerated)",
+     "result": "all current"
+    },
+    {
+     "cmd": "the new regression tests copied into scratchpad/oldref (the reference at 136c208) and run there, then deleted",
+     "result": "each new test fails on the old reference for the intended reason (18 live cases, plus the store/multipass and frontend ones) and passes now"
+    }
+   ],
+   "parity": "Bit for bit: FeRing contents, its ok mask and `end` (both a Python int, type checked in _ring_same), including writes behind the window (dropped in both) and numpy indices. Also bit for bit: restrict masks (spans as a list or a generator), capture_prepare and finish_receive results with heard 0.0 for an empty slice, DialLog points/spans/by_dial/span_at for every pinned dial file except a dial past int64, store median_w and rule-1 gating, prov_add cluster naming, due() rows, and the passband read masks for a short raw hour. Byte for byte: Tile JSON text (== json.dumps(tile.to_json()), with null for NaN/inf in both and no NaN token), store trees through compare_trees, passband files (meta.json, raw .i16, FLAC) and the temporary names, and the merge log's \"accepted\" as true/false. No tolerances were added or loosened. rx_pins.json regenerated: only the frontend.py and live.py source hashes moved; every receiver summary is unchanged. Not compared here: the y/aa listener behaviour against the C++ listener, which is in the listener lane's worktree, not this branch. Python-only checks (worker retry/log-once, a bad state.json starting fresh, DialLog read as UTF-8 under LC_ALL=C) are covered by tests/test_qrss_live.py. The per-pass \"signal(s) at\" log (item v) is not changed anywhere. See shared_changes_needed.",
+   "deviations": [
+    "DialLog: a dial value past int64 is skipped by the C++ but kept as a Python int by the reference. It is pinned in test_qrss_native_live.py::test_dial_log_deviations and in live_pins.json's 'dials past int64' case. The OverflowError lines (an infinite dial, a time past float's range) were the other half of this deviation and are now skipped by both.",
+    "Tile::from_json refuses a wrong-typed field (for example a null f_hz, which is what to_json now writes for a non-finite f_hz), where the reference's Tile(**d) keeps whatever it is given. This predates this lane. test_live.cpp special-cases the 'every float not finite' tile, and _load_previous still drops a tile Tile() cannot take.",
+    "Pre-existing, still pinned: store key_name/slot_time raise OverflowError for integers past int64; an int clock is written as a float; passband raw writes are not fsynced (the reference's mm.flush is msync); C++ packing needs nothing installed.",
+    "Python's synchronous LiveListener.step() still raises a live refresh's exception (item aa was scoped to _worker). The C++ listener logs it and retries in both modes; that is the listener lane's design."
+   ],
+   "shared_changes_needed": [
+    "(v, Python; outside this lane's live.py region) sstvae/qrss/live.py LiveListener._refresh, line ~1320: the line `self.log(f\"slot {utc_iso(slot_t0(s.q) - 1)}: {len(passes)} signal(s) at \" f\"{100 * self._progress(s.q):.0f}% ({time.time() - t_start:.0f} s)\")` is inside `for p in passes:` after `t.status = ...`, so it logs once per taken pass. Set `took = 0` before the loop, replace the log with `took += 1`, and after the loop (still under `with self.lock:`) add `if took: self.log(<the same f-string>)`. Then regenerate tools/gen_qrss_rx_reference.py --all (rx_pins hashes live.py) and tools/gen_qrss_listener_pins.py.",
+    "(v, C++; listener lane) native/core/qrss/listener.cpp, ~1716-1738: count the taken passes and move the log_locked(\"... signal(s) at ...\") call out of the per-pass loop, logging it once when the count is > 0. Then regenerate native/tests/golden_qrss/listener_pins.json with tools/gen_qrss_listener_pins.py.",
+    "(y; listener lane) tests/test_qrss_native_listener.py::test_a_bad_state_file_starts_fresh (~line 850-858): remove `with pytest.raises(Exception): live.LiveListener(d, ...)` and assert the reference starts fresh too: `P = live.LiveListener(d, live.LiveConfig(spec=TINY, render=False), log=lambda m: None); assert P.tiles() == [] and P.finished == set()`. Update its docstring: no longer a deviation, both start fresh. Optionally widen `bad` to this lane's set: '\"x\"', 'null', '{\"finished\": \"12\"}', '{\"tiles\": {\"a\": 1}}', '{\"finished\": [1e400]}', '{\"tiles\": [{\"status\": \"complete\", \"q\": \"x\"}]}', '{\"tiles\": [{\"status\": \"lost\", \"q\": 3, \"snr_db\": \"x\"}]}'. Without the first edit this test FAILS once this branch merges with the listener lane.",
+    "(aa; listener lane) tests/test_qrss_native_listener.py module docstring lines ~27-30 and the docstring of test_an_exception_in_a_refresh_is_logged_once_and_retried: change 'the reference's synchronous listener raises it out of step() and its worker retires the slot' to 'the reference's synchronous listener raises it out of step(); its worker, like the C++, logs it once per slot and message and retries'. The test's code stays valid: it only checks the synchronous reference raising.",
+    "After merging with the listener lane, run `python tools/gen_qrss_listener_pins.py --check` and test_qrss_native_listener.py. The listener pins hold the reference's Tile.to_json and state.json text, which now write null where they wrote NaN/Infinity. Regenerate the pins if --check reports stale."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "Store rule 1 took the median W over the whole group, so a SHORT/MEDIUM/TINY frame's accumulator had median 0 forever and collisions were never checked. It now gates on the median over the pass's own air-order prefix.",
+     "evidence": "sstvae/qrss/store.py median_w(g, n); regression test in tests/test_qrss_multipass.py fails at 136c208"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Five store bugs. prov_add wrote over an existing cluster file c_<uid>. ZW_CACHE=0 raised KeyError. due() returned partial rows when an accumulator failed partway. A pass cached in one process was served stale after another process (qrss_decode's EM) rewrote it. An empty $HOME put the store under /.",
+     "evidence": "commit b3596d0; tests/test_qrss_multipass.py regression tests"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Temporary names carried only the pid, so two threads of one process collided on one .tmp (store JSON, and concurrent pack_hour in the passband store).",
+     "evidence": "store.py/frontend.py temp names now <pid>.<threading.get_ident()>; tests in test_qrss_multipass.py and test_qrss_frontend.py"
+    },
+    {
+     "kind": "python-bug",
+     "what": "PassbandStore bugs. pack_hour's stat sat outside its try, so a raw hour vanishing ended the packer pass with FileNotFoundError. A negative fs hung read(). A short raw hour (a crash before sizing) was unreadable. Stale temporaries were never cleaned. _HOUR_RE's \\d took non-ASCII digits and $ accepted a trailing newline. _merge_ranges returned numpy ints.",
+     "evidence": "commit d6ea91e; tests/test_qrss_frontend.py, each failing on the old reference"
+    },
+    {
+     "kind": "python-bug",
+     "what": "FeRing.write behind the ring's window landed on the slots of newer samples and overwrote them. A numpy index made `end` an np.int64.",
+     "evidence": "tests/test_qrss_live.py::test_a_ring_write_behind_its_window_is_dropped"
+    },
+    {
+     "kind": "python-bug",
+     "what": "DialLog bugs. An infinite dial (or a time past float's range) raised OverflowError out of refresh, and out of the listener's receive. Under the C locale the file was not read as UTF-8, so U+0085 between two changes lost both.",
+     "evidence": "tests/test_qrss_live.py::test_the_dial_log_skips_an_infinite_dial and ::test_the_dial_log_is_read_as_utf8_whatever_the_locale (subprocess, LC_ALL=C, PYTHONUTF8=0)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "restrict iterated its spans twice, so a generator came back as nothing heard.",
+     "evidence": "tests/test_qrss_live.py::test_restrict_takes_its_spans_once"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Listener state bugs. state.json carried NaN/Infinity tokens, which a strict JSON reader refuses. A state.json of the wrong shape raised out of LiveListener's constructor, so the listener could not start until the file was removed by hand. One live-refresh exception in the background worker retired the slot, losing the rest of it, end-of-slot receive included.",
+     "evidence": "tests/test_qrss_live.py::test_a_tile_writes_strict_json, ::test_a_state_file_of_another_shape_starts_the_listener_fresh[11 cases], ::test_a_failed_live_refresh_is_retried_and_logged_once"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Not fixed here (outside the allowed region): LiveListener._refresh logs 'N signal(s) at X%' once per taken pass rather than once per refresh, and the C++ listener copies it.",
+     "evidence": "sstvae/qrss/live.py:1320 (inside `for p in passes:`); listener lane listener.cpp ~1734"
+    },
+    {
+     "kind": "numerics",
+     "what": "np.mean of an empty slice is NaN (with a RuntimeWarning). It reached the 'heard' share when origin < 0 made ok[origin:k1] empty, and the C++ mean_of had copied the NaN for parity. Both now give 0.0, under np.errstate(all='raise') too.",
+     "evidence": "live.py _share_heard; test_the_share_heard_of_an_empty_slice_is_zero; native/core/qrss/live.cpp mean_of"
+    },
+    {
+     "kind": "numerics",
+     "what": "write_capture took its attenuation from a peak that included inf, which overflowed the gain. It now uses the finite samples' peak, and a non-finite sample is stored as write() stores it.",
+     "evidence": "frontend.py write_capture; test_qrss_frontend.py regression test"
+    },
+    {
+     "kind": "simplification",
+     "what": "Once the reference writes corr_stat's t as a Python float and 'accepted' as a bool, the port drops two type-tracking flags it carried only to reproduce numpy scalar formatting (Corr::numpy, Validation::t_numpy).",
+     "evidence": "native/core/qrss/associate.hpp diff 136c208..HEAD"
+    },
+    {
+     "kind": "simplification",
+     "what": "test_live.cpp's hand-printed pins became tools/gen_qrss_live_pins.py, which writes golden_qrss/live_pins.json, plus a staleness test in test_qrss_native_live.py. After fixing the reference, one rerun replaced editing about 20 expectations by hand, and the C++ test now covers 10 dial files and 7 tiles from the reference itself.",
+     "evidence": "live_pins.json 769 lines; test_qrss_core_live 277 checks"
+    },
+    {
+     "kind": "process",
+     "what": "A reference fix in one lane breaks other lanes' parity tests that pinned the old reference behaviour as a deviation. test_qrss_native_listener.py asserts pytest.raises on the reference's bad state.json, and that fails after merge. Pin deviations as 'the C++ does X' rather than as an assertion on the reference's failure, or fix the reference before the parity tests are written.",
+     "evidence": "listener lane tests/test_qrss_native_listener.py:854"
+    },
+    {
+     "kind": "process",
+     "what": "rx_pins.json hashes every Python source the C++ receiver mirrors, frontend.py and live.py included. Reference fixes to the store/listener halves of those files therefore force `gen_qrss_rx_reference.py --all` even though no receiver output moved: only the two hashes changed and every summary stayed byte-identical.",
+     "evidence": "commit 0be27ca: rx_pins.json 4-line diff"
+    },
+    {
+     "kind": "process",
+     "what": "A copy of the old reference in the scratchpad (oldref/) makes 'the regression test fails on the old code' a cheap, checked claim rather than an assumption. Every new test here was run against it.",
+     "evidence": "18 live cases plus store/frontend cases, each failing at 136c208"
+    },
+    {
+     "kind": "performance",
+     "what": "Fast tiers measured for the touched files on 4 shared CPUs: 61 qrss_core ctests in 39 s; live+live_l 24.5 s plain and 17.1 s native; multipass+frontend 11.8 s plain and 7.9 s native; em+cli 19.0 s plain and 13.7 s native.",
+     "evidence": "measured 2026-10-14 in this worktree"
+    }
+   ],
+   "notes": "Every item a-aa is fixed except v, which is outside my allowed region in both implementations (exact edits in shared_changes_needed). The Python and the C++ are in step wherever the C++ has the code; y and aa are already the C++ listener's behaviour (listener lane). Commits: b3596d0 store/associate (a-h), d6ea91e passband (i-r), 098f743 live (s-aa except v, plus the live pins generator), 0be27ca rx_pins regenerated. 098f743's subject says \"WIP: rx references to regenerate\"; 0be27ca completes it. The tree is clean at 0be27ca; nothing pushed.\n\nConservative choices where the list did not settle a point:\n(w) A non-empty write to a 0-sample ring still raises (IndexError / std::out_of_range), as before. n0 goes through operator.index, matching the binding's PyNumber_Index, so a float n0 now raises TypeError in both where the reference raised IndexError.\n(z) _share_heard keeps the existing `k1 > origin` condition, so only the empty-slice case changes (NaN -> 0.0).\n(y) The Python shape check mirrors the C++ listener's load_previous: an object, \"finished\" and \"tiles\" both lists, tiles objects, ints convertible. Any failure, OverflowError included, discards the whole file. A tile that Tile(**) refuses is still skipped individually, as before.\n(aa) Only the background _worker changed. The \"logged\" set is local to each worker thread and pruned to slots still live. The finish worker and the synchronous step() are unchanged (step() still raises).\n(t) DialLog reads with encoding='utf-8', errors='replace'. The skip covers OverflowError alongside the existing exceptions.\n(x) Tile.to_json maps non-finite floats, including inside confidence lists, to None; for finite tiles it is identical to asdict.\nNo module-level constants were added to the reference, so rx_config.hpp is unchanged (--check passes).\n\nMerge hazard: when this branch meets the listener lane (wf_cf5767ef-ab8-1), test_qrss_native_listener.py::test_a_bad_state_file_starts_fresh fails until its `pytest.raises(Exception)` on the reference is replaced as described. listener_pins.json should also be rechecked, because the reference's Tile.to_json and state.json now write null for non-finite floats. I could not run the listener lane's tests from this worktree."
+  }
+ },
+ {
+  "label": null,
+  "value": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-3",
+   "branch": "worktree-wf_cf5767ef-ab8-3",
+   "commit": "02500acd2c12580d9243dd3a29c574d4973c62c9",
+   "files": [
+    "native/core/qrss/passband.cpp",
+    "native/core/qrss/passband.hpp",
+    "native/tests/qrss/test_passband.cpp",
+    "native/tests/golden_qrss/rx_pins.json",
+    "sstvae/qrss/frontend.py",
+    "tests/test_qrss_frontend.py",
+    "tests/test_qrss_native_passband.py"
+   ],
+   "api": "No signature changed in the review. One behaviour changed:\nstd::vector<std::int64_t> sstvae::qrss::passband::PassbandStore::expire(std::optional<double> now = std::nullopt);  // the stale-temporary sweep is now best effort: a temporary that cannot be stat'ed or removed is skipped silently and never thrown, so expire() and write_at()/write()/write_capture() with expire on cannot fail because of it (matches frontend.py PassbandStore.expire, which now catches OSError rather than FileNotFoundError).\nThe lane's API is unchanged by the review:\n- rawfile::Signature {int64 mtime_ns; uint64 size; operator==}\n- rawfile::signature(path, ec)\n- rawfile::thread_ident()\n- Store::signature\n- PassbandStore(fs<=0 throws std::invalid_argument)\n- associate Corr/Validation without the numpy twins",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2 (whole qrss tree, 61 targets)",
+     "result": "built clean"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss --output-on-failure -j2",
+     "result": "61/61 passed (45 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_store.py tests/test_qrss_native_associate.py",
+     "result": "45 passed, 3 deselected (51 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_passband.py tests/test_qrss_native_live.py",
+     "result": "47 passed, 5 deselected (46 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_native_acceptance.py (after gen_qrss_rx_reference.py --all)",
+     "result": "20 passed (27 s); pins current"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_multipass.py tests/test_qrss_frontend.py",
+     "result": "70 passed, 1 deselected (16 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' --native-qrss=rx tests/test_qrss_multipass.py tests/test_qrss_frontend.py",
+     "result": "67 passed, 3 skipped (internals spies), 1 deselected (12 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_live.py tests/test_qrss_live_l.py",
+     "result": "72 passed, 3 deselected (40 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' --native-qrss=rx tests/test_qrss_live.py tests/test_qrss_live_l.py",
+     "result": "72 passed, 3 deselected (23 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' tests/test_qrss_em.py tests/test_qrss_cli.py",
+     "result": "12 passed, 15 deselected (21 s)"
+    },
+    {
+     "cmd": "pytest -m 'not slow' --native-qrss=rx tests/test_qrss_em.py tests/test_qrss_cli.py",
+     "result": "12 passed, 15 deselected (15 s)"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (508 files), includes ok (509 files)"
+    },
+    {
+     "cmd": "python tools/gen_qrss_live_pins.py --check",
+     "result": "exit 0 (live_pins.json current)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only passband.cpp, test_passband.cpp",
+     "result": "clean"
+    },
+    {
+     "cmd": "mutation: Python sweep back to `except FileNotFoundError`",
+     "result": "test_expire_leaves_a_temporary_it_cannot_remove and test_stale_temporaries both FAIL (IsADirectoryError); restored"
+    },
+    {
+     "cmd": "mutation: C++ sweep back to remove_missing_ok (throws)",
+     "result": "ctest qrss_core_passband FAIL (!threw, line 544); parity test_stale_temporaries and --native-qrss=rx frontend test FAIL; restored"
+    },
+    {
+     "cmd": "mutation: C++ is_temporary without \".json\" / without meta.json",
+     "result": "strengthened test_stale_temporaries FAILS for both (the lane's version passed the first); restored, cmp-verified"
+    },
+    {
+     "cmd": "earlier review mutations (before the summary): prov_add naming, cache signature for (z,w) and info, median-gate prefix, FeRing drop, Tile null, tmp thread id",
+     "result": "each caught by the lane's ctests/parity tests; all restored and rebuilt"
+    }
+   ],
+   "parity": "Unchanged in kind from the lane.\n- Byte-identical (asserted by the parity tests):\n  - the store and passband trees, compared name by name and byte by byte;\n  - the stale-temporary sweep, which leaves the same set of names in both roots;\n  - live_pins.json against live.py;\n  - rx_pins.json, regenerated by the review.\n- The pins file changed only in the frontend.py hash. Every rx_reference/*.json came out the same, so the C++ receiver acceptance is unchanged.\n- I probed parity of median_w and validate_header_match over random accumulators and lengths: 0 mismatches.\n- A fuzz of the temporary-name matcher against the Python regex: 0 mismatches.\n- No tolerances were introduced or changed by this review.",
+   "deviations": [
+    "None new. Directory handling is the same in both: Python's Path.unlink on a directory raises (IsADirectoryError on Linux, PermissionError on Windows) and is now caught. util::remove_file refuses a directory explicitly (is_a_directory) rather than calling std::filesystem::remove, which would delete an empty one. So both leave an empty or non-empty temp-named directory in place, which the parity test pins."
+   ],
+   "shared_changes_needed": [
+    "Item (v) is NOT done. The lane could not do it: the log line is in LiveListener._refresh, outside the lane's edit region, and its C++ twin is in the listener lane (ab8-1). Today `self.log(f\"slot ...: {len(passes)} signal(s) at ...\")` sits inside `for p in passes:` (sstvae/qrss/live.py ~line 1320), so a slot with k accepted passes logs the line k times per refresh. Exact edit, Python: in `with self.lock:` after `if s.done: return`, add `took = False`; in the loop replace the self.log call with `took = True` right after `t.status = ...`; after the loop (still under the lock) add `if took: self.log(f\"slot {utc_iso(slot_t0(s.q) - 1)}: {len(passes)} signal(s) at {100 * self._progress(s.q):.0f}% ({time.time() - t_start:.0f} s)\")`.",
+    "Item (v), C++ twin (ab8-1 native/core/qrss/listener.cpp ~line 1717-1738, in the refresh pass loop): declare `bool took = false;` before `for (PassResult& p : passes)`, set `took = true;` after `t.status = ...` inside the first locked block, delete the per-pass `{ Lock lk(mu_); log_locked(...); } deliver();` block, and after the loop add `if (took) { { Lock lk(mu_); if (!s->s.done) log_locked(\"slot \" + slot_utc(q) + \": \" + std::to_string(n_passes) + \" signal(s) at \" + fmt(100 * progress_locked(q), \"%.0f\") + \"% (\" + fmt(clock_locked() - t_start, \"%.0f\") + \" s)\"); } deliver(); }`. Then regenerate the listener pins (tools/gen_qrss_listener_pins.py) and the rx references (tools/gen_qrss_rx_reference.py --all, since live.py moves).",
+    "Integration: after merging this lane with ab8-1, run `tools/gen_qrss_listener_pins.py --check`. I verified the listener pins against this lane's live.py with a scratch copy of the generator: still current. Also run `tools/gen_qrss_rx_reference.py --all`, because rx_pins.json hashes frontend.py and live.py and any merge-time edit to either moves it."
+   ],
+   "findings": [
+    {
+     "what": "Item (o) introduced a crash path. PassbandStore.expire()'s new stale-temporary sweep caught only FileNotFoundError in Python, and in C++ it threw on any stat/remove error other than missing. Any temporary it could not stat or remove raised out of expire(), and so out of every write()/write_at()/write_capture() with expire on. Examples: a directory named like a temporary, a Windows file another process holds open (PermissionError on unlink), EPERM/EACCES. The live capture would stop for good on what is meant to be housekeeping. Fixed in both implementations: the sweep is now best effort, skipping such a file for the next expire. Docstring and header comments updated. Regression tests added: Python test_expire_leaves_a_temporary_it_cannot_remove (it also runs under --native-qrss=rx), a ctest block in test_passband.cpp, and a parity case. Each fails against the old code.",
+     "fixed": true
+    },
+    {
+     "what": "The parity test test_stale_temporaries could not catch a broken matcher for the JSON kinds. It assigned ages by `i % 4`, so every fe_<h>.json and meta.json temporary got a fresh age and none was ever swept. A C++ is_temporary with \".json\" dropped from its extension list still passed. Rewritten: every kind (.flac, .i16, fe_<h>.json, meta.json; one id and two) appears both stale and fresh. Names the matcher must refuse were added: a trailing suffix, a prefix, upper-case TMP, an Arabic-Indic digit, an extra id. Two stale temp-named directories were added. The test now fails for both the \".json\" mutation and the meta.json mutation.",
+     "fixed": true
+    },
+    {
+     "what": "Item (v) (the 'N signal(s)' line logged once per slot) was not done by the lane. The line is still inside the per-pass loop of LiveListener._refresh (live.py ~1320) and of the C++ listener (ab8-1 listener.cpp ~1734), so it is logged once per accepted pass. It is outside this lane's permitted region, and both implementations must move together. The exact edit is in shared_changes_needed.",
+     "fixed": false
+    },
+    {
+     "what": "Item (f), the cache signature (st_mtime_ns, st_size), cannot see a rewrite of the same size within one mtime tick. On coarse-timestamp filesystems (1-2 s on FAT/exFAT, older HFS+), or with a clock that does not advance, a re-saved pass with equal size keeps serving the stale (z, w)/info. The lane's Python test bumps mtime by 1 s to step around exactly this. Adding st_ino (or st_ctime_ns) would narrow the window, since the store writes by rename, which changes the inode. Left as is: it matches the task's spec, and both implementations agree.",
+     "fixed": false
+    },
+    {
+     "what": "Tile state round trip: Python's Tile.from_state/_load_previous accepts None in float fields that are not optional, and carries it along. The C++ refuses the field. That is only reachable from a hand-edited or foreign state.json. In both cases _load_previous's wrong-shape handling drops the state, so the visible outcome is the same, but the paths differ.",
+     "fixed": false
+    },
+    {
+     "what": "write_state's temporary name is pid-only, without the thread id. It is called only from the listener's main thread, so this is not a bug today. If it is ever called from a worker, it must use the store's _tmp_name.",
+     "fixed": false
+    }
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "Housekeeping added to a write path must not be able to fail the write. Item (o)'s sweep made every PassbandStore.write depend on every stray *.tmp in the directory being stat-able and removable, and caught only FileNotFoundError. A temp-named directory (or, on Windows, a temp held open by an antivirus or indexer) raised IsADirectoryError/PermissionError out of write(), killing the capture.",
+     "evidence": "sstvae/qrss/frontend.py PassbandStore.expire (except FileNotFoundError -> except OSError); mutation run: IsADirectoryError from test_expire_leaves_a_temporary_it_cannot_remove"
+    },
+    {
+     "kind": "process",
+     "what": "Parameterising test data by index modulo a short cycle silently correlated kind with age. The four JSON-kind temporaries all landed on fresh ages, so 'stale JSON temporaries are swept' was never asserted, and a matcher mutation survived. Give each property you claim to test its own explicit value, and mutation-check the claim, not just the test.",
+     "evidence": "tests/test_qrss_native_passband.py::test_stale_temporaries (old `ages[n] = (...)[i % 4]`); a C++ is_temporary without '.json' passed the old test and fails the new one"
+    },
+    {
+     "kind": "numerics",
+     "what": "Signature caching by (mtime_ns, size) is only as fine as the filesystem's timestamp. The lane's own test has to advance mtime by a whole second to be reliable, which is the tell. Because writes go through rename, the inode changes on every rewrite, so st_ino would close most of that gap on POSIX. On NTFS the file index from GetFileInformationByHandle is the equivalent.",
+     "evidence": "sstvae/qrss/store.py _signature; tests/test_qrss_multipass.py cache-staleness test bumps mtime by 1 s"
+    },
+    {
+     "kind": "process",
+     "what": "A 'log once per slot' item crossed lane boundaries: the log call sits in LiveListener._refresh (listener lane) while the item was assigned to the reference-fixes lane. Items that touch a function owned by another lane should be routed to that lane, or the boundary widened, or they fall between the two.",
+     "evidence": "sstvae/qrss/live.py ~1320 vs ab8-1 native/core/qrss/listener.cpp ~1734"
+    },
+    {
+     "kind": "simplification",
+     "what": "util::remove_file already refuses directories (is_a_directory) instead of calling std::filesystem::remove, which would delete an empty directory. That is what keeps the C++ sweep byte-identical to Python's Path.unlink, so no special case was needed for directories. Reusing it instead of remove_missing_ok made the fix a two-line change.",
+     "evidence": "native/core/util/fileio.hpp:247"
+    },
+    {
+     "kind": "performance",
+     "what": "expire() lists the store directory twice per write: once for hours() and once for the temporary sweep. That is negligible at the store's tens of files but could be one listing.",
+     "evidence": "inferred from code: native/core/qrss/passband.cpp expire(), frontend.py expire()"
+    }
+   ],
+   "notes": "I reviewed the whole diff 136c208..0be27ca against items a-aa and against Python, and mutation-checked the lane's tests.\n- Verified correct, with tests that can fail: a (median gate over the air-order prefix), b (prov_add never clobbers), c (ZW_CACHE=0), d (no partial due rows), e (bool accepted), f (signature-checked cache), g (thread-id temporary names), h (empty HOME), i/j (pack_hour stat in its try, serialised with a unique temp), k (fs<=0 refused), l (non-finite capture), m (write counter), n (FLAC fsync), p (short raw hour unwritten), q (_HOUR_RE ASCII and \\Z), r (int ranges), s/t (DialLog OverflowError and UTF-8), u (restrict materialised), w (FeRing drops writes behind its window, end stays an int), x (strict tile JSON), y (malformed state.json), z (empty slice share 0.0), aa (_worker live failures logged once, done not set). The live pins generator is current.\n- Item o was implemented but introduced the write-killing sweep failure, fixed here.\n- Item v is not done; the exact edit is in shared_changes_needed.\n- MinGW syntax checks are clean.\n- Commit 02500ac sits on top of the lane's 0be27ca. Nothing was pushed, and nothing was written outside the worktree and the scratchpad.\n- The *.orig/*.fixed backups used for mutations are in scratchpad/w9a_rv_ref. Every mutated file was restored, cmp-verified, and the tree rebuilt."
+  }
+ },
+ {
+  "label": null,
+  "value": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2",
+   "branch": "worktree-wf_cf5767ef-ab8-2",
+   "commit": "a2aed2df4cb3c7a693073c1e6d20b7e53b278264",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/native/core/qrss/sources.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/native/core/qrss/sources.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/native/tests/qrss/test_sources.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/native/tests/qrss/gen_sources_pins.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/native/tests/qrss/sources_pins.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/tests/test_qrss_native_sources.py",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/native/apps/sstvae_qrss/decode.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_cf5767ef-ab8-2/native/core/qrss/decode.hpp"
+   ],
+   "api": "The review left every signature unchanged. The lane's public C++ API, as the listen CLI and the in-process API will use it:\nnamespace sstvae::qrss::live (source.hpp, byte-identical to the listener lane):\n  struct Chunk { std::vector<double> x; double t_end; };\n  class Source { virtual std::optional<Chunk> next(double timeout_s) = 0; virtual bool eof() const = 0; virtual std::string name() const = 0; };\nnamespace sstvae::qrss::live (sources.hpp):\n  using Clock = std::function<double()>; using Sleep = std::function<void(double)>; double system_time();\n  class Stamper { explicit Stamper(double hold_s = STAMP_HOLD_S); std::vector<Chunk> push(std::vector<double> x, double t); std::vector<Chunk> flush(); double hold_s() const; };\n  class InputHandle { static InputHandle standard_input(); static InputHandle from_fd(int fd); static InputHandle from_native(std::intptr_t); std::intptr_t native() const; };\n  struct StreamOptions { std::string fmt = \"f32\"; double chunk_s = 0.25; double hold_s = STAMP_HOLD_S; Clock clock; };\n  class StreamSource final : Source { explicit StreamSource(InputHandle in = InputHandle::standard_input(), StreamOptions = {}); std::optional<Chunk> next(double timeout_s); bool eof() const; std::string name() const; void close(); std::exception_ptr error() const; };\n  struct WavOptions { double speed = 0.0; double chunk_s = 1.0; Clock clock; Sleep sleep; std::optional<std::string> shown_as; };\n  class WavSource final : Source { WavSource(const std::string& path, double start_unix, WavOptions = {}); WavSource(std::vector<double> x, const std::string& path, double start_unix, WavOptions = {}); next/eof/name; double start() const; };\nnamespace sstvae::qrss::decode (core/qrss/decode.hpp):\n  struct PictureKey { std::string callsign; pynum::PyInt picture_id; }; PictureKey parse_key(std::string_view);\n  std::string member_wave(store::Store&, const pyjson::Value& uid);\n  double acc_mean_w_db(const store::Accumulator&);\n  std::vector<std::string> acc_lines(const store::Accumulator&, store::Store* = nullptr);\n  struct Planes { std::vector<double> S, W; std::int64_t mode; };\n  Planes planes_from_pass(const types::PassResult&); Planes planes_from_accumulator(const store::Accumulator&); std::string pass_line(const types::PassResult&);\n  std::string py_upper(std::string_view); std::string py_hex(std::int64_t, int); std::string py_hex(std::string_view decimal, int); std::string py_str(const pyjson::Value&); std::string py_repr(const pyjson::Value&);\ncore/qrss/codec/decode.hpp: images::Picture render_planes(const OpenDecoder&, const decode::Planes&); images::Picture render_accumulator(const OpenDecoder&, const store::Accumulator&);\napps/sstvae_qrss/decode.hpp (cli::decode_image): struct PictureRequest; struct PictureRenderer { refusal, render }; PictureRenderer picture_renderer(); struct RegisterPictureRenderer;\nutil/fileio.hpp: inline int errno_of(const std::error_code&); inline std::error_code errno_code_of(const std::error_code&); inline bool replace_file(const std::string& from, const std::string& to, std::error_code& ec);\napps argparse.hpp: ArgParser& optional_positional(const std::string& name, const std::string& help = {});",
+   "tests": [
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j2 --output-on-failure",
+     "result": "66/66 passed (35 s); qrss_core_sources now 2451 checks, including the new 1e12 s timeout check"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss-codec -R qrss_core -j2 --output-on-failure",
+     "result": "67/67 passed (37 s); sources/live/listener/decode subset re-run after the last edit, 3/3 passed"
+    },
+    {
+     "cmd": "pytest -q tests/test_qrss_native_sources.py tests/test_qrss_native_pynum.py tests/test_qrss_native_decode.py (plain tree)",
+     "result": "52 passed, 1 skipped (the codec side-by-side test), 89 s; sources alone 19 passed in 1.8 s after the final edit"
+    },
+    {
+     "cmd": "SSTVAE_REQUIRE_CODEC=1 QRSSTVAE_MODEL_DIR=/home/user/qrss-data/models pytest -q tests/test_qrss_native_decode.py (codec tree)",
+     "result": "7 passed, 108 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_cli.py tests/test_qrss_multipass.py",
+     "result": "34 passed, 5 deselected, 22 s"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_cli.py tests/test_qrss_multipass.py",
+     "result": "34 passed, 5 deselected, 14 s"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_live.py",
+     "result": "37 passed, 18 s (Stamper row substituted for live.Stamper and the StdinSource global)"
+    },
+    {
+     "cmd": "pytest -q tests/test_qrss_native_cli.py tests/test_qrss_native_paths.py",
+     "result": "317 passed, 46 skipped, 124 s"
+    },
+    {
+     "cmd": "tools/check_layering.py && tools/check_includes.py",
+     "result": "layering ok (529 files), includes ok (531 files)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only -Wall -Wextra on sources.cpp, core/qrss/decode.cpp, apps/sstvae_qrss/decode.cpp",
+     "result": "clean"
+    },
+    {
+     "cmd": "MSVC macro probe: wrapper windows.h (#include_next, then defines min/max unless the TU's NOMINMAX, renamed SSTVAE_TU_NOMINMAX by sed) on the base d501f75 sources.cpp and on the fixed one",
+     "result": "base: error at std::min( (C2589's equivalent); fixed: rc 0"
+    },
+    {
+     "cmd": "MSVC-branch probe: sources.cpp with _MSC_VER renamed and UCRT's _set_thread_local_invalid_parameter_handler declared via -include",
+     "result": "rc 0 with -Wall -Wextra. Wine is not installed, so there was no runtime check"
+    },
+    {
+     "cmd": "mutation: resync check `start - next > R` changed to `>=` the floor",
+     "result": "the old parity test and pins both survived it; after the fix both fail (ctest: 'FAIL resync+0 chunk 1: len: got 105, want 100')"
+    },
+    {
+     "cmd": "mutation: next() huge-timeout guard made isinf-only",
+     "result": "the new 1e12 s check fails"
+    },
+    {
+     "cmd": "mutation: pixel write in planes_from_pass, codec tree",
+     "result": "test_decode_side_by_side[cpp] FAILED as it should; source restored and rebuilt"
+    }
+   ],
+   "parity": "Bit-exact:\n- Stamper chunk stamping (sample values and t_end, round-half-even, resync and hold), against live.Stamper. This covers the parity test and the generated ctest pins, now including both sides of the resync boundary (d = -1..r+2).\n- StreamSource sample decoding (f32 and int16 with partial-sample carry) and WavSource chunking and stamps, against live.StdinSource and live.WavSource.\n- decode's text output (--list, --key, --pass lines, refusals, exit codes) and its parse_key / pynum Unicode digit and space handling, character for character with the script, on stores either implementation wrote.\n- The decoded PNG's pixels match the reference's on the codec tree. The PNG bytes are stb's encoder's, not Pillow's.\n\nWithin tolerance: 10 log10 in acc_mean_w_db / pass_line uses libm where the script uses numpy. Only a value sitting exactly on a 2-decimal rounding boundary could print differently; none was seen.\n\nNot compared:\n- Windows behaviour (ReadFile/CancelSynchronousIo loop, _get_osfhandle guard, MSVC macro handling). These were syntax-probed with mingw only and never run.\n- Exception classes on a damaged store (documented as a deviation).\n- Real-time pacing of WavSource beyond the injected Clock/Sleep seams.",
+   "deviations": [
+    "Damaged store: a truncated or corrupt pass or accumulator file ends both implementations, with different exception classes. The script's traceback names BadZipFile, EOFError, JSONDecodeError and so on; the C++ store raises its ValueError with its own text. Written down in apps/sstvae_qrss/decode.cpp's deviation list.",
+    "member_wave on a pass file np.load cannot open: the C++ prints '?' for that member and continues. qrss_decode.py catches only OSError/KeyError/ValueError, so BadZipFile/EOFError escapes and --list/--key crash after partial output. The script is the one to fix. Written down in decode.hpp and decode.cpp.",
+    "Pre-existing and documented by the lane: --em/--retro are refused on --key ('not in this build yet', exit 2); the picture is PNG only, refused otherwise; a callsign containing '.' names accumulator files differently from store.py's with_suffix (store.py bug).",
+    "StreamSource: a NaN or negative timeout is refused (as queue.get refuses a negative one). An infinite timeout, or any from 1e9 s up, waits without a deadline; Python raises OverflowError past PY_TIMEOUT_MAX."
+   ],
+   "shared_changes_needed": [
+    "native/core/qrss/store.cpp: every FileError built from a std::error_code with .value() / code_of (remove, replace, create_directories, stat sites, about lines 131, 287, 292, 666, 736 in the ab8-3 lane) should pass util::errno_of(ec). On Windows a system_category code is a Win32 error, not an errno, so the OSError errno and text differ from Python's.",
+    "native/bindings/module/qrss/passband.cpp: drop its local errno_of in favour of util::errno_of from util/fileio.hpp, so there is one mapping.",
+    "native/core/qrss/passband.cpp: `throw FileError(ec, ...)` after util::replace_file and filesystem calls (about lines 400, 436, 741) should pass util::errno_code_of(ec) so Windows reports errno values.",
+    "native/core/images (images.cpp save_png) and native/apps/sstvae_qrss/codec/receive_image.cpp: stbi_write_png opens the path with narrow fopen, so on Windows an output path outside the ANSI code page fails. Fix: define STBIW_WINDOWS_UTF8 where stb_image_write is implemented, or write through stbi_write_png_to_func into util::open_file. This is the known W7 shared change; decode's PNG output inherits it."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "qrss_decode.py member_wave catches (OSError, KeyError, ValueError) around store.pass_info, but np.load on a truncated or corrupt .npz raises zipfile.BadZipFile or EOFError, neither a subclass of those. One damaged pass file therefore kills --list / --key part-way through the listing instead of printing '?' for that member.",
+     "evidence": "inferred from code: qrss_decode.py member_wave except clause vs numpy.load / zipfile; C++ npz.cpp bad() raises std::invalid_argument, which member_wave maps to '?'"
+    },
+    {
+     "kind": "process",
+     "what": "Both resync-boundary tests (the Python parity test and the ctest pins generator) computed the push time so that start - next was 55900 + d instead of RESYNC_S*FS + d. They never reached the boundary, so a `>` vs `>=` mutant in the resync check survived both. Rewritten to derive the time from the first stamp (nxt = round(first.t_end*FS) + 1); the mutant now fails both.",
+     "evidence": "measured: the mutant passed the old tests and fails the new ones ('FAIL resync+0 chunk 1: len: got 105, want 100')"
+    },
+    {
+     "kind": "process",
+     "what": "A plain MinGW cross-compile cannot catch MSVC's min/max macros: libstdc++'s mingw os_defines.h predefines NOMINMAX, so a TU with no NOMINMAX still compiles. A faithful probe uses a wrapper windows.h (#include_next, then defines min/max unless a renamed NOMINMAX is set) and seds the TU's NOMINMAX to that renamed spelling. That probe fails on the lane's original sources.cpp and passes on the fix.",
+     "evidence": "measured: base d501f75 sources.cpp fails at std::min( under the wrapper; fixed version rc 0"
+    },
+    {
+     "kind": "numerics",
+     "what": "steady_clock::now() + duration<double>(timeout) overflows int64 nanoseconds past about 292 years, and a double-to-duration cast past about 9.2e9 s is UB. In practice the deadline lands in the past, so next(huge) would return at once and a caller asking to wait 'forever' would spin. Guarded at 1e9 s.",
+     "evidence": "sources.cpp StreamSource::next; new ctest check with a 1e12 s timeout waits for the writer's close"
+    },
+    {
+     "kind": "performance",
+     "what": "sources parity file: 19 tests in about 2 s. decode parity: 52 plain-tree tests in 89 s; the codec-tree side-by-side 7 tests in 108 s. The CLI and paths parity files take 124 s together. An incremental rebuild of either tree after a one-file change is about 10-15 s at -j2.",
+     "evidence": "pytest/ninja timings in this session"
+    },
+    {
+     "kind": "process",
+     "what": "MSVC's _get_osfhandle runs the CRT invalid-parameter handler on a bad descriptor, and by default that terminates the process. Python reports EBADF instead, because it suppresses the handler (_Py_BEGIN_SUPPRESS_IPH). Any C++ path taking a descriptor from Python (stream.fileno()) needs the same suppression, or a closed-underneath fd becomes a crash.",
+     "evidence": "sources.cpp InputHandle::from_fd; mingw-w64's headers lack _set_thread_local_invalid_parameter_handler, so it was checked only by a syntax probe with UCRT's declaration supplied"
+    }
+   ],
+   "notes": "Two review commits on top of the lane's d501f75:\n- 17b3e50: NOMINMAX/WIN32_LEAN_AND_MEAN before <windows.h> in sources.cpp, resync-boundary tests that actually reach the boundary (parity test, pins generator, regenerated pins), and a guard for very long timeouts with a ctest check.\n- a2aed2d: _get_osfhandle wrapped in a thread-local no-op invalid-parameter handler on MSVC, and the damaged-store deviations written down in decode.cpp and decode.hpp.\n\nThe temporary probe test file was deleted and never committed. Nothing was pushed, and nothing under /mnt/project-files was touched.\n\nLeft unfixed and not in this lane's files:\n- PNG writing via stb's narrow fopen on Windows (listed in shared_changes_needed).\n- On macOS, poll() on a tty returns POLLNVAL, so StreamSource::close() on an interactive terminal stdin may not wake the reader until input arrives. The reader thread is joined in close(). This affects only a tty on macOS; pipes and files are fine. A fix would be a self-pipe or a kqueue-based wait, left for the listen-CLI wave.\n- In MSVC debug CRT builds an _ASSERTE may still fire before the silenced handler; release builds are what this guard targets.\n\nWindows code paths were checked only by mingw syntax probes; wine is not installed in this container, so nothing ran there.",
+   "findings": [
+    {
+     "what": "sources.cpp includes <windows.h> without NOMINMAX, so on MSVC every std::min( in the TU is a C2589 syntax error. The Windows build of sources.cpp would not compile, and MinGW cannot see it because libstdc++ predefines NOMINMAX.",
+     "fixed": true
+    },
+    {
+     "what": "The Stamper resync-boundary tests (tests/test_qrss_native_sources.py::test_stamper_resync_boundary and gen_sources_pins.py's resync cases) placed the push 55900+d samples past `next` instead of RESYNC_S*FS+d. They never exercised the boundary, and a `>` to `>=` mutant survived both.",
+     "fixed": true
+    },
+    {
+     "what": "StreamSource::next(timeout) overflowed the steady_clock deadline for very large finite timeouts (UB; in practice an immediate return, so a caller waiting 'forever' would spin). It now waits without a deadline from 1e9 s up; a new ctest check uses a 1e12 s timeout.",
+     "fixed": true
+    },
+    {
+     "what": "InputHandle::from_fd on MSVC: _get_osfhandle of a descriptor that is not open invokes the CRT invalid-parameter handler, which ends the process, where Python raises OSError EBADF on the first read. The handler is now silenced thread-locally for the one call, so the invalid handle is reported by the first read as the header already promised.",
+     "fixed": true
+    },
+    {
+     "what": "On a damaged store, decode raises different exception classes from qrss_decode.py, and member_wave prints '?' where the script crashes on np.load's BadZipFile/EOFError (a Python bug). The behaviour is kept and written down as a deviation.",
+     "fixed": false
+    },
+    {
+     "what": "decode's PNG output (images::save_png via stbi_write_png) uses narrow fopen, so on Windows an output path outside the ANSI code page fails. This is outside the lane's files and is listed in shared_changes_needed.",
+     "fixed": false
+    },
+    {
+     "what": "On macOS, poll() on a tty returns POLLNVAL, so close() of a StreamSource reading an interactive terminal may block until input arrives. Pipes and files are unaffected; left for the listen-CLI wave.",
+     "fixed": false
+    }
+   ]
+  }
+ }
+]

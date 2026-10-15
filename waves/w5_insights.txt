@@ -1,0 +1,316 @@
+#### track / core
+[performance] track() C++ vs Python on the receiver's own calls: FULL pass 19.6 s -> 3.67 s (5.3x; per call 2.41/8.64/8.55 s vs 0.36/1.58/1.74 s); SHORT 0.39/1.04/1.18 s vs 0.04/0.18/0.23 s (5-10x); TINY 0.12/0.31 vs 0.01/0.06 s. refine_timing FULL 0.88 s -> 0.22 s (3.9x), SHORT ~3x.
+   EVIDENCE: scratchpad time_full.py: 'track total py 19.60s cpp 3.67s x5.3', 'refine_timing py 0.8767s cpp 0.2230s'
+[numerics] The Kalman/RTS pass is badly conditioned in Pu: its diffuse initial velocity covariance (big*1e-2) cancels down to ~q*Pu, keeping ~7 digits, so a 1-ulp change of Pu_g (np.convolve's BLAS ddot vs a sequential sum in _smooth) moves P by 8.4e-7 and u by ~1e-9 relative. Any port comparing u/P against Python must either accept ~1e-6 on P or check 'conditional bitwise' (reference kalman_rts on the port's own mu/R/q/Pu_g), which holds exactly.
+   EVIDENCE: test_qrss_native_track.py::test_track_on_the_receivers_calls; explore_kf2.py: 'Pu_g + 1 ulp: P rel 8.4e-07'
+[python-bug] known_symbols does not check the header bits' length: a short header (2473 bits) silently returns a _Known whose pos (3574) and val (3573) differ in length; make_classes on the same input raises. Downstream code indexing val by pos would misalign without an error.
+   EVIDENCE: sstvae/qrss/track.py:454-463; probe: known_symbols(SHORT, bits[:-1]) -> pos (3574,), val (3573,)
+[python-bug] derotate(chan, fn) with fn returning a scalar (e.g. lambda t: 1500.25) fails with np.interp's 'fp and xp are not of the same length.' rather than broadcasting a constant frequency; only array-valued paths work. Harmless today (all callers pass PathFn), but a constant-path helper would trip it.
+   EVIDENCE: sstvae/qrss/track.py:303-313 (g scalar -> cumsum length 1 -> np.interp over n indices)
+[numerics] scipy.signal.oaconvolve on a complex64 input runs its FFTs in single precision even with float64 taps (result complex128 but ~1.2e-7 relative error vs the complex128 path); _lowpass therefore depends on its input dtype. track/fit_timing pass complex128 z_d so the receiver is unaffected.
+   EVIDENCE: scratchpad lp.py: complex64 rows 1.2e-7..1.7e-7 vs 1e-15 for complex128/float64
+[numerics] templates' sf = MF{a^2 (1 - exp(-v))} loses relative accuracy where v is small: one ulp of exp(-v) (numpy SIMD vs libm) becomes 1.9e-10 relative in sf; np.expm1 would make it well-conditioned (Python change, not made).
+   EVIDENCE: sstvae/qrss/track.py:771; test_templates worst sf 1.93e-10 elementwise, <1e-14 of scale
+[process] A pybind11 binding built a py::float_ inside a py::gil_scoped_release scope (return statement inside the nogil block): segfault only on that path (_kf_forward store=False), invisible to the whole-caller tests because the receiver never calls it that way. Keep the nogil block to the computation and build Python objects after it.
+   EVIDENCE: native/bindings/module/qrss/track.cpp kf_forward_py (fixed in ff2f7ba); found by test_kalman
+[process] Pinning a synthetic end-to-end track() pass in the ctest was cheap and strong: a CE TINY signal from ce::phase_grid over exact-binary-fraction 'noise' reproduces the capture bit-for-bit in both languages (cos/sin of the phase is np.exp(1j*phi)), so q, meas and the decisions are pinned exactly and the values to 1e-9; it also hosts a two-thread reentrancy check.
+   EVIDENCE: native/tests/qrss/test_track.cpp test_synthetic_pass (capture digest 134cbc75...)
+PARITY: Bitwise (dtype and shape included), on the receiver's own TINY/SHORT pass inputs and on edge inputs: mf_table taps (CE and L), _pulse_at, _pulse_g0, _mf_taps, symbol_mf (complex and real z, CE/L/complex tables), psi_at, derotate (given the same path values; PathFn evaluated by the C++ to 1e-9 relative), known_symbols, make_classes, remove_spread, _window_unknown, _kf_forward, kalman_rts (causal too), select_q (same grid element, same type), _measurements, _pu_initial, erase; ctest pins of the same by SHA-256. Tolerance: templates c 1 ulp (measured 3e-16 rel), sf elementwise 1.9e-10 rel where v is small (bar 1e-9 elementwise and 1e-14 of scale; numpy SIMD exp vs libm then 1-e^-v cancels); _lowpass 1e-15 (complex64 input 1.6e-7: scipy transforms complex64 in single precision, C++ in double); _smooth 1e-15 (np.convolve via BLAS ddot). track(): same q, keying, ook, lead-in, pos, meas and every decision on all 5 receiver calls; z_d/m/c/N/psi <= 1e-9 rel (measured ~2.5e-10, re-centred spline); freq path <= 1e-9 Hz; timing <= 1e-6 CH samples (measured ~2e-13); u measured 6.7e-10 rel, P 8.4e-7 rel (TINY gate-V run), pu 1.1e-8 -- this is the reference's own conditioning (a 1-ulp change in Pu_g from the BLAS-summed smoother moves Python's P by 8.4e-7); conditional bitwise holds: the reference's kalman_rts on the C++ run's own (mu, R, q, Pu_g) reproduces the C++ u, P and loglik to the bit (asserted). FULL pass: u 9.6e-10, P 6e-8 rel. refine_timing: same None outcomes, timing to 1e-6 sam
+DEV: track()'s freq argument must be a PathFn (Python's or the native one): any other callable raises TypeError, because the C++ tracker re-centres and stores a PathFn; the reference accepts any callable. No caller in the suites passes one.
+DEV: track() with no timing (timing None and det.timing None) raises AttributeError "'NoneType' object has no attribute 'tau0'" up front; the reference raises the same error later, after derotation (same type and text, earlier).
+DEV: _smooth sums its window sequentially where np.convolve uses BLAS ddot (CPU-dependent kernel): ~1e-15 relative, which via the Kalman pass's conditioning shows up as u ~1e-9 / P up to ~1e-6 relative against the Python run (conditionally bitwise, see parity).
+DEV: templates uses libm exp where numpy uses its SIMD exp for real arrays: c 1 ulp, sf up to 1.9e-10 elementwise where v is small.
+DEV: _lowpass on a complex64 input computes in double; scipy transforms complex64 in single precision (1.6e-7 apart). Real callers pass complex128 z_d.
+DEV: symbol_mf's chunk argument is accepted and ignored (it only bounds Python's memory, not the result).
+DEV: A pass_uid's sha8 suffix may differ (it hashes float32 z, which agrees to tolerance); the q/frequency prefix is identical.
+DEV: _measurements/_pu_initial bound for a duck-typed track with no spec use a placeholder spec (they never read it).
+DEV: make_classes/known_symbols header bits that are not 1-D: outcomes and messages now match numpy (broadcast of leading unit axes, numpy's shape-mismatch / concatenate messages); core make_classes accepts a non-1-D HdrBits only when the caller flattened a broadcastable shape.
+#### track / core_review
+[numerics] The reference tracker is machine-dependent at about 1e-5 in P. Its diffuse initial velocity covariance (0.1 Pu, cancelled down to about q*Pu) keeps only about seven digits. A 1-ulp change in Pu_g, from np.convolve's BLAS kernel, or an ulp of numpy's SIMD exp in sf, comes out as 8.4e-7 to 2.0e-5 relative in P and 1e-9 in u. The same Python run on a different CPU or BLAS would therefore disagree with itself at that level. Any future bar on track's u/P must be conditional: the reference's last Kalman step on the C++ inputs, or the swap test.
+   EVIDENCE: measured: lead-in TINY gate-V run P 2.0e-5, u 2.7e-9, pu 8.9e-8; CE TINY gate-V run P 8.4e-7; with the C++ _smooth and templates swapped in, 0 on all 7 calls
+[process] The strongest check found for a long iterative routine is a swap test. Assign the C++ versions of the known non-bitwise leaf functions over the reference's, run the reference, and require bit-for-bit equality. It proves that everything downstream (Kalman iterations, spline refit, refine decisions) is the reference's arithmetic exactly, and it names each divergence seed. The earlier claim that only _smooth seeded the divergence turned out to be half the story: SIMD exp in sf seeds it on the lead-in pass.
+   EVIDENCE: tests/test_qrss_native_track.py::test_track_is_the_reference_up_to_smooth_and_templates; swapping _smooth alone still left P 2.0e-5 on the lead-in call 0
+[performance] C++ against Python on the same inputs.
+   EVIDENCE: measured on 4 shared Xeon CPUs:
+- symbol_mf over a FULL grid: 0.07-0.20 s vs 0.31-0.94 s.
+- track per call: SHORT 0.18-0.36 s vs 1.1-1.7 s; MEDIUM 0.10-0.50 s vs 0.95-2.55 s; TINY 0.05 s vs 0.30 s.
+- refine_timing on MEDIUM: 0.05-0.28 s vs 0.29-1.04 s.
+- l-short receive_pass with the rows: 1.71 s vs 3.46 s.
+- Suites: test_qrss_smoke 3.9 s vs 7.4 s, test_qrss_ltrack 3.5 s vs 6.1 s.
+[numerics] The C++ emulates numpy's einsum SSE2 sum (two lanes, blocks of 8, unfused muladd) to get symbol_mf bit for bit. That is x86-specific: numpy's NEON muladd is fused. On aarch64 the parity tests may then see ulp differences in symbol_mf that are not a port bug. Worth re-measuring on linux-aarch64 or macos-arm64 before treating a failure there as one.
+   EVIDENCE: inferred from code: native/core/qrss/track.cpp around line 178 (einsum emulation comment) and numpy's simd muladd definitions
+[python-bug] refine_timing's 3-D (gamma) Newton branch is effectively unreachable by the test data: no fixture or simulated pass takes it (zk(th3) > zk(th) + 1). Injected gamma either leaves it untaken or makes refine_timing return None. The branch is therefore untested in the reference too, beyond being evaluated.
+   EVIDENCE: measured: MEDIUM at -6 dB with tx_ppm -30: branch evaluated on 3 tracks, never taken. Injected gamma 3/-6: not taken. 12/25/-40: None on both sides.
+[process] The original track parity test held u/P against the Python run at 1e-8 and 1e-5. Those bounds pass on its two fixtures by a 12x margin but are exceeded (P 2.0e-5) by the first drifting lead-in scenario probed. Absolute tolerances on an ill-conditioned output are fixture luck; the conditional bit-for-bit check is what carries the claim.
+   EVIDENCE: tests/test_qrss_native_track.py: test_track_on_the_receivers_calls (P 1e-5) against the new test_track_with_a_lead_in (measured 2.0e-5, bound 1e-4 plus the conditional check)
+PARITY: Bit for bit:
+- symbol_mf and psi_at over FULL's whole grid (58810 positions, every fifth) with random tau0/ppm/gamma and fractional positions, on the CE and L tables, for complex128, complex64 and a float32 keep. New test, 4 trials; an earlier 12-trial probe at every position also matched.
+- kalman_rts (both modes), select_q (same element and type) and _kf_forward(store) under a 160-trial fuzz. Inputs included inf, NaN, -inf and 0 variances, NaN mu, q=0, Pu=0, and n from 0 to 1200. A 400-trial probe also matched. Refusals match in type and text.
+- The swap test: the reference's track with the C++ _smooth and templates swapped in is the C++ track bit for bit. That covers every array (pos, meas, z_d, m, c, N, psi, u, P, pu), q, loglik, df_max and the recentred path, on all 7 recorded calls (CE TINY, CE SHORT and the lead-in pass).
+
+To rounding:
+- Without the swap, the arrays depart from the reference at only two seeds: np.convolve's BLAS ddot in _smooth (the n=32 and 99 kernels are the CPU's SIMD order) and numpy's SIMD exp in sf. The reference amplifies these through its own Kalman conditioning.
+  - Worst P against the Python run: 2.0e-5 relative, on the new drifting lead-in pass's gate-V run (u 2.7e-9, pu 8.9e-8).
+  - On the original fixtures: P 8.4e-7, u 6.7e-10.
+  - The task's 1e-10 bar for u/P is therefore unreachable against an unswapped reference. The contract is the conditional bit-for-bit check, which holds on every call.
+- The refined timing is to an ulp: tau0 1.4e-17
+DEV: _smooth is a sequential sum where np.convolve goes through OpenBLAS ddot. The order differs by kernel length: plain for n<=8, sequential FMA for n of 12 and 15, a SIMD kernel for n>=16. The tracker uses n=32 and 99 (L: 16 and 49), so _smooth is to 1e-16, not bitwise. Matching it would tie the C++ to one CPU's BLAS kernel (SkylakeX vs Haswell vs NEON differ), so this was accepted as the author's do
+DEV: templates' sf uses libm exp where numpy uses its SIMD exp (an ulp apart). The reference then amplifies that, up to 2.0e-5 in P on a gate-V run. This is accepted; the swap test proves it is the only array-level seed besides _smooth.
+DEV: refine_timing's Newton step uses the math lane's LU solve and inv, which are documented as to-rounding against OpenBLAS getrf. The refined timing therefore agrees to an ulp, and the arrays it feeds stay bitwise because the difference is below the sample grid's rounding.
+DEV: Binding edge cases on exotic inputs, unchanged:
+- remove_spread checks the spread's shape at a different point than the reference; both raise ValueError.
+- select_q given Python lists: the reference raises AttributeError, the C++ accepts them.
+- z_ref_stat's error type differs on malformed input.
+- _recenter returns a C++ PathFn rather than the reference's spline object; it evaluates the same to 1
+#### track / timing
+[performance] fit_timing blind (n_best=8): C++ direct gather against Python's FFT path. FULL is about 10x faster, SHORT 2.8x.
+   EVIDENCE: FULL -12 dB: Python 13.98 s, C++ 1.40 s. SHORT -6 dB: Python 0.31 s, C++ 0.11 s. Measured 2026-10-13 on 4 shared CPUs. One FULL grid takes 0.22-0.28 s (0.29 ns per term); fit_statistic x4 takes 0.25 s.
+[performance] verify_track (blind fit plus the withheld track) is about 9x faster on FULL and 4.5x on SHORT. verify on SHORT takes 0.27 s against 0.67 s; on TINY 0.09 s against 0.22 s.
+   EVIDENCE: FULL -12: Python 16.88 s, C++ 1.85 s. SHORT -6: Python 0.63 s, C++ 0.14 s.
+[performance] Choosing the direct gather over porting the FFT path. The direct sum is cheap because, within one binade, a run of lags shares one rounding offset, so the gather becomes contiguous and vectorizes (AVX2 target clone with runtime dispatch, -ffp-contract=off, the same bits). An AVX-512 clone was no faster, and blocking by lag or delta was slower.
+   EVIDENCE: Run-based gather: FULL fit 0.5 s per grid down to 0.22-0.28 s. Lag/delta blocking: 3.12 s against 2.26 s for a FULL fit. AVX-512 clone: no measurable gain.
+[python-bug] verify's blind path computes the coarse grid twice: once inside verify_track (n_best 1) and again for the runners-up (n_best=V_TIMING_TRIES) on the same z_d and path. Sharing one fit_timing call would roughly halve the blind gate's cost on a weak candidate. This is a performance issue, not a correctness one.
+   EVIDENCE: sstvae/qrss/track.py verify(): the verify_track(... fit=fit) call, then fit_timing(..., n_best=V_TIMING_TRIES) with the same fn and z_d
+[numerics] Z_ref is conditioned at about 1e-8 relative on a signal and about 5e-5 on noise in the reference itself. A 1e-12-sample timing change moves it that much, through the Kalman smoother's diffuse start (P keeps about 7 digits). Any port of gate V can therefore only be compared at those levels. Exact comparison has to swap primitives, as test_gate_v_composition does.
+   EVIDENCE: Reference handed the C++ timing (1e-12 samples away): Z_ref moves 2.2e-8 (drift), 1.4e-8 (TINY -12) and 6.3e-5 (noise, 0.75926 to 0.75921).
+[process] Spying on the reference made its internal intermediates checkable without copying its code into the test. The spy replaces the module's np with a proxy that records np.full's 2-D -inf grids (filled in place) and records _segment_timing's calls, so the FFT grid, x, sig2 and the peak inputs are all compared directly.
+   EVIDENCE: tests/test_qrss_native_track_timing.py _NpSpy and _ref_fit
+[process] Swapping the C++ primitives into the reference's glue turned a set of conditioning-level tolerances into one exact check of the decision logic: bases in order, runners-up, choice, acceptance, erase, keyed_from and the local-search range.
+   EVIDENCE: test_gate_v_composition: bitwise equality in all 8 scenarios
+[numerics] The noise scenario's flat 3-point FreqPath fitted with 10 s knots over -10..1800 s gives a z_d that differs between the C++ and scipy PathFn fits by 1.6e-10 relative. The dense paths from refine_path agree bitwise.
+   EVIDENCE: noise track z_d 1.61e-10 against track z_d 0 (QRSS_PARITY_WORST run)
+PARITY: Bit-exact: _carrier_lines given the same z (t, f, ratio; measured 0 difference); the gate-V glue. With the C++ primitives (PathFn/freq_path_spline, derotate, fit_timing, make_classes, track, templates, z_ref_stat, erase, plus verify_track/refine_path/line_path/_flat_path for verify) assigned over the reference's names, the reference's verify_track and verify give the C++ results bit for bit in all 8 scenarios. That covers every array, q, loglik, z_ref, timing and path (test_gate_v_composition). fit_grid matches numpy's direct-path expression for each term exactly; only the k-sum order differs.
+
+Tolerance (bar / measured worst over TINY/SHORT at -6/-12 dB, 1 Hz/min drift, +100/-100 ppm, noise at -80 dB):
+- fit_timing: same argmax cells and runners-up per carrier estimate, checked against the reference's own grid. _segment_timing inputs t0abs 1e-9 / 9e-13 samples, clock error 1e-9 / 4e-12 samples of slip. tau0 1e-6 / 8e-12 CH samples, ppm slip 1e-6 / 5e-11, Timing.z 1e-8 / 5e-12 rel.
+- Grid: vs the reference's FFT grid, bar 1e-12 of max|Z|, measured 1.05e-13. Vs its direct path (local search), 1e-13 / 4.4e-15. Edge and non-finite-edge probes 1e-13 / 1.8e-15, with the NaN/inf pattern identical.
+- Statistic x: 1e-12 of scale / 9.8e-16. sig2: 1e-12 / 2.3e-15.
+- _segment_timing on the reference's inputs: t0 1e-6 / 8e-12, slip 1e-6 / 6e-11, score 1e-8 / 2.3e-13.
+- refine_path / line_path: same branch (unchanged, fine and coarse all exercised) and same grid bitwise. f_hz 1e-7 Hz / 4.
+DEV: fit_timing correlates by the direct sparse gather for every lag count. Above 64 lags the reference uses FFT correlation. The grids agree to rounding (1.05e-13 of scale), and every peak, decision and timing is the same. One structural difference: a term whose interpolation pair straddles an end of x counts 0 here, as in the reference's direct path, while its FFT path keeps the half that is inside. 
+DEV: Z_ref and resid_ratio are held to 1e-7 and 1e-6 rather than the task's 1e-8 (measured 4.5e-8 and 1.1e-7). TrackResult u/P/pu are held to the track core's bars rather than 1e-9. This is the tracker core's conditioning, not this lane: with identical inputs the glue is bit-exact (test_gate_v_composition). The reference itself moves its own Z_ref by 1.4e-8 to 2.2e-8 when given the C++ timing, which is
+DEV: fit_statistic is not bit-exact: _lowpass and the dense-MF oaconvolve differ from scipy at about 1e-15 relative.
+DEV: A peak with a NaN score (only possible from a NaN capture) sorts last. Python's sort key -score is unordered for NaN.
+DEV: Complex known symbols are refused with std::invalid_argument; the reference's known symbols are always real.
+DEV: verify's result path is a value copy, not the caller's object. Identity is preserved only where Python returns its argument: refine_path and line_path when unchanged, and verify_track's timing when fit=False. The rows restore those.
+#### track / timing_review
+[performance] fit_timing in C++ (direct gather, AVX2 clone) against Python (FFT grids). FULL frame, n_best=8: Python 13.74 s, C++ 1.52 s, 9.0x. One grid: Python FFT 2.99 s, C++ 0.225 s, 13.3x. SHORT: 0.32 s against 0.15 s (2.1x); one grid 0.04 s against 0.009 s (4.1x). This confirms the plan's '10-20x cheaper grid' claim for long frames; for short frames the speedup is mostly overhead.
+   EVIDENCE: scratchpad perf2.py: FULL nlag 1255, 147 rows, nfft 524288, 4200 known symbols; SHORT nlag 1255, 21 rows, nfft 65536; grid relative difference 6e-13 / 1.3e-13
+[numerics] With q at the Kalman grid floor (Q_GRID[0] = 8.6e-10), the reference is ill-conditioned in its own timing input. A 1e-13-sample change of tau0 moves its Z_ref by 5e-7 to 1.1e-6 relative and P by about 1e-4. Every existing parity scenario had q at grid index 1-2, which is why a 1e-7 Z_ref bar held in all of them. Weak steady signals land at the floor (sim -15 dB seed 11, -17 dB seed 10), and there the bar has to be about 1e-5. The same applies to any later port of a caller that compares Z_ref at the floor, for example A3 or live gates.
+   EVIDENCE: test_probe_steady_weak_q_floor: own nudge z_ref 7.81e-7, P 8.36e-5; C++ vs reference z_ref 3.65e-7, P 4.62e-5
+[python-bug] verify keeps the first base's Z_ref with `if best is None or alt.z_ref > best.z_ref`. If that first Z_ref is NaN, every later comparison is False, so a NaN on cand.path blocks _flat_path and line_path from ever being chosen. The C++ copies this faithfully. It is latent: no realistic input produced a NaN Z_ref, because an all-erased frame gives 0.0, not NaN.
+   EVIDENCE: inferred from code, sstvae/qrss/track.py verify (base loop)
+[python-bug] _segment_timing's single-segment fallback fits with the outer `delta`, not the loop's `d_`. It is harmless today, because d_ only diverges from delta after the ptp >= 300 ppm refusal, and that path never reaches the single-segment fit. It is a trap for anyone who reorders that walk.
+   EVIDENCE: inferred from code, sstvae/qrss/track.py _segment_timing; branch coverage via the scratchpad lines.py tracer
+[numerics] The reference's two correlation paths in fit_timing (FFT when nlag > 64, direct otherwise) are not the same function at the capture's end. An interpolation pair straddling len(x) is zero-extended by one and dropped by the other. Only receiver.channel_for's padding keeps the switch invisible. A caller that hands fit_timing an unpadded capture, such as a future live path, would see a timing that depends on the search width.
+   EVIDENCE: inferred from code plus probe: test_probe_fit_timing_random local searches on both sides of the 64-lag switch agree only on padded captures
+[numerics] np.hanning and the C++ libm cos agree bitwise on this machine, so _carrier_lines can be asserted bitwise. This depends on the platform's libm. If a macOS or Windows parity run ever fails bitwise there, the window is the first suspect, not the peak search.
+   EVIDENCE: test_carrier_lines bitwise on all scenarios + 16 random captures (x86-64 glibc)
+[process] A whole-caller A/B over receive_pass alone did not exercise receiver._gate's second verify_track (fit=False, used for _ce_resid_ratio) or em.pass_path's line_path/refine_path/verify_track chain on a stored pass. Spying on call counts (`used`) showed those rows were never reached. A whole-caller test should assert, per row, that the caller actually reached it.
+   EVIDENCE: test_receive_pass_on_the_cpp now asserts verify == 2 + len(gates), verify_track == len(gates) + 2*len(refs), line_path == refine_path == len(refs)
+PARITY: Measured worst values with QRSS_PARITY_WORST=1 on this run.
+
+Bit-exact (asserted):
+- _carrier_lines t/f/w: dtype and values, on every scenario and on 16 random captures. The review tightened this from a tolerance to bitwise.
+- refine_path/line_path take the same branch, and the C++ returns the caller's own path back exactly when the reference does. All four (fn, unchanged) branches are hit.
+- The fine and coarse grids are identical.
+- _flat_path t_s and weight are identical.
+- Gate V composition: the reference's verify and verify_track with the C++ primitives assigned over the ones they call are the C++ ones bit for bit.
+- z_d is bitwise equal, and on the q-floor probe so are m, N and psi.
+
+To tolerance:
+| quantity | bar | worst |
+|---|---|---|
+| fit_timing tau0 | 1e-6 samples | 8.2e-12 |
+| fit_timing slip | 1e-6 samples | 5.0e-11 |
+| Timing.z | 1e-8 relative | 6.7e-12 |
+| peak inputs | 1e-9 | 9.1e-13 |
+| peak delta_in slip | 1e-9 | 4.4e-12 |
+| C++ grid vs reference FFT grid | 1e-12 of scale | 1.05e-13 |
+| C++ grid vs reference direct path | 1e-13 | 4.4e-15 |
+| statistic x | | 9.8e-16 |
+| sig2 | | 2.3e-15 |
+| _segment_timing t0 | | 8.2e-12 |
+| _segment_timing slip | | 5.7e-11 |
+| _segment_timing score | | 7.1e-13 |
+| path f | 1e-7 Hz | 2.1e-12 |
+| flat_path f | 1e-9 Hz | 1.4e-12 |
+| verify Z_ref | 1e-7 relative | 4.5e-8 |
+| verify_track Z_ref | 1e-7 | 2.5e-8 |
+| resid_ratio | 1e-6 | 1.1e-7 |
+| z_d, m, c, N, psi | 1e-9 | 5.2e-11 |
+| u | 1e-8 | 1.05e-9 |
+| P | 1e-5 | 1.6e-6 |
+|
+DEV: The C++ fit_timing always correlates by the direct sparse gather, while the reference uses an FFT correlation once nlag > 64. They agree to 1e-13 of the grid's scale on receiver captures. For an interpolation pair that straddles the end of x the two reference paths themselves disagree, and the C++ follows the direct path. receiver.channel_for pads the capture so this never happens there. (This dev
+DEV: The C++ track core (the Kalman/RTS smoother) carries about 7 significant digits of P when q is at the grid floor. That matches how well-conditioned the reference itself is there, not a port error. The parity bars on that probe are therefore 1e-5 for Z_ref and 1e-3 for P, not the plan's 1e-8 for Z_ref.
+#### acquire-a12 / port
+[numerics] numpy's float32 np.log is its own SIMD algorithm (AVX2/AVX512F paths), not libm's logf: ~5% of float32 arguments differ by 1 ulp. A1's parabola vertex depends on it, so bit-exact A1 needed a port (math/nplog.hpp log_f32).
+   EVIDENCE: tests/test_qrss_native_acquire_a12.py::test_numpys_float32_log; native/core/math/nplog.hpp
+[numerics] np.einsum(..., optimize=True) for 'fcs,tcs->ftc' on numpy 2.5 is not c_einsum: it routes through bmm_einsum to a BLAS zgemm per chunk, so _preamble_sums' S depends on the BLAS build and CPU and comes back Fortran-ordered (which in turn fixes the order preamble_p sums it). Any golden vector built from S is BLAS-dependent.
+   EVIDENCE: measured S max-rel 1e-15..2e-15 vs per-cell sequential sum; S.flags F_CONTIGUOUS in the reference
+[numerics] np.angle is a SIMD arctan2 (1 ulp from std::atan2 in ~7% of arguments); this is the dominant source of A2's 1e-12 phase and 4e-14 s tau0 differences, far under the bars.
+   EVIDENCE: smoke diff: phase worst 3.5e-12 rad, tau0_s worst 4.0e-14 s
+[python-bug] _cell_line indexes stat[d0, b] (axis 0 first) and only indexes the requested drift d if it survives the straight-drift comparison, so an out-of-range d with a low v succeeds in Python; an eager port raises IndexError. Latent fragility: a bad drift index is silently ignored depending on the statistic's value.
+   EVIDENCE: A._cell_line(cs, 0, 13, 10.0) succeeds; inferred from sstvae/qrss/acquire.py _cell_line
+[python-bug] Return types are value-dependent: CarrierCandidate.f_hz is np.float64 when refined from a cell but a Python float when hint_line falls back to the hint itself, and _phase_line's slope is np.float64 only when fitted. Harmless today, but a JSON/pickle consumer or an 'is float' check would see two types for one field.
+   EVIDENCE: inferred from sstvae/qrss/acquire.py hint_line/_phase_line; binding mirrors it (cell_to_py)
+[python-bug] The reference _phase_line divides by sxx without a guard: a degenerate input (all chunks at one time / zero weight spread) emits 'invalid value encountered in scalar divide' and returns NaN slope.
+   EVIDENCE: sstvae/qrss/acquire.py:823 RuntimeWarning during test_fine_sums_coherent_phase_line
+[performance] A1 (carrier_line_stats + carrier_lines) on a FULL-slot-length (600 s) capture: Python 11.9 ms, C++ 8.7 ms (x1.4). A1 reads only its ~25 s span, so slot length barely matters.
+   EVIDENCE: scratchpad time_a12.py, best of 5
+[performance] preamble_search per candidate, from FE: CE Python 53.9 ms vs C++ 43.4 ms (x1.2); L Python 59.1 vs C++ 40.7 ms (x1.5). Given a precomputed _A2Input: CE 30.6 vs 39.3 ms, L 28.7 vs 29.0 ms. C++ in-process breakdown (CE): a2_input 7.2, a2_mf 0.55, preamble_sums 17.6, preamble_p 26 ms. _a2_input via binding: CE 16.8 -> 6.9 ms, L 18.8 -> 11.2 ms; lead_in_span CE 7.9 -> 3.6 ms, L 12.6 -> 7.4 ms.
+   EVIDENCE: scratchpad time_a12.py and a12prof/prof.cpp, best of 5-7
+[performance] Where the C++ loses: the S sums (BLAS zgemm in numpy, 5.5-8.6 ms, vs a scalar-order correlation here at 12.7-20.4 ms) and preamble_p's gammaincc (26 ms vs scipy 17.5 ms). Restructuring S as a per-(c,f,q) correlation along tau with a 4-way unrolled MAC cut it from 29.6 to ~18 ms without changing any cell's summation order. The build is baseline x86-64 (SSE2, -O2, -ffp-contract=off), so 16-byte vectors only; FMA is forbidden by parity.
+   EVIDENCE: _preamble_sums CE 29.6 ms before / 18.5-20.4 ms after; numpy 8.6 ms
+[performance] Whole live-only joint acquire() on CE SHORT: Python 1.286 s; with the acquire_stats rows only 1.49 s (slower: preamble_p); with stats + acquire_a12 rows 1.118 s. A3 still dominates and is Python.
+   EVIDENCE: scratchpad time_acq.py
+[numerics] Python 3.13 evaluates -2j*np.pi as complex(+0.0, -2pi) (unary minus on the complex literal first), which matters for the sign of zero in exp() phasors when matching numpy to the bit.
+   EVIDENCE: inferred while porting the templates' phasor construction; pinned by the template digests
+[process] Asserting 'bit-exact' on a numpy reduction requires knowing which kernel numpy dispatches to at this version: einsum's optimize path, np.angle and float32 np.log all left the C library, and two of the three were only found by bit-level probes, not by reading the Python.
+   EVIDENCE: scratchpad einprobe.py; test_numpys_float32_log
+PARITY: A1 is bit-exact. Across the parity captures, carrier_line_stats.stat (float32), f_hz, drifts and M are identical (0 ulp flips measured, which beats the "a few 1-ulp flips" bar); carrier_lines is exact, including f_hz/drift/metric hex and order; hint_line, _cell_line and pilot_lines return the same candidates bit for bit, with the reference's return types (np.float64 f_hz when refined). Tap tables, CE/L sequences, _chunks/_norm/_templates are exact.
+
+A2 is within tolerance, measured on a CE SHORT -15 dB capture and an L SHORT -15 dB capture, top 3 lines plus the true carrier, both kinds:
+- m and local: relative 6.5e-16 and 9.4e-16; sigma2 and t0_ch/f_mix are exact or 1 ulp.
+- Lambda: max relative 1.4e-15 on the same channel and 2.0e-15 on its own channel (bar 1e-9), with the same argmax cell every time. taus and var are exact. S is max-relative ~1e-15 (2e-15 worst), not exact (see deviations).
+- preamble_search: f_hz identical in every case (0 Hz error; bar 1e-7). tau0_s worst 4.0e-14 s (bar 1e-6). phase worst 3.5e-12 rad. lam worst 2.5e-12 absolute (1.4e-13 relative). cell_lam worst 5e-15. p_value worst relative ~1.3e-13. tau0_sd_s worst 8.6e-16. chunk_sums worst relative 7.1e-12. passed, n_groups, f_mix and waveform are identical, with the same None outcomes.
+- preamble_p on A2's own arrays: Q.preamble_p on the native S equals A.preamble_p on the same S to the bit (SumOrder::Sequential over the Fortran-ordered S).
+- fine_sums/coherent/phase_line: rtol 1e-9 asserted, with the
+DEV: S (the chunk sums of _preamble_sums) is the per-cell sum over symbols taken in order; the reference's einsum('fcs,tcs->ftc', optimize=True) is dispatched by numpy 2.5 to bmm_einsum, i.e. a BLAS zgemm per chunk, whose blocking/FMA order is the BLAS's and is not reproducible (nor stable across BLAS builds/CPUs). ~2e-15 relative; Lambda inherits it (~1.5e-15). preamble_p on a given S is exact.
+DEV: Chunk phases use std::atan2 where np.angle uses numpy's SIMD arctan2 (1 ulp apart in ~7% of arguments): source of the 1e-12-level phase/tau0 differences.
+DEV: oaconvolve's FFTs (math/convolve.hpp) are not pocketfft's order: rounding-level differences in m/local (~1e-15 relative).
+DEV: carrier_lines walks np.argsort(best)[::-1]; numpy's argsort is not stable, so two bins with exactly equal float32 best-statistics may be visited in the other order (C++ breaks ties highest bin first). Never observed in the parity captures.
+DEV: The binding refuses inputs the reference would silently accept differently: a non-float32 or non-2-D CarrierStats.stat, a non-1-D fe, a non-2-D chunk table raise NotImplementedError rather than being computed (carrier_line_stats always makes float32).
+DEV: Helpers called *inside* a native composite (preamble_search's _a2_input/_preamble_sums/CubicSpline, carrier_lines' carrier_line_stats when stats is None) are the C++ and are not hookable through acquire's module attributes; no existing test patches one alone.
+DEV: lead_in_span's noise floor goes through a NoisePsdFn seam: the C++ frontend when frontend.noise_psd is the native one, otherwise the Python callable called as noise_psd(ch, fs, fs_in=, audio_hz=) -- so a spy on frontend.noise_psd still sees the call, as with chan.py.
+#### acquire-a12 / review
+[numerics] Python's builtin abs() of an np.complex128 scalar is numpy scalar math (npy_cabs, i.e. libm hypot). It is not the np.abs ufunc (larger*sqrt(1+r^2)), and the two differ by 1 ulp often. A port that maps every abs() of a numpy complex to the ufunc formula is wrong wherever the reference applies the builtin abs to a scalar from np.sum. This was the one real bug in this lane (lead_in_span).
+   EVIDENCE: measured: 4224 of 20000 random complex sums differ by 1 ulp between np.abs-formula and builtin abs; std::hypot vs builtin abs 0/50000; fix at native/core/qrss/acquire_a12.cpp lead_in_impl
+[numerics] The ported numpy AVX512F float32 log (core/math/nplog.hpp) is exact on every non-negative float32, so the A1 stat grid is bit-exact by construction rather than by luck.
+   EVIDENCE: exhaustive probe: 0 mismatches over 0x0..0x80000000 plus negative ranges; test keeps [0.5,2) (8.4M values, ~2 s)
+[numerics] The A2 cross-correlation sums S agree with numpy only to rounding, because einsum('fcs,tcs->ftc', optimize=True) dispatches to zgemm with an F-ordered result. Lambda is still rtol 1e-9, and every decision and cell is identical, so holding S to a tolerance is the right bar.
+   EVIDENCE: measured: 2-3.5% of S elements bit-equal; Lambda rtol < 1e-9 in all probe cells
+[numerics] On a normalised FE, A2 Lambda saturates at about 620 for CE from about 0 dB SNR, so preamble_p underflows below 1e-250. That branch is real and reachable at ordinary strong signals, not only in pathological input. The probes exercise it, and the C++ takes the same branch.
+   EVIDENCE: probe2.py strong-signal sweep: pmin < 1e-250 at 0 and 10 dB, identical passed/cell
+[performance] The C++ is at or slightly ahead of numpy end to end on A1/A2, except _preamble_sums, which is slower than numpy's BLAS zgemm einsum. That is the place to vectorise or block if A2 becomes a cost on Android.
+   EVIDENCE: measured best-of-7: _preamble_sums CE py 0.0172 s vs C++ 0.0220 s, L 0.0079 vs 0.0131; _a2_mf 0.0013 vs 0.0006; A1 FULL stats+lines 0.011 vs 0.008; preamble_search CE 0.048 vs 0.045, L 0.050 vs 0.041; lead_in_span CE 0.008 vs 0.004, L 0.013 vs 0.007
+[process] A whole-caller A/B that only checks the result equals the reference proves nothing when the rows silently fail to reach the C++ (for example a from-import bound before substitution). The A/B now wraps every native entry point in a call counter, asserts that each row target is the binding, and requires nonzero counts. Without that, both A/B tests would pass on pure Python.
+   EVIDENCE: tests/test_qrss_native_acquire_a12.py _apply_rows / _COUNTED; preamble_search count >= 20 in the acquire A/B
+[process] The receive-pass A/B compared Detection.uid exactly. uid hashes the float32 z, so a 1e-13 Hz move of the detection can flip it, which contradicts cpp-port-plan 4.1. It was dropped from the exact comparison.
+   EVIDENCE: inferred from code: uid derivation in sstvae/qrss types; test edit in test_receive_pass_on_the_cpp
+[numerics] scipy's oaconvolve of complex data with real taps cannot be reproduced to the bit by numpy-pocketfft-style code, because scipy transforms the real taps with ducc0's real-input FFT. Any statistic downstream of such a convolution should be specified to rounding.
+   EVIDENCE: measured: ~21% of lead-in MF samples bit-equal, 6e-16 relative; a pocketfft probe matched at n=1250 but not at power-of-2 lengths
+PARITY: Bit-exact:
+- A1 carrier_line_stats.stat (float32) on every probe, including a new crowded band (four carriers, two of them drifting, three t0 shifts).
+- carrier_lines bins/drifts in the same order under five option sets (default, max_cands 2, min_sep 12, min_sep 0.25 with max 40, pfa 0.3 with max 64).
+- hint_line at five offsets (bin edges included) and pilot_lines at two separations.
+- log_f32 against numpy's AVX512F float32 log: 0 mismatches over all 2^31 non-negative bit patterns plus the negative ranges probed. The test keeps [0.5, 2) exhaustively.
+- preamble_p on A2's real S/var arrays, the same as numpy.
+- fine_sums/coherent/phase_line on a shared scipy spline.
+- lead_in_span's returned span in 16 new random trials (CE and L; random t0, f, drift, tau0 and z_min; found and missed lead-ins both present) and in the existing tests.
+- to_detection.
+
+Within tolerance:
+- A2 Lambda: rtol 1e-9 is asserted. S matches numpy's einsum to the bit in only 2-3.5% of elements, because einsum goes through BLAS zgemm.
+- f_hz and tau0_s: the random-cell probe's worst differences are under 1e-9, as asserted (24 cells: CE, L and the crowded band, drifting and not, a window running off the capture start, passed and failed). The bar is 1e-7 Hz and 1e-6 s.
+- phase: np.angle uses SVML atan2 on this host.
+- The pass/fail outcome and the cell are identical in every probed cell, including the p-underflow branch at strong SNR.
+- lead_in_span's internal z statistic matches only to rounding (about 6e-
+DEV: lead_in_span's window statistic z matches only to rounding. scipy.signal.oaconvolve of complex data with real taps uses ducc0's real-input FFT, and the shared math/convolve.hpp follows numpy's pocketfft, so not every sample is bit-equal (~21% are; 6e-16 relative). The returned span can differ only when z lands within an ulp of z_min. This is documented in acquire_a12.hpp.
+DEV: A2's S and Lambda match only to rounding (rtol 1e-9). numpy's einsum('fcs,tcs->ftc', optimize=True) goes through BLAS zgemm with an unspecified summation order, and np.angle uses SVML atan2. Decisions and cells are identical.
+DEV: carrier_lines tie order. numpy's default argsort (introsort, not stable) and the C++ sort can order exactly equal float32 stats differently. None occurred in any probe; documented, not fixed.
+DEV: In the binding, a hand-built _A2Input/_A2Channel with f_mix None becomes Rational(0) rather than being refused or treated as None. Real callers always set f_mix, so the rows never reach this case.
+#### acquire-a3-cwid / port
+[python-bug] track_before_detect with a band narrower than its clip span returns a confident hit at the wrong frequency. np.clip is called with a_min > a_max, the resulting negative slice bounds wrap, and bins are read from the wrong end of the grid.
+   EVIDENCE: Probe: band (1000, 1060), candidate 1030 Hz -> hit centre 1020 Hz, path 1046.5-1050.75 Hz (sstvae/qrss/acquire.py, the band clip in track_before_detect/l_pilot_bins)
+[python-bug] tbd_viterbi with B < |max_step| < 2B (B = number of bins) fails with an opaque numpy broadcast ValueError instead of a parameter error. With |max_step| >= 2B it silently works differently, so the valid-step range is undocumented and unchecked.
+   EVIDENCE: Probe of tbd_viterbi with an 81-bin E and max_step 100 -> ValueError 'operands could not be broadcast together'
+[python-bug] _path_line on a path with fewer than 2 points raises UnboundLocalError: the refit branch references a variable assigned only inside the loop. A degenerate path reaching TbdHit.f_hz therefore crashes instead of returning NaN or raising a clear error.
+   EVIDENCE: Probe: A._path_line(FreqPath with 1 point) -> UnboundLocalError; mirrored as acquire::UnboundLocal and pinned in test_acquire_tbd.cpp
+[performance] FULL-slot track_before_detect: the C++ is 3.1x faster at half the peak memory without shape specs, and 5.7x faster with them. The Python's biggest single cost is TbdHit.f_hz recomputing np.polyfit inside the dedup loop.
+   EVIDENCE: 896 frames, all_hits: Py 2.12 s / +202 MB vs C++ 0.68 s / +100 MB. With shape (FULL, L_FULL): Py 4.44 s vs C++ 0.78 s. cProfile: 3816 polyfit calls = 0.97 s of 2.99 s (acquire.py:1282 and :1080)
+[performance] cwid.read_ml is 50-90x faster in C++. The margin pass (a second constrained DP per character) dominates the Python cost.
+   EVIDENCE: margin=True 24.2 ms vs 0.27 ms; margin=False 5.67 ms vs 0.112 ms
+[simplification] Caching f_hz per hit is a one-line Python fix worth about a third of track_before_detect's runtime, and needs no format change.
+   EVIDENCE: cProfile above; the C++ caches it with identical output
+[numerics] cwid.match uses np.dot, which goes through OpenBLAS DYNAMIC_ARCH. Its result depends on the CPU's kernel: on AVX-512 the SkylakeX ddot uses FMA with four 8-lane accumulators (blocks of 32), folds them to 4 lanes, runs four 4-lane accumulators (blocks of 16), combines ((a0+a1)+a2)+a3 then (s0+s2)+(s1+s3), and finishes with an FMA scalar tail. Bit-exact parity needs that order emulated with std::fma, and holds only on SkylakeX dispatch. Python's own match score is therefore machine-dependent at the ulp level.
+   EVIDENCE: scratchpad dot_order.py: 0 mismatches in 2000 trials at n=176,16,32,40,100,7 with fma=True; plain multiply-add mismatched
+[numerics] numpy's float32 log is a SIMD kernel whose results differ from logf in the last ulp. It feeds tbd_emissions/_bins_path's parabola refinement, so it had to be emulated exactly (np_log_f32) for bit-exact paths.
+   EVIDENCE: native/core/qrss/acquire_tbd.hpp np_log_f32; bins_path digests match
+[numerics] scipy's i0e near 0 and the C++ series disagree at 5e-11 relative for small x, though they agree to 1e-14 for x >= 1. Any ln_i0 parity test needs a split tolerance.
+   EVIDENCE: tests/test_qrss_native_cwid.py ln_i0 test, measured worst 5.3e-11 near 0
+[process] pybind11 without stl.h compiles fine but fails at runtime when a std::vector is passed to py::object.attr(...) (for example reshape). Build shapes as py::tuple explicitly.
+   EVIDENCE: First parity run: 'Unable to convert call argument' on reshape; fixed with shape_tuple() in both binding files
+[process] A synthetic OOK callsign stub must key the carrier in the plain units too (units 0-4 and 184-191), not only in key-down units. Without it, read_ml on the OOK stub reads garbage while the FSK test passes, which looks like a port bug.
+   EVIDENCE: scratchpad dbg_ook.py; the fixed stub reads K1ABC (gen_pins.py line 125)
+[process] Peak memory of one call inside a long-lived Python process is measurable without tracemalloc's overhead: write '5' to /proc/self/clear_refs to reset VmHWM, then read VmHWM after the call.
+   EVIDENCE: scratchpad time_full.py; used for the +202 MB vs +100 MB figures
+PARITY: Bit-exact:
+- acquire_tbd: tbd_frame_starts, tbd_n_frames, tbd_viterbi paths and Z (float32 and float64 E), tbd_channels, tbd_emissions (E, f and t), shape_frames, shape_z, shape_waveform/_shape_verdict, _bins_path, l_pilot_bins, frame_map, _path_of.
+- track_before_detect: every TbdHit field except p_value (paths, z, n_frames, centre_hz, shape_z, above_z, waveform, l_path, l_shape_z, l_above_z), including the hit order. Checked on CE, L and noise captures and on the TINY tone capture pinned by sha256 in the ctest.
+- cwid: _unit_sums X0/X1/sigma2, window_soft and window_llr (0 ulps), keying_type, decode_units, _patterns, _dp and _trace, read_ml Z and margin, read, and match.
+- match is bit-exact only on a machine where OpenBLAS dispatches the SkylakeX ddot kernel; the C++ emulates that kernel's FMA order.
+
+Tolerance (worst measured error):
+- TbdHit.p_value: 2.1e-16 relative.
+- TbdHit.f_hz / line(): intercept 1.6e-15 relative, slope 3.6e-10 relative. np.polyfit uses LAPACK SVD lstsq; the C++ uses QR. The ctest holds f_hz to 1e-9 Hz absolute.
+- cwid _ln_i0: 1e-14 relative for x >= 1, 5.3e-11 relative near 0 (the parity test uses a split tolerance).
+
+Whole-caller A/B with the rows monkeypatched:
+- acquire() on a single frame and on the CE+L tuple: same results.
+- cwid's _cw_result on SHORT and L_SHORT tracks: same results.
+
+Not compared:
+- Dtypes other than complex64, complex128 and float64 for fe (NotImplementedError).
+- Rank > 2 cwid stacks.
+- The narrow-band and wide-step cases
+DEV: np.polyfit inside _path_line / TbdHit.f_hz is LAPACK SVD lstsq; the C++ solves the same weighted fit by QR. The two agree to about 1e-15 on the intercept and 4e-10 relative on the slope, not bit-exactly.
+DEV: A band narrower than the anchor/clip span (for example band (1000, 1060) with a 1030 Hz candidate) makes Python call np.clip with a_min > a_max; negative slices then wrap bins and it returns a hit centred at 1020 Hz on a 1046-1051 Hz path. The C++ raises NotImplementedError (NotPorted) instead of reproducing garbage.
+DEV: tbd_viterbi with B < |max_step| < 2B: numpy raises its broadcast ValueError. The C++ raises NotImplementedError carrying numpy's wording. |max_step| past int8 range raises OverflowError in both.
+DEV: fe dtypes other than complex64/complex128/float64, and a cwid channel that is not complex128, raise NotImplementedError rather than being coerced. cwid rank > 2 stacks raise NotImplementedError; a 0-d input gives the reference's IndexError('tuple index out of range').
+DEV: TbdHit.f_hz is computed once per hit and cached during the 10 Hz dedup. Python recomputes polyfit on every comparison: 3816 polyfit calls and 0.97 s of 2.99 s on FULL. The result is identical; only the cost differs.
+DEV: tbd_viterbi reads each channel's float32 E columns in place with a stride, widening per element as numpy does. Python builds a float64 stack, so the C++ uses half the peak memory with the same numbers.
+DEV: shape_frames is reached through a TbdOptions::keep_fn seam. The binding passes the module attribute through it, so tests that monkeypatch acquire.shape_frames still take effect with the native row installed.
+DEV: TINY frames carry no callsign windows, so the cwid whole-caller A/B runs on _cw_result over SHORT and L_SHORT stub tracks. The smoke suite's SHORT pass under --native-qrss=rx covers the live path.
+#### acquire-a3-cwid / review
+[numerics] numpy's s.sum(axis=0) on a 2-D float64 stack is a row-by-row running sum from row 0 only when the inner loop runs along axis 1. That holds for C order and for reversed, strided and broadcast rows. For an F-order (or transposed) stack, numpy runs a pairwise sum down each column, which gives different bits from 8 rows up. A C++ port that copies to C order (pybind11 c_style|forcecast) silently matches only the first case. Watch for this in every axis-0 reduction the port takes from a py::object.
+   EVIDENCE: measured: F and .T stacks of 9/17/40/200 rows differ from the sequential sum; every row-major layout is equal (scratchpad probe_strides.py; test_combine_many_rows_and_layouts asserts n_diff >= 6)
+[numerics] numpy's float64 np.log (SVML on AVX-512) differs from glibc's log in the last ulp on about 0.37% of inputs in (0,1) and 0.012% overall. _ln_i0 = log(i0e(x)) + x cancels at small x, so that ulp becomes 5e-11 relative there. Because window_llr is cast to float32, it stays bit-identical anyway.
+   EVIDENCE: measured on this host; tests/test_qrss_native_cwid.py::test_ln_i0_and_combine
+[numerics] np.add.reduce starts from the identity +0.0, so np.sum([-0.0]) is +0.0. A C++ sum seeded with 0.0 matches; one seeded with the first element does not (sign of zero). np.convolve 'same' with 15 taps goes through OpenBLAS ddot (a running fma from 0) rather than small_correlate, which handles only up to 11 taps.
+   EVIDENCE: inferred from numpy source and checked bit-exactly by shape_z / smooth probes
+[performance] A3 at FULL size (896 frames, about 7 M FE samples): track_before_detect takes 1.97, 4.54 and 2.3 s in Python against 0.64, 0.86 and 0.64 s in C++, roughly 3-5x faster. The phases measured were a single CE spec, the joint shape test and the L spec. Peak memory was +202 MB in Python against +100 MB in C++.
+   EVIDENCE: measured with scratchpad time_full.py on this 4-CPU VM, shared with another agent
+[process] The brief's literal A/B for cwid ('receive_pass on a CE TINY pass') is vacuous: TINY, L_TINY and every n_win == 0 frame return from _cw_result before calling cwid at all. SHORT and L_SHORT are the smallest frames with callsign windows. The receive_pass A/B now runs on those and is marked slow (about 7 s each).
+   EVIDENCE: receiver._cw_result: `if spec.n_win == 0: return None, None`
+[process] The original A/B tests compared each caller with itself unless the rows really replaced the reference, and nothing proved they did. Counting spies wrapped around the native functions, before the rows are applied, close that gap for both acquire and _cw_result. A row computed inside the C++ (TbdHit.f_hz, read -> read_ml) correctly shows zero Python-side calls.
+   EVIDENCE: test_the_a_b_ran_the_cpp, test_cw_result_on_the_cpp
+[performance] Building a synthetic FULL capture is the slow part of any FULL-slot test. np.exp of a 7 M complex array plus an odd-length ifft took 13.6 s; cos/sin of exactly reduced turns plus a power-of-two FFT brings it to about 6 s on this VM. The FULL-slot test is still slow-tier, and the same sizes are kept in the fast tier as matrices (test_full_size_pieces, about 2 s).
+   EVIDENCE: measured
+[simplification] acquire::np_log_f32 in this lane and math::np::log_f32 in the A1/A2 lane are the same transcription of numpy's simd_log_FLOAT. Keep one.
+   EVIDENCE: native/core/qrss/acquire_tbd.cpp vs wf_c19e1b62-a4e-2/native/core/math/nplog.hpp
+PARITY: Every probe was bit-exact on this host (x86-64 with AVX-512, numpy 2.x, OpenBLAS SkylakeX).
+
+A3, bit-exact:
+- Viterbi paths and Z, single-channel and stacked, at 896 and 2500 frames, float32 and float64.
+- shape_z (z1 and z_above, with and without keep), l_pilot_bins and _bins_path at FULL size.
+- frame_map and _path_of.
+- track_before_detect on 14 random captures (TINY, L_TINY and SHORT; complex64 and complex128; fractional t0; drifting tones and L-like pilots; random candidates, bands, pfa, all_hits and shape_specs). Every TbdHit field is equal and in the same order, apart from p_value, which the test holds to 4e-16 relative (gumbel_p's SIMD exp).
+- A whole FULL slot with shape_specs (FULL, L_FULL), more than 30 hits.
+
+cwid, bit-exact:
+- read_ml text, Z and margin.
+- _unit_sums, window_soft and window_llr on every CE and L track (0 ulps; test bound 1 float32 ulp in at most 1e-4 of values).
+- keying_type.
+- match (0 difference over 5000 draws; the old "4.6e-16" comment was stale).
+- decode_units.
+- _combine on row-major stacks of 2-200 rows, in C order, float32, reversed, column-reversed, strided and broadcast. read_ml, read and match on those stacks too.
+
+Whole-caller A/Bs, identical results:
+- acquire (joint CE+L), with a spy proving that track_before_detect, _hit_to_detection and frame_map ran on the C++.
+- receiver._cw_result, with a counting spy proving keying_type, window_soft, window_llr, read and match ran on the C++.
+- receiver.receive_pass on a SHORT CE pass at -9 
+DEV: cwid _combine / read_ml / read / match refuse a column-major 2-D unit stack (NotImplementedError). numpy's s.sum(axis=0) sums such a stack pairwise down each column, which gives a different number from 8 rows up. No caller produces one: window_llr's rows and their stacks are row-major. Row-major stacks in any stride pattern are accepted and are exact.
+DEV: track_before_detect in the C++ computes TbdHit.f_hz (polyfit) for the first hit straight away; Python computes it at dedup. Results are identical. Only the point at which an error would be raised differs, and only if polyfit raises.
+DEV: The cwid binding refuses a complex64 channel and a float32 noise_psd (NotImplementedError) where Python would compute in float32. No caller passes these. Inherited from the author; unchanged.

@@ -1,0 +1,10 @@
+tiles in state
+2026-10-14T23:57:14Z listening: /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/measure/live/short.wav (replay from 2025-09-30T23:59:49Z), frame short, waveforms CE (short) and L (l-short)
+2025-10-01T00:00:01Z slot 2025-10-01T00:00:00Z: frame started
+2025-10-01T00:00:26Z slot 2025-10-01T00:00:00Z: signal at 2000.0 Hz, waveform L
+2025-10-01T00:00:26Z slot 2025-10-01T00:00:00Z: signal at 1200.0 Hz, waveform CE
+2025-10-01T00:00:26Z slot 2025-10-01T00:00:00Z: 2 signal(s) at 10% (3 s)
+2025-10-01T00:02:26Z slot 2025-10-01T00:00:00Z: 2 signal(s) at 57% (3 s)
+2025-10-01T00:04:22Z slot 2025-10-01T00:00:00Z: 2 signal(s) at 100% (1 s)
+2025-10-01T00:04:22Z slot 2025-10-01T00:00:00Z: frame over, 2 pass(es) (3 s)
+2025-10-01T00:04:22Z audio ended

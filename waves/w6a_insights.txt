@@ -1,0 +1,183 @@
+#### ltrack / core
+[performance] track_l, Python vs C++ row, l-short at -6 dB: gate V 0.26 / 0.03 s, round A 0.93 / 0.21 s, round B 1.37 / 0.40 s. refine_timing_l (4 calls) 0.68 / 0.22 s.
+   EVIDENCE: timed on the recorded calls, 4 shared CPUs, 2026-10-13
+[performance] track_l on an L FULL pass at -6 dB, Python vs C++: gate V 1.51 / 0.27 s, round A 8.92 / 3.54 s, round B 11.64 / 3.45 s, refine_timing_l (4 calls) 9.47 / 4.69 s. On l-medium: round A 4.09 / 1.83 s, round B 7.26 / 2.10 s, refine 5.77 / 2.64 s. The C++ gain shrinks with pass length, because the FFT filters and the Kalman passes dominate there, not the interpreter.
+   EVIDENCE: timed on the recorded calls, 4 shared CPUs
+[python-bug] refine_timing_l on a finished track is not a fixed point. It refines against tr.u_pl/P_pl, which were computed under the pre-refinement timing and never recomputed, so calling it again moves tau0. Harmless in the receiver, which calls it inside track_l's loop, but a caller re-refining a returned track gets a different timing.
+   EVIDENCE: measured: tau0 +0.915 CH samples on l-short round A, -0.583 on l-tiny round A
+[python-bug] ltrack's layout-using functions (_Model, _distortion, data_templates, _pilot_gain, pilot_wave, _lead_supported_l) do not check the waveform. Given a CE frame, lframe.layout fails in one of two unrelated ways: AttributeError (no n_data_payload) or AssertionError '<n> header symbols for 2474 bits', with n = n_hdr - ceil(n_hdr/16). An explicit _l_only guard would give one clear message.
+   EVIDENCE: sstvae/qrss/lframe.py layout(); probed on TINY and FULL CE specs
+[python-bug] pilot_wave and _pilot_gain with a scalar tau: _pilot_gain returns np.float64, but pilot_wave raises TypeError, because lwave.pilot's _ramp_envelope item-assigns into a 0-d result. The two functions are inconsistent on the same input.
+   EVIDENCE: probed: pilot_wave(3.5, L_SHORT) raises TypeError; _pilot_gain(3.5, L_SHORT) gives np.float64(0.656)
+[numerics] _q_near uses np.log (SVML on x86), so its window edge depends on the libm. The C++ uses the port's numpy-matching log, and the q_near spans are pinned in the ctest from Python.
+   EVIDENCE: native/core/qrss/ltrack.cpp q_near_span; gen_ltrack_pins.py q_near pins
+[numerics] scipy's oaconvolve keeps complex64 in single precision, so pilot_filter on a complex64 capture is single-precision in Python. The C++ is double throughout; the difference is 9.4e-8 relative.
+   EVIDENCE: test_qrss_native_ltrack.py::test_pilot_filter, complex64 worst 9.4e-8
+[process] The whole-caller A/B needs a counting spy that subclasses a class row (_Model). A plain function wrapper would break isinstance and attribute access, so it would silently test a different object than the receiver uses.
+   EVIDENCE: tests/test_qrss_native_ltrack.py _counted
+[process] The test marked slow for 'receives a pass' (the l-tiny lead-in pass) runs in 1.7 s, so it moved to the fast tier. It is the only configuration that reaches _lead_supported_l, and a slow-only mark would have left that row unexercised in the default run.
+   EVIDENCE: pytest --durations: test_lead_in_pass 1.70 s; fast tier 25.1 s total
+[process] Edge-case probing of numpy semantics turned up 0-d results that must be numpy scalars, not 0-d arrays: pilot_filter, _pilot_gain, and data_mix at a scalar index. A helper (shaped_result) now handles all three. Only a test comparing type(), not just dtype and shape, catches this.
+   EVIDENCE: the earlier failure: ('_pilot_gain', '3.5', 0.0) array(0.656) vs np.float64(0.656)
+PARITY: Measured on 2026-10-13. The inputs are the Python receiver's own calls, recorded by spies on ltrack.track_l and refine_timing_l: l-tiny at -12 dB and l-short at -6 dB, covering gate V's withheld runs, round A, and round B with the header and the cw keying known.
+
+BIT-EXACT (dtype and shape included):
+- pilot_table and _pilot_taps
+- data_mix (all positions, at an index, with a boolean mask, a 0-d index giving a numpy scalar, and an N-d index)
+- data_mf (dense and sparse)
+- make_classes_l, _distortion, data_templates (with and without withhold)
+- _pilot_gain and pilot_wave (every keying from round B, leads 0, 4.2 and 10)
+- _q_near, known_symbols_l
+- _Model's arrays, streams, fused and pu_initial (on two models), and _fit_delta
+- _hold_ends
+
+TOLERANCE:
+- pilot_filter: 1e-12 of output scale on z_d and on float64. A complex64 x is held to 1e-6 (measured 9.4e-8), because scipy transforms complex64 in single precision.
+- _pu_local: 1e-13 (np.convolve's sum order).
+- track_l on the receivers' calls: the same q, keying, lead-in, grid, pos/meas/meas_pl masks and every decision.
+  - Arrays z_d, m, c, N, psi, u, P, pu and the _pl streams: to 1e-9 relative (measured worst 4.4e-10, at the frame'
+#### ltrack / core_review
+[performance] ltrack in C++ is 3-7x faster than Python, unlike wave 5's track(). On l-short at -12 dB: gate V's withheld track_l went 0.25 -> 0.05 s (4.9x), round A 0.81 -> 0.23 s (3.5x), round B 1.35 -> 0.32 s (4.25x), and four refine_timing_l calls 0.68 -> 0.24 s (2.8x, including conversion). On L FULL at -6 dB: the gate's withheld track_l went 1.58 -> 0.22 s (7.2x), round A 10.0 -> 3.5 s (2.9x), round B 11.1 -> 3.3 s (3.4x), and refine_timing_l x4 9.2 -> 4.8 s. The whole Python receive_pass takes 40.4 s on FULL and 3.2 s on l-short.
+   EVIDENCE: scratchpad timing.py runs (l-short -12 dB; l-full -6 dB, timing_full.txt)
+[process] The receivers' fixtures (and the port's original parity file) never blank a symbol: keep's mean is 1.0, so psi and psi_pl never fall below PSI_MIN. As a result the erase branches of _Model.streams and of the pilot measurement, and _hold_ends with interior infinite R, were untested. Impulses at 40 dB, 1/s, with 3 crashes/min on a moderate fade (l-tiny -6 dB, seed 2) reach them, and the C++ matches there too (test_probe_blanked_fading_pass).
+   EVIDENCE: test_probe_blanked_fading_pass asserts psi and psi_pl are under PSI_MIN inside the frame in every call
+[process] No whole-caller A/B covered the joint receiver: receiver._gate -> verify_l -> verify_track_l -> withheld track_l on the row, followed by round A. Without that, a row reached only from the gate could be wrong unseen. The new probe counts track_l calls by caller (gate with withhold_known, pass without) and asserts both happen.
+   EVIDENCE: test_probe_joint_gate_on_the_rows (receive_slot on l-tiny -12 dB, (TINY, L_TINY))
+[numerics] CwIdResult.z_match is a sum of float32 soft values computed from round A's track. A track that agrees to 1e-10 relative can still flip one float32 rounding (about 6e-8 relative per element, about 700 elements), which moves z_match by about 1e-9. The original _receive_agrees compared cw with ==, so it passed only by fixture luck (dz = 0.0 on l-short). It now compares text, keying and agrees exactly and z_match to 1e-6 relative.
+   EVIDENCE: receiver._cw_result and cwid.window_soft (.astype(np.float32)); measured dz 0.0 on l-short -12 dB
+[process] report_l on a withheld track returns z_ref = NaN in both implementations, so a plain dataclass == on TrackReport fails even when the two agree. Compare NaN-aware.
+   EVIDENCE: the first run of test_probe_track_l_from_threads failed only on z_ref nan != nan
+[process] The parity tests skip under --native-qrss=rx, because they hold both implementations and need the reference unsubstituted. Run them without the flag; with it, -k probe reports "8 skipped", which reads like success at a glance.
+   EVIDENCE: pytest --native-qrss=rx tests/test_qrss_native_ltrack.py -k probe: 8 skipped
+[numerics] In ltrack the Python pow-vs-square trap is real. G_REF_ABS ** 2 and other scalar Python floats squared go through pow(), and array ** 2 is a multiply. The port's py_sq and np::mul/np::div (FMA complex multiply, reciprocal division) are what make the swap test bitwise, and every one of them is load-bearing.
+   EVIDENCE: inferred from code: ltrack.cpp py_sq (line ~93), report_l's 10*log10(p/G_REF_ABS**2); swap tests bit for bit
+PARITY: Bit-exact:
+- pilot_table, _pilot_taps, data_mix, data_mf, _distortion, data_templates, _pilot_gain, pilot_wave, _q_near, make_classes_l and known_symbols_l.
+- _Model's streams, fused and pu_initial, and _fit_delta. The probes cover these on scrambled measurements: psi under PSI_MIN, at 0 and at 1; rescaled m and N; random deltas, including 1e-3+2e-3j; and data masks.
+- _hold_ends.
+- data_mf and data_mix under random timings: ±250 ppm, gamma ±40, sparse and dense position sets.
+- track_l under the swap test. With the C++ pilot_filter, refine_timing_l, _smooth, _recenter and freq_path_spline put under the reference, it matches bit for bit. That now includes the new blanked fading pass (Impulses at 1/s at 40 dB, 3 crashes/min, a moderate fade, seed 2).
+- track_l run from four Python threads at once matches the serial run bit for bit, as do refine_timing_l and report_l.
+
+Within tolerance:
+- track_l on the receivers' calls: arrays to 1e-9 relative, with q, keying and masks identical. On the drift passes the worst was 4.4e-10 for the arrays, 1.4e-12 for P and 1.1e-11 for pu. The blanked pass also stays inside 1e-9.
+- refine_timing_l: timing to 1e-6 CH samples, including 6 random starts p
+#### ltrack / timing
+[performance] fit_timing_l on L FULL, blind search: the C++ direct sparse gather is 8.7x faster than Python's FFT path (1529 ms against 13253 ms). n_best 8 is about the same (1637 ms against 13815 ms). Most of the C++ time is fit_grid_l: about 310 ms per carrier estimate, or 0.40 ns per (known x delta x lag x gather) element (2100 x 73 x 1255 x 4). fit_mixed takes 34 ms.
+   EVIDENCE: measured, scratch prof_lt.py; l-full -6 dB
+[performance] fit_timing_l on l-short: 79.5 ms against 250.8 ms blind, and 166 ms against 405 ms at n_best 8.
+   EVIDENCE: measured on l-short -6 dB
+[performance] verify_track_l is about 3x faster in C++ on l-short:
+- fit=False: 63.7 ms against 185.9 ms
+- local fit: 77.7 ms against 249 ms
+- blind: 131 ms against 410 ms
+
+verify_l on l-short: 146 ms against 466 ms. On L FULL, verify_track_l with fit=False: 239 ms against 1194 ms.
+   EVIDENCE: measured on l-short and l-full passes
+[performance] A dedicated complex gather kernel, one pass over x per clock error instead of four real fit_grid passes, should roughly halve fit_grid_l, the dominant L FULL cost. It was not written because the task said to reuse track_timing's kernel and AVX2 clone.
+   EVIDENCE: inferred from the 4-gather structure in ltrack_timing.cpp fit_grid_l
+[python-bug] _segment_timing_l's inner fit() uses the enclosing `delta` (the function argument) in its short-span branch, `ab - tp * sps * (1 + delta)`, instead of its own d_ parameter. This is the same latent bug as CE's _segment_timing. The port reproduces it.
+   EVIDENCE: sstvae/qrss/ltrack.py _segment_timing_l, fit(): uses delta not d_
+[python-bug] verify_l computes the blind coarse grid twice on the same z_d. verify_track_l's own blind fit runs on the line base, then verify_l calls fit_timing_l again with n_best=V_TIMING_TRIES for the runners-up. On L FULL that is about 13 s of duplicated Python work, about 1.5 s in C++.
+   EVIDENCE: sstvae/qrss/ltrack.py verify_l: base None branch
+[python-bug] L's _segment_timing_l scores its final statistic through the ok mask (terms past x count 0), while CE's _segment_timing does not mask. The two waveforms' scores differ near capture edges, which is an asymmetry rather than a crash.
+   EVIDENCE: ltrack.py _segment_timing_l stat() vs track.py _segment_timing
+[python-bug] fit_timing_l's FFT path and direct path disagree on an interpolation pair that straddles the end of x: the FFT keeps the inside half, the direct path drops the term. Which grid a caller gets depends on whether nlag > 64. This is unreachable from the receiver because channel_for pads.
+   EVIDENCE: ltrack.py fit_timing_l, nlag <= 64 vs FFT branch
+[numerics] The sign of zero in np.exp(-2j*np.pi*t) at t=0 depends on the CPython version. Under 3.13, -2j*np.pi = (+0.0, -2pi), which gives exp -> 1+0j. CPython 3.14 changed complex*float to scale both parts, giving (-0.0, -2pi) and 1-0j. The C++ first produced -0.0 and the bitwise phase test caught it. It now follows 3.13 via `0.0 + -TWO_PI*t`. A Python upgrade would flip the reference's own signed zero.
+   EVIDENCE: test_mix_phases failure at lag 0.0 (C++ 1-0j vs Python 1+0j); python 3.13.16
+[process] The whole-caller A/B can only show that a row is reached and correct when that row's caller stays Python. With every row installed, the C++ verify_l never calls the Python-visible fit_timing_l or resid_ratio. The CONFIGS that keep verify_l, then verify_track_l, then fit_timing_l in Python are what made shifted fit_timing_l, _segment_timing_l and _lag_phase rows, and a scaled resid_ratio, fail. Mutation-checked through a pytest plugin.
+   EVIDENCE: 4 mutants, each caught in exactly the config that keeps its caller
+[process] Building the from-import site list from sys.modules by object identity found cwid.rx_index and ltrack's PathFn and freq_path_spline. The earlier hand-written list in the track_timing test only covered ltrack's from-imports of track functions.
+   EVIDENCE: sites dump: ltrack 38 names incl. PathFn, freq_path_spline; cwid rx_index
+PARITY: Bars are the contract; measured worst values in brackets, from 2026-10-13 runs of these scenarios with QRSS_PARITY_WORST=1. Scenarios: l-tiny -6/-12, l-short -6/-12, 1 Hz/min drift, +100 ppm, -100 ppm, q floor (l-tiny -18 dB, seed 11), and noise (-80 dB, refused).
+
+BIT-EXACT:
+- _lag_phase and _clock_phase, including signed zeros, shapes and numpy scalars.
+- resid_ratio on the same track.
+- The coarse grid against the C++'s own k-order sum, restated in numpy (ctest digest).
+- Gate V composition, every scenario: with the C++ primitives assigned over the reference's names, the reference's verify_track_l and verify_l equal the C++ ones bit for bit (test_gate_v_composition).
+
+TOLERANCE:
+- fit_timing_l:
+  - The same argmax cells and runners-up (exact).
+  - Peak inputs: t0abs [4.6e-13] and delta slip [1.7e-12] against a 1e-9 bar.
+  - tau0 [6.4e-12 CH samples] and slip [4.3e-11 samples], both against 1e-6.
+  - Timing.z [5.9e-13 rel] against 1e-8.
+  - Grid against the reference's FFT grid [7.2e-14 of scale] against 1e-12.
+  - Grid against the reference's direct path [2.0e-15] against 1e-13.
+  - x [1.1e-15] and sig2 [2.6e-15] against 1e-12.
+- _segment_timing_l: t0 [1.4e-11] and slip [1.1e-10
+#### ltrack / timing_review
+[performance] L FULL blind fit_timing_l: Python 17.8 s, C++ 1.6 s (11x faster); with n_best 8, 19.5 s against 1.6 s. The direct gather wins here because the reference's FFT path pays for 2x4 transforms of 2^19 points per clock error. On CE the port was 9-10x slower than Python.
+   EVIDENCE: measured in a scratch timing script on the l-full scenario, one run each
+[performance] verify_l blind on l-full: Python 18.5 s, C++ 2.3 s. verify_track_l fit=False on l-full: 1.43 s against 0.32 s, Z_ref bit-identical. Local fit: 1.98 s against 0.54 s. l-short: verify_l 0.47 s against 0.18 s; fit_timing_l blind 0.25 s against 0.09 s, and with n_best 8, 0.63 s against 0.25 s.
+   EVIDENCE: measured in a scratch timing script
+[python-bug] fit_timing_l's FFT path and direct path disagree at both ends of x, not only at the end as wave 5 recorded for CE. A pair x[-1],x[0] at the start counts half on the FFT path and 0 on the direct path, so the same capture can score differently depending on whether nlag is above or below 64. Latent in practice, because the receiver zero-pads.
+   EVIDENCE: test_probe_fit_timing_l_unpadded: unpadded, the FFT gap is > 1e-3 of scale while C++ against direct is 1.95e-15; padded, C++ against FFT is 3.4e-14
+[python-bug] In verify_l's blind runners-up, the reference recomputes the coarse grid with n_best=8 and skips tms[0]. The best timing of that list can differ from the n_best=1 timing it tracked first, so the 'skip the one already tried' assumption is not guaranteed. The C++ keeps this quirk on purpose.
+   EVIDENCE: inferred from code, sstvae/qrss/ltrack.py verify_l
+[python-bug] _clock_phase computes its factor in the dtype of d. A float32 d would give a float32 phase; callers always pass a Python float, so this is latent. A negative sig2 makes math.sqrt raise ValueError in Python but gives NaN in the C++; unreachable, because sig2 is a variance.
+   EVIDENCE: inferred from code, sstvae/qrss/ltrack.py _clock_phase and _segment_timing_l
+[process] A float == test for 'unchanged' is wrong when the identity of the object is the contract. NaN != NaN, so the binding's row returned a new Timing for a NaN candidate where the reference returns the same object. The scenario rows never fed a NaN timing, so whole-caller A/B could not see it; a targeted probe with NaN z and cov found it at once. The CE binding has the same pattern.
+   EVIDENCE: test_probe_nan_timing_keeps_its_identity failed before the fix (r.timing is not tm) and passes after
+[process] The CE-under-L decision path, a CE signal heard under an L hypothesis and cut by resid_ratio, had no fast-tier parity coverage. A 1.5 s probe built from qrss_demod_tracks._ce_sim now covers it in the default run.
+   EVIDENCE: test_probe_ce_signal_under_l, about 1.5 s
+[numerics] The C++ grid sums the known symbols in k order. The reference sums in zgemv order on the direct path and through a transform on the FFT path. On random inputs that costs only 1e-15 of scale, and no decision moved in any probe.
+   EVIDENCE: test_probe_fit_grid_l_random worst 1.27e-15
+PARITY: The port's bars all still hold. Bitwise: lag_phase and clock_phase, resid_ratio, and the composition of verify_track_l and verify_l (test_gate_v_composition). Tolerances, with the worst error the port measured on its scenarios: fit_timing_l tau0 1e-6 CH samples [6.4e-12], ppm 1e-6 samples of slip [4.3e-11], Timing.z 1e-8 relative [5.9e-13]; the grid is within 1e-12 of scale of the reference's FFT grid [7.2e-14] and within 1e-13 of its direct path [2.0e-15]; _segment_timing_l t0 and slip 1e-6 [1.4e-11, 1.1e-10]; refine_path_l f 1e-7 Hz [6.8e-13]; verify_l Z_ref 1e-8 [1.6e-12]; verify_track_l arrays 1e-9 [1.6e-10]. Every decision matches: argmax cell, runners-up, accept/reject.
+
+Worst errors from the probes added in this review:
+- random fit_grid_l against the reference's direct path, 24 trials (subsets of the known symbols, real known values, one symbol, x shorter than the span, negative base, nlag 1..120): 1.3e-15 of scale.
+- An unpadded capture: the C++ grid matches the reference's direct path to 1.95e-15. Zero-padded by 2000 samples, it matches the reference's FFT grid to 3.4e-14, with the same peaks and timings.
+- Random _segment_timing_l cuts (tiny and short, 12 dB, 10 trials e
+#### acquire-arbitration / port
+[performance] acquire() on a FULL slot (1800 s FE). Python against C++: CE alone with A3 took 2.88-3.14 s against 1.15-1.33 s (2.2-2.7x). Joint (FULL, L_FULL) on a CE+L capture with A3 took 4.11-4.82 s against 2.24-2.42 s (1.7-2.2x). Joint live-only took 1.43-1.81 s against 1.32-1.73 s (1.05-1.09x). On SHORT live, single CE took 0.75 s against 0.69 s and joint 1.59 s against 1.28 s.
+   EVIDENCE: measured: scratch time_full.py (2 reps each) and smoke_acq.py, 4 shared CPUs
+[performance] The live path barely gains because A2 dominates, and A2 per line costs about the same in both: Python's Lambda grid is already one batched BLAS zgemm (einsum). preamble_search(CE, inp) took 0.052 s in Python against 0.042 s in C++; L took 0.035 s against 0.034 s; _a2_input 0.018 s against 0.012 s; carrier_line_stats 0.015 s against 0.011 s. The orchestration itself costs nothing measurable. A real speed-up needs the per-line A2 searches run in parallel (they are pure and independent; joint FULL had 11 lines plus 9 pilots, i.e. 31 searches) or a BLAS-backed Lambda grid.
+   EVIDENCE: measured: scratch prof_stages.py, best of 3
+[python-bug] Possibly fragile in the reference: drop_symbol_rate_aliases requires the alias's timing within T/2 (15.2 ms). A 0 dB CE signal hinted at f-1/T produced a passed alias at 1617.0 Hz (Lambda 71 against 604) whose tau0 was 19.4 ms off. The rule keeps it, so the acquisition reports two CE preamble hits for one signal. The +1/T alias (timing 12.6 ms off) was dropped. This only shows up when a hint or an A1 line lands on the alias; gate V then has to reject it.
+   EVIDENCE: measured: TA._capture(1650.0, 0.0, shift_s=0.2, seed=9), hints (1650 - 1/T, 1650 + 1/T): preamble [(CE, 1650.0), (CE, 1617.0)]; tau0 0.19990 against 0.18053 s
+[python-bug] In the reference, an L hint within 2.5 Hz of a failed L hit at an A1 line reuses that failed hit (near[0]) and never searches at the hint itself. A hint on a strong L signal's -1/T_L alias (1186.9 Hz, with an A1 line at 1184.95 Hz) is therefore never searched there. Hinting at 1188.0 instead reaches the alias through the L_HINT_OFFSETS_HZ tries, and the alias then passes A2-L with p about 1e-22. Probably intended, but it means a hint's outcome depends on unrelated A1 lines within 2.5 Hz.
+   EVIDENCE: measured: scratch probe_band.py / probe_band2.py on TL._capture(l-short, 1203.4, 0 dB, seed 10)
+[process] The spies on the native entry points have to be installed before rows(q) is built, because rows that bind native functions at build time (_hint_items, drop_*) would otherwise escape them. A whole-caller test also has to compute the reference's detections before the rows are applied: Acquisition.detections is replaced at class level, so calling it on the reference Acquisition afterwards runs the native code and silently compares native with native.
+   EVIDENCE: tests/test_qrss_native_acquire.py: test_acquire_whole_caller precomputes `want` before _every_row
+[process] The isolated-worktree Bash guard refuses `git add && git commit && pytest` chains and `mv; pytest; mv; git status` sequences. Running each git command on its own avoids the refusal.
+   EVIDENCE: two refusals this session
+PARITY: Arbitration is exact. drop_symbol_rate_aliases (at T and T_L), drop_band_owned, merge_hits and the joint composition keep the very same Python objects in the same order. This was checked on crafted boundary and tie sets, on 300 random sets in pytest, and on 200 splitmix sets pinned by digest in the ctest. _hint_items, live_end_s and the frame_map and hint error texts are equal to the reference.
+
+detections() and _joint_detections() on the reference's own Acquisitions are exact, with one exception: an A3 line's polyfit f_hz is within 1e-12 relative. Order, method, waveform, lead_in_s, path and timing all match, on crafted acquisitions and on real ones, for 8 frame and tuple sets.
+
+acquire() on the C++ against the reference:
+- A1 lines, pilots and hinted lines match bit for bit, type for type. f_hz is an np.float64 for A1 cells and refined hint lines, a float otherwise.
+- Preamble hits are held to wave 5's A2 bar (f_hz 1e-7 Hz, tau0_s 1e-6 s, lam 1e-9 relative, p 1e-6 relative) with the same lead_in_s. The measured worst errors in wave 5 were about 1e-12 Hz and 1e-13 s.
+- A3 is exact except its Gumbel p_value (within 4e-16 relative).
+- Scenarios covered: CE and L SHORT at -15 dB, sin
+#### acquire-arbitration / review
+[python-bug] acquire() fails as a whole on one bad hint. A NaN or inf hint raises ValueError ('cannot convert float NaN to integer') or OverflowError from inside the A2 stage instead of skipping that hint, so one non-finite expected frequency (say, from a failed track) loses the whole slot's acquisition. The C++ reproduces this on purpose.
+   EVIDENCE: test_acquire_odd_hints; sstvae/qrss/acquire.py:1569-1573 (hint_line, then preamble_search on f_hz=nan)
+[python-bug] The single-frame path does not reject an (f, waveform) hint; it fails by accident. The error depends on whether A2 produced any hits: "unsupported operand type(s) for -: 'float' and 'tuple'" from abs(h.f_hz - f) when there are hits, otherwise "float() argument must be ... not 'tuple'". A list gives the same messages with 'list'. The C++ needs tuple_hint(have_hits) to match.
+   EVIDENCE: sstvae/qrss/acquire.py:1566-1569; the stubbed fuzz hits both messages (6 list, 5 tuple, 2 float())
+[python-bug] test_qrss_live's end-of-slot-in-a-child test compares a spawned pure-Python child with the in-process implementation using exact equality. Under --native-qrss it therefore asserts that track and track_timing are bit-exact, which their own parity contracts do not claim. It has failed since wave 5's track rows.
+   EVIDENCE: bisect: only track gives dz=9.31e-10, df=-2.0e-12; only track_timing gives dz=9.31e-10; every other rx module, acquire included, is exact (scratch livebisect.py)
+[performance] FULL acquisition with A3 is faster on the C++: 2.5-2.9x for CE alone (Python 2.82 s vs C++ 0.97-1.14 s); 1.8-1.9x joint CE+L (3.90-4.09 s vs 2.14-2.17 s), with the same hits. A raw complex128 single-frame SHORT acquisition, live_only: Python 2.01 s, C++ 1.02 s.
+   EVIDENCE: scratch time_full.py and edges.py, measured on 4 shared CPUs
+[process] Exact orchestration parity is cheap to check with deterministic stubs. When every stage is replaced by a stub whose answer depends only on its question, the C++ reaches them as seams, and the call logs (with argument types) and results can be compared exactly. 240 seeds take about 2.3 s, while real-stage acquisitions cost about 1-5 s each. This is how the L hint-offset branch (min over (p, -lam)) and the near[0] branch get fast-tier coverage; on real captures they appear only in slow runs.
+   EVIDENCE: test_acquire_orchestration_stubbed: 2.3 s; it counts at least 10 offset triples, 300+ preamble hits and 100+ hinted lines
+[numerics] The complex128-to-complex64 cast in prepare() matches numpy's asarray(dtype=complex64) bit for bit. Each component is rounded to nearest by static_cast<float>, and A1 lines on a raw complex128 capture are exact.
+   EVIDENCE: test_acquire_raw_complex128_single (slow); native/core/qrss/acquire.cpp:39-48
+[simplification] On the single path, a hint with a nearby hit that did not pass (near[0]) always ends in `hinted`: any passed hit within the span would already have triggered `continue`. So `h.passed` is always False on that branch, and the near[0] lookup only saves one A2 search.
+   EVIDENCE: sstvae/qrss/acquire.py:1566-1574, inferred from code
+PARITY: Unchanged by this review (no C++ edits); the new probes confirm it.
+- Exact, type for type: the arbitration (the same objects kept, in the same order), _hint_items, live_end_s, the hint lines and pilots, every hinted line, and the full orchestration when every stage is a Python seam:
+  - 240 stubbed seeds: call log, arguments and types, the Acquisition, and detections on 8 frame sets.
+  - The reference-stage swap test.
+- Tolerance:
+  - A2 hits on real stages meet wave 5's bar: f_hz within 1e-7 Hz, tau0_s within 1e-6 s.
+  - The A3 Gumbel p is within 4e-16 relative.
+  - An A3 detection's polyfit f_hz is within 1e-12 relative. The worst measured on stubs was about 4e-16 relative, from the C++ polyfit against numpy's.
+- Errors (type and text) are identical, including:
+  - NaN hints (ValueError) and inf hints (OverflowError).
+  - A tuple or list hint on the single path, whose message depends on whether A2 found any hits.
+- Measured end to end: with only the acquire rows applied, the live end-of-slot TINY pass at -10 dB is bit-exact against the pure-Python reference (z, w and f_hz).
+- Not compared: np.float32 hints on the single path, and NaN in passed hits' sort keys. Both are under dev

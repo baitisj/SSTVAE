@@ -1,0 +1,1023 @@
+{
+ "base": "c0c830f",
+ "store": {
+  "build": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-1",
+   "branch": "worktree-wf_be3272b3-748-1",
+   "commit": "838ec0ebfbb275235b110a31e0b3993702627a56",
+   "files": [
+    "native/core/qrss/store.hpp",
+    "native/core/qrss/store.cpp",
+    "native/core/qrss/associate.hpp",
+    "native/core/qrss/associate.cpp",
+    "native/core/qrss/pyjson.hpp",
+    "native/core/qrss/pyjson.cpp",
+    "native/core/qrss/rx_config.hpp",
+    "tools/gen_qrss_rx_config.py",
+    "native/bindings/module/qrss/store.cpp",
+    "native/bindings/module/qrss/store_types.hpp",
+    "native/bindings/module/qrss/associate.cpp",
+    "native/tests/qrss/gen_pyjson_pins.py",
+    "native/tests/qrss/pyjson_pins.hpp",
+    "native/tests/qrss/test_pyjson.cpp",
+    "native/tests/qrss/gen_store_pins.py",
+    "native/tests/qrss/store_pins.hpp",
+    "native/tests/qrss/store_session.hpp",
+    "native/tests/qrss/test_store.cpp",
+    "native/tests/qrss/test_associate.cpp",
+    "tests/qrss_native/_store.py",
+    "tests/qrss_native/store.py",
+    "tests/qrss_native/associate.py",
+    "tests/test_qrss_native_store.py",
+    "tests/test_qrss_native_associate.py"
+   ],
+   "api": "// all in namespace sstvae::qrss::store (native/core/qrss/store.hpp)\ninline constexpr int N_GROUPS (3), GROUP_LATENTS (52800), SENT (50600); inline constexpr std::size_t PLANE (3*52800); inline constexpr double DAY_S; inline constexpr std::int64_t SLOT_S; inline constexpr std::size_t ZW_CACHE; inline constexpr double SAME_PASS_HZ  // from rxconfig::store\nusing KeyError = pyjson::KeyError;  using FileError = npz::FileError;\nstruct Key { std::string callsign; std::int64_t picture_id; bool operator==(const Key&) const; };\nstd::string default_root();\nstd::string key_name(const Key& key);\ndouble slot_time(std::int64_t q);\ndouble mean_w_db(std::span<const double> w);  double mean_w_db(std::span<const float> w);\nstd::span<const std::uint16_t> canonical_index(std::int64_t segment, std::int64_t n);\nstruct ZW { std::vector<double> z, w; };  using ZWPtr = std::shared_ptr<const ZW>;\nstruct PassInfo { std::string uid; std::int64_t q; double f_hz; pyjson::Value header; std::vector<double> hdr_llr; double z_ref; std::int64_t em_round; std::int64_t waveform; pyjson::Value frame; };\nstruct Part { std::string sha; npz::Array S, W; };\nstruct Due { Key key; std::int64_t segment; double f_hz; std::int64_t q; std::int64_t waveform; pyjson::Value frame; };\nstruct Expired { std::vector<Key> acc; std::vector<pyjson::Value> prov; std::vector<std::string> passes; };\nstruct Accumulator { Key key; std::int64_t mode, codec_id; std::vector<float> S, W, S_ext, W_ext; std::vector<pyjson::Value> members, foreign; std::vector<Part> parts; double created, updated;\n  static Accumulator empty(Key key, std::int64_t mode, std::int64_t codec_id, double now);\n  std::vector<std::string> uids() const;  std::optional<pyjson::Value> member(std::string_view uid) const;  std::optional<std::size_t> member_index(std::string_view uid) const;  const Part* part(std::string_view sha) const;\n  struct Sums { std::vector<double> S, W; };  Sums sums(Store& store, std::optional<std::string_view> skip = std::nullopt, bool ext = true) const;\n  void rebuild(Store& store);  std::pair<std::vector<double>, std::vector<double>> loo(std::string_view uid, Store& store) const;\n  bool has_data(std::int64_t g) const;  double median_w(std::int64_t g) const;  std::vector<std::optional<double>> seg_snr_db() const;  pyjson::Value meta() const; };\nclass Store {\n  using Clock = std::function<double()>;  using Replace = std::function<void(const std::string& from, const std::string& to)>;  using CacheSize = std::function<std::size_t()>;\n  struct Seams { Clock clock; Replace replace; CacheSize zw_cache; };   // empty members: time.time(), os.replace, ZW_CACHE\n  explicit Store(std::optional<std::string> root = std::nullopt, Seams seams = {});   // non-copyable; one internal recursive mutex, every call locks it\n  const std::string& root() const;  double now() const;  std::unique_lock<std::recursive_mutex> hold() const;   // a transaction\n  std::string pass_path(std::string_view uid) const;  void add_pass(const types::PassResult& p);  bool has_pass(std::string_view uid) const;  types::PassResult load_pass(std::string_view uid) const;  std::vector<std::string> pass_uids() const;\n  ZWPtr pass_zw(const std::string& uid);  std::vector<std::string> zw_cached() const;  std::vector<std::pair<std::string, ZWPtr>> zw_items() const;  PassInfo pass_info(const std::string& uid);  std::vector<Key> update_pass(const types::PassResult& p);\n  std::pair<std::string, std::string> acc_paths(const Key& key) const;  bool has_accumulator(const Key& key) const;  Accumulator accumulator(const Key& key) const;  Accumulator create(const Key& key, std::int64_t mode, std::int64_t codec_id);\n  void save_accumulator(const Accumulator& acc);  void commit(Accumulator& acc);  std::vector<Key> open_keys() const;  std::vector<Due> due(std::int64_t q);  std::optional<Key> find_member(std::string_view uid) const;\n  Accumulator attach(const Key& key, const std::string& uid, std::int64_t segment, const std::string& method, std::optional<std::int64_t> mode = std::nullopt, std::optional<std::int64_t> codec_id = std::nullopt);\n  std::optional<pyjson::Value> twin(const Accumulator& acc, std::int64_t q, double f_hz, std::int64_t segment, std::optional<std::string_view> uid = std::nullopt, std::optional<std::int64_t> waveform = std::nullopt);\n  Accumulator detach(const Key& key, std::string_view uid);  void delete_accumulator(const Key& key);\n  bool merge(const Key& key, std::span<const float> S, std::span<const float> W, const std::string& source = \"\");\n  std::string prov_path(std::string_view cid) const;  std::vector<pyjson::Value> prov_clusters() const;  std::optional<pyjson::Value> prov_cluster_of(std::string_view uid) const;  std::string prov_add(const std::string& uid, std::optional<std::string> cluster = std::nullopt);  void prov_remove(std::string_view uid);\n  void log(const pyjson::Value& event);  Expired expire(std::optional<double> now = std::nullopt, double days = 7.0); };\nstd::int64_t py_int(const pyjson::Value& v);  double py_float(const pyjson::Value& v);  bool truthy(const pyjson::Value& v);  bool equals(const pyjson::Value& v, std::string_view s);  bool contains(const pyjson::Value& list, std::string_view s);\n// namespace sstvae::qrss::associate (native/core/qrss/associate.hpp)\ninline constexpr double T_ACCEPT, RHO_MIN, KURTOSIS, VALIDATE_MEDIAN_W, HDR_REJECT_T, HDR_REJECT_EXPECT, PAIR_HZ, PAIR_DAYS, HDR_AGREE_Z, HDR_OTHER_FLIP;   // from rxconfig::associate\nstruct Corr { double t; std::int64_t M; bool numpy; };\nCorr corr_stat(std::span<const double> z, std::span<const double> w, std::span<const double> m, std::span<const double> W);\ndouble expected_t(std::span<const double> w, std::span<const double> W, double kurtosis = KURTOSIS);\nbool corr_accept(double t, double t_exp);\nstd::pair<std::vector<double>, std::vector<double>> acc_reference(const store::Accumulator& acc, std::int64_t g, std::int64_t n);\nstd::pair<std::vector<double>, std::vector<double>> cluster_sums(store::Store& store, const std::vector<std::string>& uids);\nstruct Best { double t; store::Key key; std::int64_t segment; };\nstd::optional<Best> best_accumulator(store::Store& store, std::span<const double> z, std::span<const double> w, const std::vector<store::Key>& exclude = {});\nstruct Validation { bool ok; pyjson::Value details; bool t_numpy; };\nValidation validate_header_match(store::Store& store, const store::Key& key, std::int64_t mode, std::int64_t segment, std::span<const double> z, std::span<const double> w);\nstd::vector<std::string> attach_by_header(store::Store& store, const header::HeaderFields& h, const std::vector<std::string>& uids, const std::string& method);\nbool header_agrees(const header::HeaderFields& h, std::optional<std::span<const double>> llr);\nstruct SoftHeader { header::HeaderFields h; std::vector<std::string> uids; };\nstd::optional<SoftHeader> soft_header(store::Store& store, const std::string& uid, std::span<const double> llr);\nstd::string rule(store::Store& store, const store::Key& key, std::string_view uid, const std::string& rule);\nstruct Result { std::optional<store::Key> key; std::string rule; };   // rule: \"header\" | \"soft-header\" | \"corr\" | \"prov\" | \"\" (GUI contract)\nusing SoftHeaderFn = std::function<std::optional<SoftHeader>(store::Store&, const std::string& uid, std::span<const double> llr)>;\nResult associate(const types::PassResult& p, store::Store& store, const SoftHeaderFn& soft = {});   // holds store.hold() for the whole association\nstd::vector<std::pair<pyjson::Value, store::Key>> resolve_provisional(store::Store& store);\n// namespace sstvae::qrss::pyjson (added)\nstd::string dumps(const Value& v, std::optional<int> indent, bool sort_keys);   // json.dumps(v, indent=, sort_keys=) byte for byte\n// namespace sstvae::qrss::rxconfig::store / rxconfig::associate: generated constants (tools/gen_qrss_rx_config.py)\n// Python: sstvae_native.qrss.store (Store, Accumulator, default_root, key_name, slot_time, mean_w_db, canonical_index, ...), sstvae_native.qrss.associate (every associate.py function; associate(p, store, soft_header=None)); every binding releases the GIL, seams reacquire it",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2",
+     "result": "builds clean (sstvae_native, sstvae_qrss, all tests)"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j2",
+     "result": "58/58 passed in 36.6 s; qrss_core_store 2.1 s (156 checks), qrss_core_associate 1.0 s (80 checks), qrss_core_pyjson passes"
+    },
+    {
+     "cmd": "mutation: store.cpp twin keep rule '>=' -> '>' then both new ctests",
+     "result": "caught: 6 failures in qrss_core_store (op result + 3 tree checkpoints + threaded op), 2 in qrss_core_associate; reverted"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_native_store.py tests/test_qrss_native_associate.py -m 'not slow'",
+     "result": "43 passed, 3 deselected in 46.5 s (store ~15 s, associate ~32 s)"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_native_associate.py -m slow",
+     "result": "3 passed in 21.8 s (fuzz seeds 3-5)"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_native_store.py tests/test_qrss_native_associate.py -m 'not slow' --native-qrss=rx",
+     "result": "43 skipped (require() skips under substitution, as intended)"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_multipass.py tests/test_qrss_em.py -m 'not slow' --native-qrss=rx",
+     "result": "40 passed, 12 deselected in 14.8 s"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_live.py -m 'not slow' --native-qrss=rx",
+     "result": "37 passed in 14.5 s"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_live_l.py tests/test_qrss_cli.py -m 'not slow' --native-qrss=rx",
+     "result": "20 passed, 7 deselected in 10.3 s"
+    },
+    {
+     "cmd": "pytest tests/test_qrss_multipass.py tests/test_qrss_em.py tests/test_qrss_live.py tests/test_qrss_live_l.py tests/test_qrss_cli.py -m 'not slow' (plain)",
+     "result": "97 passed, 19 deselected in 46.8 s"
+    },
+    {
+     "cmd": "pytest (5 slow em/multipass tests) -m slow --native-qrss=rx: test_p5_noise_passes_do_not_confirm_themselves, test_retro_detect_from_the_passband_store, test_template_search_on_a_ch_capture_uses_its_own_mix, test_p4_em_quiet_converges_and_does_not_lose, test_p7_null_on_coco_pictures",
+     "result": "5 passed (23.4 s + 89.6 s)"
+    },
+    {
+     "cmd": "scratch check_rows.py: qrss_native.apply(native, 'rx') then import the five suites",
+     "result": "sstvae.qrss.store.Store, test_qrss_multipass/em/cli's Store and em's Store are the facade over sstvae_native.qrss.store.Store; associate.* rows in place (live.py imports associate lazily, so it gets the row)"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (492 files); includes ok (493 files) after adding <algorithm> to two binding files"
+    },
+    {
+     "cmd": "python tools/gen_qrss_rx_config.py --check",
+     "result": "exit 0 (rx_config.hpp not stale)"
+    },
+    {
+     "cmd": "python native/tests/qrss/gen_store_pins.py (rerun)",
+     "result": "regenerates store_pins.hpp byte-identically (no git diff)"
+    },
+    {
+     "cmd": "scratch timing.py (50 FULL passes, 5 pictures)",
+     "result": "associate/pass Py 78.1 ms vs C++ 90.3 ms (x0.86); rebuild warm 1.07 vs 0.32 ms per member pass (x3.38); cold load+rebuild 151.5 vs 198.0 ms (x0.77)"
+    }
+   ],
+   "parity": "Byte-identical:\n- Store files: every pass .npz, accumulator .npz and .json, cluster .json and log.jsonl line.\n  - Holds in the 142-op scripted sequence, in interop both ways (rebuild gives bit-identical float32 S/W and equal merge digests), and in the multipass scenarios and fuzz.\n  - Pinned without Python in test_store.cpp: the SHA-256 of every file at 4 checkpoints of the gen_store_pins session.\n  - Single exception: a member's mean_w_db (10*log10 mean w). numpy's SIMD log10 differs from glibc in the last place for 5-9% of arguments on this AVX-512 machine. In the scripted sequence this hit 2 members of one accumulator: 2.05436353280837 vs 2.0543635328083694, and 2.0382447587105825 vs 2.038244758710582. `_store.compare_trees` checks each such difference is exactly that and nothing else. The ctest pins use power-of-ten mean weights, where the two agree.\n\nBit-exact, value and type:\n- corr_stat t/M (np.float64 vs Python 0.0 preserved), expected_t, corr_accept (np.bool_ vs bool preserved), _acc_reference, _cluster_sums, _best_accumulator, validate_header_match details (t as np.float64).\n- Every associate (key, rule) and resolve_provisional result on 25 test_qrss_multipass scenarios and a 300-pass fuzz over 6 sessions.\n  - Rules reached: header, soft-header, corr, prov and \"\".\n  - Also: 2 collisions, 2 resolutions, 148 twins left out.\n- Every Store and Accumulator return value in the scripted sequence, including errors with the same type and text.\n- The LiveListener._finish_apply whole caller (4 slots: tiles, notes, due hints, log, files) and em.py's store use (em_prior, known_header, em_refine, template_search). Both run with counting spies installed before the rows, and each row is asserted reached.\n- In C++ only: STATS (10 vector cases incl. NaN/inf/prefix/129-element) and AGREE (16 header_agrees cases straddling the threshold), pinned from Python as json.dumps text.\n\nTolerance:\n- header_agrees: pairwise sum vs np.dot (BLAS). Could differ only at an exact tie; 0 of 3000 random LLR sets differed.\n\nNot compared:\n- A Python clock returning int vs float (deviation).\n- int64 overflow paths.\n- Fsync behaviour.",
+   "deviations": [
+    "A member's mean_w_db is 10*log10 via the C library, numpy uses its SIMD log10. The last place differs for 5-9% of arguments on AVX-512 x86-64. This shows only in the JSON text and in twin's >= between two copies equal to the ulp.",
+    "Integers are int64. key_name's picture_id, slot_time's q and JSON ints past int64 are refused (TypeError/overflow); Python ints are unbounded.",
+    "ZW_CACHE = 0: the reference's pass_zw raises KeyError, the C++ returns the pass and caches nothing. Pinned in test_zw_cache_seam.",
+    "A Store clock is std::function<double()>, so a Python clock returning an int is written as a float ('1700000000.0', Python writes '1700000000').",
+    "Seen from Python, a native Accumulator's members/foreign/parts are fresh objects at each attribute access. Mutating acc.members[0] in place does not stick; you must assign the list. The S/W numpy views alias the C++ arrays, so a later rebuild is visible through a view held before it (Python rebinds new arrays).",
+    "Accumulator arrays must hold 3 x 52800 values when loaded, and foreign parts when summed. Python loads any shape and fails later.",
+    "A pass .npz is read whole (every member inflated and CRC-checked). np.load is lazy, so the reference never notices a damaged member it does not read. This also costs time.",
+    "Pass uids must be str (key_name of bytes refused as Python's bytes.replace would refuse; non-str uids TypeError).",
+    "Under --native-qrss the Store row is a thin Python facade over the native class (tests/qrss_native/_store.py). It is needed because store.py's os.replace and ZW_CACHE are module attributes tests monkeypatch, and because load_pass must return the reference's PassResult.",
+    "header_agrees sums pairwise where the reference uses np.dot (BLAS kernel order); the decision can part only at an exact tie."
+   ],
+   "shared_changes_needed": [
+    "native/core/qrss/crc32.cpp: replace the byte-at-a-time loop with slicing-by-8. The drop-in file is at /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/store_lane/crc32.slice8.cpp; it uses constexpr tables, a static_assert on T[0][1]/T[0][255], le32 loads (endianness-safe) and a byte tail, and gives identical results. Per 2.5 MB accumulator: 6.3 ms -> 1.25 ms. associate per pass on a 50-pass FULL store: 78 ms -> 38.8 ms, against Python's 66 ms at the time. This one change turns the C++ store from x0.84 to x1.76 against Python.",
+    "native/core/qrss/npz.{hpp,cpp}: add a member-selective read, e.g. Npz load_npz(const std::string& path, std::span<const std::string_view> names) / parse_npz(file, names), that inflates and CRC-checks only the named members, as np.load does lazily. Then store.cpp's pass_zw reads only z and w instead of ch/psi/hdr_llr/meta too, and pass_info only meta/hdr_llr. Accumulator load is currently 7.6 ms in C++ vs 2.1 ms in Python.",
+    "ALREADY MADE in this lane (not named by the task, flagging for the merge): tools/gen_qrss_rx_config.py MODULES gained \"store\", \"associate\", and native/core/qrss/rx_config.hpp was regenerated (namespaces rxconfig::store and rxconfig::associate; --check passes). store.hpp/associate.hpp take their constants from it. It is a one-line conflict point with any other lane that appends to MODULES."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "Rule 1's correlation check (validate_header_match) never runs for any frame but FULL. It validates only when median_w(segment) > 0.1, and median_w is the median of W over all 50,600 sent latents. That median is 0 until more than 25,300 of them are covered. SHORT/MEDIUM/TINY carry the same 4096/16384/1024-latent air-order prefix every time, so any number of those passes leaves the median at 0. A colliding header is then attached unchecked. Found while building the ctest pins: with 4000-latent passes, picture B's latents under picture A's header were attached by rule \"header\"; with 26000-latent passes the same pass is refused as a collision.",
+     "evidence": "sstvae/qrss/associate.py:184 with store.py:217-219; frame presets n_data full 50600, medium 16384, short 4096, tiny 1024; gen_store_pins.py run with N=4000 vs N=26000 (pass x0)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "prov_add(uid) with cluster=None writes a fresh {\"cluster\": \"c_<uid>\", \"members\": [uid]}. It does this without checking whether a cluster of that name exists, e.g. one this pass founded, left, and other passes joined. That cluster's other members are silently dropped from the provisional set. The C++ mirrors it, and the scripted parity sequence pins the identical clobbering.",
+     "evidence": "sstvae/qrss/store.py:596-604"
+    },
+    {
+     "kind": "python-bug",
+     "what": "With store.ZW_CACHE = 0, pass_zw raises KeyError: it inserts and then evicts down to the size before returning the entry it just evicted. The C++ returns the pass with nothing cached; pinned as a deviation.",
+     "evidence": "tests/test_qrss_native_store.py::test_zw_cache_seam; store.py pass_zw"
+    },
+    {
+     "kind": "python-bug",
+     "what": "due() wraps each accumulator in try/except, but rows already appended from an accumulator that raises partway (a later member's pass expired) are kept. The result can hold half an accumulator's due rows.",
+     "evidence": "sstvae/qrss/store.py:404-417 (scripted sequence case 'due with an accumulator whose later member's pass is gone')"
+    },
+    {
+     "kind": "python-bug",
+     "what": "One log field has two formats. merge's log line writes \"accepted\" as 1.0/0.0 normally: corr_accept returns np.bool_, which json's default=float converts. When nothing overlaps, corr_stat returns the Python float 0.0, so corr_accept yields a bool and the line says true/false. The C++ carries a 'numpy' flag on Corr just to reproduce this.",
+     "evidence": "store.py merge + associate.py corr_stat (return 0.0, 0); native/core/qrss/associate.hpp struct Corr"
+    },
+    {
+     "kind": "python-bug",
+     "what": "default_root with HOME=\"\" puts the store at /.local/share/qrsstvae. posixpath.expanduser('~') returns '/' for an empty HOME, so a service started with an empty environment writes under the filesystem root. The C++ mirrors it; its first version produced '//.local', which pathlib normalises away.",
+     "evidence": "native/core/qrss/store.cpp default_root; tests/test_qrss_native_store.py::test_default_root"
+    },
+    {
+     "kind": "numerics",
+     "what": "numpy's AVX-512 log10 differs from glibc's in the last place for 5-9% of 10*log10(x) values. That is the only byte the C++ store writes differently. ctest pins avoid it by using power-of-ten mean weights, where both are exact.",
+     "evidence": "scratch log10_rate.py: x uniform [0.01,100]: 5.25%, [0.5,20]: 8.72% (array and scalar np.log10 alike); scripted sequence: 2 of its members"
+    },
+    {
+     "kind": "performance",
+     "what": "The C++ store is slower than Python where it does file I/O and faster where it does arithmetic. The I/O loss comes from a byte-at-a-time CRC-32 over 2.5 MB accumulator archives on every save and load, plus eager npz reads. Python's zlib.crc32 is table-sliced, and np.load is lazy. Slicing-by-8 CRC alone makes associate x1.76 faster than Python.",
+     "evidence": "50-pass FULL store (scratch timing.py): associate/pass Py 78.1 ms vs C++ 90.3 ms (x0.86); rebuild warm 1.07 vs 0.32 ms per member pass (x3.38); cold load+rebuild 151.5 vs 198.0 ms (x0.77); per op load 2.1 vs 7.6 ms, save 8.7 vs 17.3 ms; crcbench 6.3 vs 1.25 ms per 2.5 MB; with slicing-by-8 associate 38.8 ms"
+    },
+    {
+     "kind": "process",
+     "what": "Deterministic 'noise' for association pins must be decorrelated across seeds, not just non-repeating. The first ctest generator used (i*13 + seed*7) % 29 sawtooth noise. Every seed's noise was then a shifted copy of the others, and passes of different pictures correlated at t=20 against an expectation of 90. The intended rule-1 collision silently became a 'header' attach. A 32-bit integer hash (lowbias32, same code in Python uint64 and C++ uint32) fixed it. The generated rules were checked to cover header, soft-header, corr, prov and \"\", plus a correlation collision and a mode collision.",
+     "evidence": "native/tests/qrss/gen_store_pins.py h32; scratch probe_x0.py: validate_header_match t=20.09, t_expected=90.14"
+    },
+    {
+     "kind": "process",
+     "what": "A tree comparison taken after expire() compares two nearly empty directories, so it passes vacuously. The parity test's first compare_trees did exactly that; snapshots before expiry, and four checkpoints in the ctest session, fixed it. The ctests were mutation-checked: flipping twin's '>=' to '>' fails 8 checks across both ctests.",
+     "evidence": "tests/test_qrss_native_store.py _script '-mid' copytree; mutation run on native/core/qrss/store.cpp:986"
+    },
+    {
+     "kind": "simplification",
+     "what": "One shared replay header (native/tests/qrss/store_session.hpp) runs the generator's op table, so test_store.cpp and test_associate.cpp do not mirror the session by hand. Each op's expected result is json.dumps text that the C++ rebuilds as a pyjson::Value and dumps, so pins need no per-type comparison code.",
+     "evidence": "native/tests/qrss/store_session.hpp run_op; store_pins.hpp OPS[].want"
+    }
+   ],
+   "notes": "Done:\n- The C++ multi-pass store and association are complete: store.{hpp,cpp} and associate.{hpp,cpp}.\n- Bindings: sstvae_native.qrss.store and sstvae_native.qrss.associate. Every call releases the GIL; seams reacquire it.\n- Rows: tests/qrss_native/store.py and associate.py.\n  - The Store row is the facade in tests/qrss_native/_store.py.\n  - associate's row wrapper hands a monkeypatched ref._soft_header through the SoftHeaderFn seam, so tests that patch _soft_header still steer the C++.\n- Under --native-qrss=rx, the facade is the Store seen by sstvae.qrss.store, test_qrss_multipass, test_qrss_em, test_qrss_cli and em.py.\n- associate/resolve_provisional are C++, including in live.py, which imports associate at call time.\n\nThreads:\n- One recursive mutex per Store. Every call returns values (Accumulator by value, ZWPtr to an immutable ZW).\n- associate() and resolve_provisional() hold store.hold() for the whole association.\n- test_store.cpp runs a writer replaying the session, a reader and a logger on one Store. Afterwards every file but the log matches the reference's pinned hashes, and the log is whole lines.\n\nTests:\n- Parity file test_qrss_native_associate.py: three of its six fuzz sessions are marked slow, giving a fast tier of ~32 s.\n- Parity file test_qrss_native_store.py: ~15 s.\n- ctests: test_store.cpp (2.1 s) and test_associate.cpp (1.0 s), pinned by native/tests/qrss/gen_store_pins.py. Rerunning the generator reproduces store_pins.hpp byte for byte.\n\nOther:\n- Commits: 72b15c8 (WIP core + bindings), 3792bc6 (tests, rows, ctests, fixes), 838ec0e (includes). Not pushed.\n- tools/gen_qrss_rx_config.py was edited (MODULES += store, associate) and rx_config.hpp regenerated. This is a shared generator; see shared_changes_needed.\n- Nothing under sstvae/ or the qrss_*.py scripts was changed."
+  },
+  "review": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-1",
+   "branch": "worktree-wf_be3272b3-748-1",
+   "commit": "8fff4954671d7ab9db6e33ed796495770fba8095",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-1/native/core/qrss/store.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-1/native/core/qrss/store.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-1/native/tests/qrss/test_store.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-1/tests/test_qrss_native_store.py"
+   ],
+   "api": "The review changed no signatures. This is the API as the lane added it (native/core/qrss/store.hpp, associate.hpp), with one behaviour change: Store::hold() now locks the root's shared mutex.\nnamespace sstvae::qrss::store:\nstruct Key { std::string callsign; std::int64_t picture_id; };\nusing KeyError = pyjson::KeyError; using FileError = npz::FileError;\nstd::string default_root();\nstd::string key_name(const Key& key);\ndouble slot_time(std::int64_t q);\ndouble mean_w_db(std::span<const double> w); double mean_w_db(std::span<const float> w);\nstd::span<const std::uint16_t> canonical_index(std::int64_t segment, std::int64_t n);\nstruct ZW; using ZWPtr = std::shared_ptr<const ZW>; struct PassInfo; struct Part; struct Due; struct Expired { std::vector<Key> acc; std::vector<pyjson::Value> prov; std::vector<std::string> passes; };\nstruct Accumulator { Key key; std::int64_t mode, codec_id; std::vector<float> S, W, S_ext, W_ext; members; foreign; parts; double created, updated; std::vector<std::string> uids() const; std::optional<pyjson::Value> member(std::string_view uid) const; void rebuild(Store&); loo(uid, Store&); bool has_data(g) const; double median_w(g) const; std::vector<std::optional<double>> seg_snr_db() const; pyjson::Value meta() const; };\nclass Store { using Clock = std::function<double()>; using Replace = std::function<void(const std::string&, const std::string&)>; using CacheSize = std::function<std::size_t()>; struct Seams { Clock clock; Replace replace; CacheSize zw_cache; };\n  explicit Store(std::optional<std::string> root = std::nullopt, Seams seams = {});\n  const std::string& root() const; double now() const;\n  std::unique_lock<std::recursive_mutex> hold() const;   // the ROOT's mutex, shared by every Store open on that directory in the process\n  std::string pass_path(std::string_view uid) const; void add_pass(const types::PassResult&); bool has_pass(std::string_view) const; types::PassResult load_pass(std::string_view) const; std::vector<std::string> pass_uids() const; ZWPtr pass_zw(const std::string&); std::vector<std::string> zw_cached() const; std::vector<std::pair<std::string, ZWPtr>> zw_items() const; PassInfo pass_info(const std::string&); std::vector<Key> update_pass(const types::PassResult&);\n  std::pair<std::string,std::string> acc_paths(const Key&) const; bool has_accumulator(const Key&) const; Accumulator accumulator(const Key&) const; Accumulator create(const Key&, std::int64_t mode, std::int64_t codec_id); void save_accumulator(const Accumulator&); void commit(Accumulator&); std::vector<Key> open_keys() const; std::vector<Due> due(std::int64_t q); std::optional<Key> find_member(std::string_view uid) const;\n  Accumulator attach(const Key&, const std::string& uid, std::int64_t segment, const std::string& method, std::optional<std::int64_t> mode = std::nullopt, std::optional<std::int64_t> codec_id = std::nullopt);\n  std::optional<pyjson::Value> twin(const Accumulator&, std::int64_t q, double f_hz, std::int64_t segment, std::optional<std::string_view> uid = std::nullopt, std::optional<std::int64_t> waveform = std::nullopt);\n  Accumulator detach(const Key&, std::string_view uid); void delete_accumulator(const Key&); bool merge(const Key&, std::span<const float> S, std::span<const float> W, const std::string& source = \"\");\n  std::string prov_path(std::string_view) const; std::vector<pyjson::Value> prov_clusters() const; std::optional<pyjson::Value> prov_cluster_of(std::string_view) const; std::string prov_add(const std::string& uid, std::optional<std::string> cluster = std::nullopt); void prov_remove(std::string_view);\n  void log(const pyjson::Value& event); Expired expire(std::optional<double> now = std::nullopt, double days = 7.0); };\nstd::int64_t py_int(const pyjson::Value&); double py_float(const pyjson::Value&); bool truthy(const pyjson::Value&); bool equals(const pyjson::Value&, std::string_view); bool contains(const pyjson::Value&, std::string_view);\nnamespace sstvae::qrss::associate:\nstruct Corr { double t; std::int64_t M; bool numpy; }; Corr corr_stat(z, w, m, W); double expected_t(w, W, double kurtosis = KURTOSIS); bool corr_accept(double t, double t_exp);\nstd::pair<std::vector<double>,std::vector<double>> acc_reference(const store::Accumulator&, std::int64_t g, std::int64_t n);\nstd::pair<std::vector<double>,std::vector<double>> cluster_sums(store::Store&, const std::vector<std::string>& uids);\nstruct Best { double t; store::Key key; std::int64_t segment; }; std::optional<Best> best_accumulator(store::Store&, z, w, const std::vector<store::Key>& exclude = {});\nstruct Validation { bool ok; pyjson::Value details; bool t_numpy; }; Validation validate_header_match(store::Store&, const store::Key&, std::int64_t mode, std::int64_t segment, z, w);\nstd::vector<std::string> attach_by_header(store::Store&, const header::HeaderFields&, const std::vector<std::string>& uids, const std::string& method);\nbool header_agrees(const header::HeaderFields&, std::optional<std::span<const double>> llr);\nstruct SoftHeader { header::HeaderFields h; std::vector<std::string> uids; }; std::optional<SoftHeader> soft_header(store::Store&, const std::string& uid, std::span<const double> llr);\nstd::string rule(store::Store&, const store::Key&, std::string_view uid, const std::string& rule);\nstruct Result { std::optional<store::Key> key; std::string rule; }; using SoftHeaderFn = std::function<std::optional<SoftHeader>(store::Store&, const std::string&, std::span<const double>)>;\nResult associate(const types::PassResult& p, store::Store& store, const SoftHeaderFn& soft = {});\nstd::vector<std::pair<pyjson::Value, store::Key>> resolve_provisional(store::Store&);",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2 sstvae_native test_qrss_core_store test_qrss_core_associate test_qrss_core_pyjson",
+     "result": "builds with no warnings"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R 'qrss_core_(store|associate|pyjson)' --output-on-failure",
+     "result": "3/3 passed (store 171 checks, now including test_expire_cutoff and test_two_stores_one_root)"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python timeout 200 .venv/bin/python -m pytest -q tests/test_qrss_native_store.py tests/test_qrss_native_associate.py",
+     "result": "45 passed, 3 deselected (slow fuzz seeds) in 51 s; 2 new tests: test_expire_at_the_cutoff, test_two_stores_one_root"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_multipass.py",
+     "result": "31 passed, 1 deselected (7.7 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_em.py",
+     "result": "9 passed, 11 deselected (7.6 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_live.py",
+     "result": "37 passed (15.2 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_live_l.py",
+     "result": "17 passed, 3 deselected (2.3 s)"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_cli.py",
+     "result": "3 passed, 4 deselected (7.5 s)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_multipass.py tests/test_qrss_em.py tests/test_qrss_live.py tests/test_qrss_live_l.py tests/test_qrss_cli.py (reference, no rows)",
+     "result": "97 passed, 19 deselected (48 s)"
+    },
+    {
+     "cmd": ".venv/bin/python tools/check_layering.py && .venv/bin/python tools/check_includes.py",
+     "result": "layering ok (492 files), includes ok (493 files)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only -I native/core -I native/tests -I native/tests/qrss on store.cpp, associate.cpp, test_store.cpp",
+     "result": "clean (Windows branches compile: _getpid/_commit/_wgetenv, the errno mapping)"
+    },
+    {
+     "cmd": "mutation: expire '< cutoff' -> '<= cutoff' at each of the 3 sites (accumulator, cluster, orphan pass), rebuild, ctest",
+     "result": "all 3 killed by qrss_core_store (before this review a <= mutant survived every test)"
+    },
+    {
+     "cmd": "mutation: per-Store mutex instead of the root's (mu_ = make_shared<recursive_mutex>())",
+     "result": "killed: ctest 'cannot replace .../.K1ABC_a1b2c3d4.npz.<pid>.tmp' + 'got 3, want 6' members; pytest test_two_stores_one_root fails"
+    },
+    {
+     "cmd": "earlier mutants M1, M3, M7 (store/associate logic)",
+     "result": "caught by the existing ctests and parity tests"
+    },
+    {
+     "cmd": "probe scratchpad/w8r/two_instances.py (two C++ Stores on one root, two threads attach/detach)",
+     "result": "before: FileNotFoundError from the shared temp name; after: 0 errors, files whole"
+    },
+    {
+     "cmd": "probe scratchpad/w8r/strmeta.py (pass meta q/f_hz rewritten as 30 text values, pass_info reference vs C++)",
+     "result": "28 of 30 agree; the 2 left are documented pynum limits: Unicode digits ('\u0661\u0662') and an int past int64"
+    },
+    {
+     "cmd": "probe scratchpad/w8r/jsonfuzz (pyjson dumps(indent=1, sort_keys) vs json.dumps)",
+     "result": "8000 random documents byte-identical"
+    },
+    {
+     "cmd": "probe scratchpad/w8r/timing.py (50 SHORT passes, one accumulator)",
+     "result": "see insights (performance)"
+    }
+   ],
+   "parity": "Byte-identical, checked: every pass .npz, accumulator .npz and .json, provisional cluster and log.jsonl line written by the C++ matches what the reference writes. The scripted 142-op sequence, the interop tests in both directions and expiry checked with the new cutoff test all pass through _store.compare_trees, with one exception: a member's mean_w_db. numpy's log10 is the SIMD (SVML) version and differs from libm's in the last place for ~7% of arguments on this machine. compare_trees accepts each such difference only when it is exactly that last-place difference and the rest of the text matches.\nReturn values, checked: the same values and types (np.float64 where the reference returns one), arrays bit for bit, dicts in the same key order, and the same error types and messages, paths aside.\nBit-exact, checked: accumulator S and W after a rebuild through either implementation, including in the thread hammer and in the new two-stores test.\npyjson dumps: byte-identical on 8000 fuzz cases.\nWithin tolerance:\n- mean_w_db and seg_snr_db agree to 12 significant digits.\n- header_agrees sums with numpy's pairwise sum where the reference uses a BLAS dot product (documented by the lane). It was not seen to flip any result.\nNot compared:\n- Cross-process concurrent writers. These lose updates in both implementations.\n- Windows at runtime: syntax-only mingw compile, no run.\n- A non-C LC_NUMERIC locale: only C and C.utf8 are installed. The text-number path now uses pynum, whose locale handling is its own suite's job.",
+   "deviations": [
+    "Two Store objects open on one directory in one process now share that directory's mutex, keyed by its canonical path. store.py has no lock and makes no thread-safety claim, so this is a C++-only guarantee. Each object still keeps its own caches, as two Python processes do.",
+    "py_int and py_float on JSON text (only reachable from a damaged or hand-edited file) follow pynum. They refuse Unicode decimal digits, which Python's int() accepts, and raise OverflowError for an integer past int64, which Python accepts. The probe found these two mismatches out of 30 text values; everything else, hex, underflow and underscores included, now matches.",
+    "FileError carries a portable errno on Windows, taken from the std::error_code's default_error_condition (EIO when there is none). Before, it carried the raw Win32 code, so ERROR_ACCESS_DENIED (5) was read as EIO.",
+    "Deviations kept from the lane and already pinned by its tests: an int clock is written to JSON as a float (the reference writes an int); ZW_CACHE=0 returns the pass where the reference raises KeyError; mean_w_db's last place follows libm rather than numpy's SIMD log10; due() also skips accumulators whose damage raises TypeError or BadZipFile in Python, which propagate there."
+   ],
+   "shared_changes_needed": [
+    "native/core/util/fileio.cpp replace_file (shared, not edited): on Windows, MoveFileExW(REPLACE_EXISTING) fails with ERROR_ACCESS_DENIED or ERROR_SHARING_VIOLATION while another handle without FILE_SHARE_DELETE has the destination open, for example a gallery or picture viewer reading an accumulator .npz or .json. Python's os.replace fails the same way, so this is parity, but the app would be better served by a short bounded retry (about 1 s) in replace_file on those two errors. store.cpp's default_replace would then inherit it.",
+    "native/core/qrss/passband and dirlock (another lane) and other std::filesystem error sites also pass ec.value() straight through as an errno. On Windows that is a Win32 code. The same default_error_condition mapping now in store.cpp's code_of would fix it; worth a shared helper in util/fileio.hpp."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "Cross-process cache staleness: Store._zw and _light are never checked against the files. qrss_decode.py runs em_refine, which calls Store.update_pass in its own process, while a running qrss_listen keeps its own Store with that pass's old (z, w) cached. The listener's next attach or rebuild of that accumulator then writes S and W from the stale pre-EM values, silently undoing the refinement. The member's em_round and mean_w_db in the JSON come from the file and still say it was refined. The C++ copies this per instance and documents it in store.hpp's THREADS comment. A fix would check each cached pass's mtime and size, or share a generation counter.",
+     "evidence": "inferred from code: sstvae/qrss/store.py pass_zw/pass_info caches, update_pass; qrss_decode.py calls em.em_refine"
+    },
+    {
+     "kind": "python-bug",
+     "what": "prov_add(uid, None) names a new cluster c_<uid> and writes it without checking for an existing file of that name. Adding a pass that is already the seed of another cluster, or re-adding after prov_remove, clobbers that cluster and drops its other members. The C++ reproduces this and the scripted parity sequence pins it ('prov_add D3 anew').",
+     "evidence": "sstvae/qrss/store.py prov_add; tests/test_qrss_native_store.py _script 'the reference clobbers D2 here'"
+    },
+    {
+     "kind": "python-bug",
+     "what": "store.py has no lock and _atomic_write's temporary name is .<name>.<pid>.tmp. Two threads, or two Store objects in one process, writing the same file collide on that name: one thread's os.replace moves the other's half-written file, or the second open truncates it. The same race existed in the C++ until this review, which gave every Store on a root one shared mutex.",
+     "evidence": "sstvae/qrss/store.py:105,123; scratchpad/w8r/two_instances.py (FileNotFoundError before the fix, 0 errors after)"
+    },
+    {
+     "kind": "numerics",
+     "what": "numpy's log10 is its SIMD (AVX-512 SVML) version and differs from math.log10 and glibc in the last place for about 7% of arguments on this machine. So mean_w_db in a Python-written store depends on the CPU. Where the twin rule tie-breaks on mean_w_db, a Python-written store and a C++-written one can pick different twins for exactly tied weights.",
+     "evidence": "measured 7.14% of values differ (earlier probe); compare_trees justified 2 such last-place differences in the scripted sequence"
+    },
+    {
+     "kind": "numerics",
+     "what": "The old store.cpp text-number parsing used std::stod. It accepted hex ('0x10' gave 16.0; Python raises ValueError), and libstdc++ throws out_of_range on underflow, so '1e-500' became +inf where Python gives 0.0. It also took the decimal point from LC_NUMERIC, which QCoreApplication sets from the environment. Routing through pynum (as pyjson already did) fixes all three.",
+     "evidence": "scratchpad/w8r/stod.cpp: 1e-500 -> out_of_range, 0x10 -> 16 used 4; strmeta.py probe now 28/30 agree"
+    },
+    {
+     "kind": "performance",
+     "what": "50 SHORT passes into one accumulator, through the Python facade (binding overhead included), C++ against the reference: rebuild of 50 members 12.1 ms vs 68.2 ms (5.6x); attach including rebuild, npz and JSON write and fsync 40.3 ms vs 52.9 ms (I/O dominated); accumulator read 9.5 ms vs 4.5 ms (the C++ is slower here, since it decodes and validates every npz member); add_pass 6.3 ms vs 4.8 ms.",
+     "evidence": "scratchpad/w8r/timing.py on this machine, 2026-10-14"
+    },
+    {
+     "kind": "process",
+     "what": "A boundary mutant (expire '<' -> '<=') survived every test the lane wrote, because the existing expiry checks were all at least a day away from the cutoff. Each boundary now has a test at exactly the cutoff and a ulp past it, in both the ctest and the parity test. Equality boundaries need their own probes; scripted sequences with round-number clock steps never hit them.",
+     "evidence": "mutation run: 3 sites killed only after test_expire_cutoff was added"
+    },
+    {
+     "kind": "process",
+     "what": "A trap in this suite's norm(x, root) helper: passing root='' makes str.replace('', '<root>') insert '<root>' between every character, so a comparison built that way is silently wrong. Pass the real root.",
+     "evidence": "tests/test_qrss_native_store.py norm(); the first draft of test_expire_at_the_cutoff failed this way"
+    },
+    {
+     "kind": "simplification",
+     "what": "store.cpp's own strip, isdigit, strtoll and stod parser duplicated pynum, which pyjson already uses. Replacing it removed about 40 lines and the <cctype> and <limits> includes, and made the two text-number paths the same code.",
+     "evidence": "native/core/qrss/store.cpp py_int/py_float (commit 8fff495)"
+    }
+   ],
+   "notes": "I reviewed the store-associate lane (c0c830f..838ec0e) against sstvae/qrss/store.py and associate.py. associate.cpp needed no change; its logic matches the reference rule for rule. All fixes are in one commit, 8fff495, on worktree-wf_be3272b3-748-1. Nothing is pushed.\n\nFixed:\n- Two Store objects on one root raced on the temp file and lost each other's updates. They now share the root's mutex.\n- expire's cutoff boundaries had no test; both the ctest and the parity test now pin them.\n- Text numbers in damaged JSON went through std::stod (hex accepted, underflow read as inf, decimal point from the locale). They now go through pynum.\n- default_root used getpwuid, which is not thread-safe; it now uses getpwuid_r.\n- On Windows, FileError carried a raw Win32 code as if it were an errno; it is now mapped.\n\nNot fixed, and why:\n- On Windows, replacing a file another handle has open fails. Python's os.replace behaves the same, and the right fix is a retry in the shared util::replace_file (see shared_changes_needed).\n- Stale per-instance caches across Store objects or processes. This is the same as the reference, which has the same bug across processes (insight 1). Documented in store.hpp's THREADS comment: open one Store per root.\n- Cross-process lost updates (plan 4.5) remain, as in Python.\n\nThe mutation-testing round earlier in the review restored its sources from scratchpad copies, and the build tree was rebuilt clean before any reported run.",
+   "findings": [
+    {
+     "what": "Two C++ Store objects open on one directory in one process, used from two threads, wrote the same .<name>.<pid>.tmp at once. The result was a FileError 'cannot replace' / FileNotFoundError or a torn write, and lost read-modify-write updates (3 of 6 attaches survived). The mutex was per object. It is now one per root, keyed by canonical path, held in a leaked registry of weak_ptrs. Regression tests: ctest test_two_stores_one_root and pytest test_two_stores_one_root, both confirmed to fail on the per-object mutant.",
+     "fixed": true
+    },
+    {
+     "what": "Test gap: expire()'s three cutoff comparisons (accumulator updated, cluster updated, orphan pass slot_time) were never exercised at the boundary, and a '<' -> '<=' mutant survived every ctest and parity test. Added ctest test_expire_cutoff and pytest test_expire_at_the_cutoff (reference vs C++, kept at the cutoff and dropped a ulp past it); all 3 mutants are now killed.",
+     "fixed": true
+    },
+    {
+     "what": "store.cpp's py_float on JSON text used std::stod. It accepted hex ('0x10' -> 16.0; Python raises ValueError), mapped an underflow such as '1e-500' to +inf (Python gives 0.0), and read the decimal point from LC_NUMERIC, which a Qt app sets from the environment. Its py_int used locale-dependent isspace and isdigit. Both now go through pynum::py_float / py_int and invalid_int_literal, the same code pyjson uses.",
+     "fixed": true
+    },
+    {
+     "what": "default_root() fell back to ::getpwuid, which is not reentrant, while Stores may be opened on several threads. It now uses getpwuid_r with a growing buffer, and keeps the reference's handling of an empty pw_dir ('/') and of no entry ('~').",
+     "fixed": true
+    },
+    {
+     "what": "FileError's err on Windows was ec.value() from std::filesystem, which is a Win32 code rather than an errno. ERROR_ACCESS_DENIED (5) therefore surfaced as EIO's number, and ERROR_PATH_NOT_FOUND (3) as ESRCH. code_of now maps it through default_error_condition. Checked by mingw syntax-only compile only.",
+     "fixed": true
+    },
+    {
+     "what": "On Windows, replacing an accumulator or pass file that another handle has open without FILE_SHARE_DELETE fails with ERROR_ACCESS_DENIED or ERROR_SHARING_VIOLATION. This matches Python's os.replace, so it is parity, but an app with a picture viewer open on the store will hit it. The fix is a bounded retry in the shared util::replace_file; see shared_changes_needed.",
+     "fixed": false
+    },
+    {
+     "what": "Each Store object's (z, w) and pass-info caches are its own. A pass rewritten through another object or another process (update_pass by EM) is read stale by an object that has it cached, and its next rebuild writes the old values back. This is identical to the reference, which has the same bug across processes; documented in store.hpp, not changed, so that a freshly opened Store keeps the reference's empty-cache behaviour.",
+     "fixed": false
+    }
+   ]
+  }
+ },
+ "passband": {
+  "build": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-2",
+   "branch": "worktree-wf_be3272b3-748-2",
+   "commit": "a99dd6427794a226567b5c5b842f65675f7e566e",
+   "files": [
+    "native/core/qrss/passband.hpp",
+    "native/core/qrss/passband.cpp",
+    "native/core/qrss/flac.hpp",
+    "native/core/qrss/flac.cpp",
+    "native/core/qrss/dirlock.hpp",
+    "native/core/qrss/dirlock.cpp",
+    "native/core/qrss/rawfile.hpp",
+    "native/core/qrss/rawfile.cpp",
+    "native/core/util/md5.hpp",
+    "native/third_party/dr_libs/dr_flac.h",
+    "native/third_party/dr_libs/README.md",
+    "native/bindings/module/qrss/passband.cpp",
+    "native/tests/qrss/test_passband.cpp",
+    "native/tests/qrss/test_flac.cpp",
+    "tests/qrss_native/passband.py",
+    "tests/test_qrss_native_passband.py"
+   ],
+   "api": "// native/core/qrss/passband.hpp -- namespace sstvae::qrss::passband\ninline constexpr double PB_PACK_AFTER_S, PB_LEAD_S, PB_TAIL_S;   // = rxconfig::frontend::*\ninline constexpr double PB_PACK_CHECK_S = 60.0;\nstd::int64_t slot_t0(std::int64_t q);                                  // 900 q + 1; std::overflow_error past int64\nusing Range = std::array<std::int64_t, 2>;\nstd::vector<Range> merge_ranges(std::vector<Range> rs);                // frontend._merge_ranges\ninline constexpr std::int64_t HOUR_MAX = (std::int64_t{1} << 62) / 3600;\nstd::optional<std::int64_t> hour_of_name(std::string_view name);       // _HOUR_RE: fe_<digits>.i16|.flac\nstd::int64_t py_round(double x);                                       // round half to even\nstruct Masked { std::vector<cf> x; std::vector<std::uint8_t> mask; };\nstruct SlotCapture { std::optional<frontend::Capture> capture; double coverage = 0.0; };\nstruct Written { double t_first = 0.0; double gain = 1.0; };\nusing Clock = std::function<double()>;\nstruct StoreOptions { int fs = config::FE_FS; double scale = 8192.0; double keep_hours = 48.0; bool pack = false; Clock clock; };\nclass PassbandStore {\n  explicit PassbandStore(std::string root, StoreOptions opt = {});     // mkdir -p, reads/writes meta.json\n  const std::string& root() const; int fs() const; double scale() const; double keep_hours() const;\n  std::int64_t per_hour() const; bool pack() const;\n  void write(double t0, std::span<const cf> x, bool expire = true);\n  void write_at(std::int64_t n0, std::span<const cf> x, bool expire = true);\n  Masked read(double t_start, double t_end) const;\n  Written write_capture(const frontend::Capture& cap, bool expire = true);\n  SlotCapture capture(std::int64_t q, double dur_s, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S) const;\n  std::vector<std::int64_t> slots(double dur_s) const;\n  std::vector<std::int64_t> hours() const;\n  std::vector<std::int64_t> raw_hours() const;\n  std::vector<std::int64_t> expire(std::optional<double> now = std::nullopt);\n  bool pack_hour(std::int64_t hour);\n  void maybe_pack(double now);                                          // starts the background packer thread\n  bool packer_started() const; bool packer_alive() const;\n  bool join_packer(std::optional<double> timeout_s = std::nullopt);\n  std::string raw_path(std::int64_t hour) const; std::string index_path(std::int64_t hour) const; std::string flac_path(std::int64_t hour) const;\n};\n\n// native/core/qrss/dirlock.hpp -- namespace sstvae::qrss\nclass DirLock {   // flock(LOCK_EX|LOCK_NB) / LockFileEx byte 0 on <dir>/.lock, writes \"<pid>\\n\"\n  static std::optional<DirLock> try_acquire(const std::string& dir);  // nullopt: held elsewhere; FileError otherwise\n  DirLock(DirLock&&) noexcept; DirLock& operator=(DirLock&&) noexcept; ~DirLock();\n  void close(); bool is_open() const; const std::string& path() const; long long native_handle() const;\n};\n\n// native/core/qrss/flac.hpp -- namespace sstvae::qrss::flac\nstruct EncodeOptions { int blocksize = 4096; int max_fixed_order = 4; int max_partition_order = 8; bool stereo_decorrelation = true; int seek_every_frames = 16; };\nusing Source = std::function<void(std::uint64_t first, std::uint64_t n, std::int16_t* interleaved_out)>;\nstruct EncodeStats { std::uint64_t bytes, frames; std::array<std::uint64_t,4> stereo; std::array<std::uint64_t,8> subframes; std::array<std::uint8_t,16> md5; };\nclass Cancelled : public std::runtime_error;\nEncodeStats encode_file(const std::string& path, int sample_rate, int channels, std::uint64_t total_frames, const Source& source, const EncodeOptions& opt = {}, const std::atomic<bool>* cancel = nullptr);\nstd::string encode(std::span<const std::int16_t> interleaved, int channels, int sample_rate, const EncodeOptions& opt = {}, EncodeStats* stats = nullptr);\nstd::uint8_t crc8(const std::uint8_t* p, std::size_t n); std::uint16_t crc16(const std::uint8_t* p, std::size_t n);\nstd::array<std::uint8_t,16> pcm16_md5(std::span<const std::int16_t> interleaved);\nstruct Info { int channels, sample_rate, bits_per_sample; std::uint64_t frames; std::array<std::uint8_t,16> md5; };\nclass Reader { explicit Reader(const std::string& path); const Info& info() const; std::vector<std::int16_t> read(std::uint64_t first, std::uint64_t n); };   // dr_flac, 16-bit only\nstd::vector<std::int16_t> decode(const std::string& bytes, Info* info = nullptr);\n\n// native/core/qrss/rawfile.hpp (support)\nclass FileError : public std::system_error;   // carries the failing path (Python OSError.filename)\nbool make_dirs(const std::string& dir, std::error_code& ec, std::string* failed = nullptr);   // Path.mkdir(parents=True, exist_ok=True)\n\n// Python: sstvae_native.qrss.passband -- PassbandStore (pybind, dynamic_attr, root as pathlib.Path, _packer with join/is_alive/name/daemon), dir_lock + _LockFile, slot_t0, _merge_ranges, _hour_of_name, _flac_encode(path, data, fs, blocksize=4096, max_fixed_order=4, max_partition_order=8, stereo=True, seek_every=16)->dict, _flac_read(path, start=0, stop=None), _flac_info(path), PB_* constants.\n// Rows (tests/qrss_native/passband.py, STAGE=\"rx\"): frontend.PassbandStore, frontend._merge_ranges, frontend.slot_t0, live.dir_lock.",
+   "tests": [
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build -R qrss_core",
+     "result": "58/58 passed (56.9 s), test_passband.cpp (95 checks) and test_flac.cpp included"
+    },
+    {
+     "cmd": "timeout 200 pytest tests/test_qrss_native_passband.py",
+     "result": "18 passed (23.5 s); under --native-qrss=rx the same file reports 18 skipped (it holds both implementations itself)"
+    },
+    {
+     "cmd": "timeout 200 pytest --native-qrss=rx -m 'not slow' tests/test_qrss_frontend.py tests/test_qrss_em.py",
+     "result": "29 passed (9.8 s); header: 421 substitutions, 64 from-import sites, passband among the modules"
+    },
+    {
+     "cmd": "timeout 200 pytest --native-qrss=rx -m 'not slow' tests/test_qrss_live.py",
+     "result": "37 passed (14.2 s)"
+    },
+    {
+     "cmd": "timeout 200 pytest --native-qrss=rx -m 'not slow' tests/test_qrss_live_l.py tests/test_qrss_cli.py",
+     "result": "20 passed (8.9 s)"
+    },
+    {
+     "cmd": "timeout 200 pytest -m 'not slow' tests/test_qrss_frontend.py tests/test_qrss_em.py tests/test_qrss_live.py",
+     "result": "66 passed (32.3 s), plain Python"
+    },
+    {
+     "cmd": "timeout 200 pytest -m 'not slow' tests/test_qrss_live_l.py tests/test_qrss_cli.py",
+     "result": "20 passed (9.2 s), plain Python"
+    },
+    {
+     "cmd": "timeout 200 pytest tests/test_qrss_native_infra.py tests/test_qrss_native_paths.py",
+     "result": "207 passed, 4 skipped"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "both ok (492 / 493 files)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -Wall -Wextra -fsyntax-only on passband.cpp, flac.cpp, dirlock.cpp, rawfile.cpp",
+     "result": "clean (Windows LockFileEx path compiled, not run)"
+    },
+    {
+     "cmd": "scratch mutation runs (mut.py): mask flip in read, a 1-sample write shift, slot_t0 off by one on every 7th slot, each substituted as a row",
+     "result": "all three caught by test_whole_caller"
+    }
+   ],
+   "parity": "Bit-exact or byte-identical: the files a store leaves behind (fe_<hour>.i16, the ranges .json, meta.json), compared byte for byte after the same random sequences of write/write_capture/expire/pack/unpack driven through both stores. Every returned value matches bit for bit: read (x and mask), capture (Capture fields and coverage), slots, hours, expire's list, write_capture's (t_first, gain), slot_t0, _merge_ranges. Cross reads work both ways: a store written by Python and read by C++, and the reverse, give bitwise-equal results. That includes hours the other implementation packed to FLAC. The whole callers (Listener, em._from_passband/retro_detect, qrss_listen.main) give identical results and trees with the rows in and out, and spies show the C++ was actually constructed and called. Quantisation follows numpy exactly: NEP 50 float32, round half to even, clip, NaN to 0. dir_lock interoperates across processes in both directions (Python holds and C++ is refused, and the reverse), and the \"<pid>\\n\" content is the same. FLAC samples are exact. Both soundfile/libFLAC and dr_flac decode our files to the input, and dr_flac decodes soundfile's files to the input. The checked set covers 0 and 1 frames, partial last blocks, constant and full-scale signals, mono, odd rates and partial reads past the end. The STREAMINFO MD5 equals libFLAC's (md5 of interleaved little-endian int16). Not compared: FLAC file bytes, which differ from libFLAC's because there is no LPC, only FIXED predictors. Also not compared: anything on real Windows, where the code is a mingw syntax check only.",
+   "deviations": [
+    "pack=True works without soundfile installed. The C++ has its own FLAC encoder and dr_flac reader, so a store that asks to pack always packs. Python's packing depends on soundfile.",
+    "There is no msync after each write. The raw .i16 file is written with positioned I/O, and the data is synced once before an hour is packed or unpacked.",
+    "Hour file names must use ASCII digits and stay at or below HOUR_MAX (2^62/3600). Python's \\d also matches other scripts' digits, and its hours are unbounded. The C++ ignores such names, which no writer produces.",
+    "An integer beyond int64 (hour, slot, sample index) raises OverflowError. Python would carry on with bignums.",
+    "A negative fs is refused with ValueError. In Python, reading such a store hangs forever.",
+    "meta.json values must be int, float or bool. A malformed meta.json still raises ValueError, but with different text. A missing key raises the same KeyError.",
+    "Range JSON files must hold integers. _merge_ranges takes integers only and always returns Python ints. Python can return numpy ints, which json.dumps refuses (that path is unreachable today).",
+    "Store attributes (root, fs, scale, keep_hours, per_hour, pack) are read-only properties. Arbitrary new attributes are allowed (dynamic_attr). _packer is a handle to the current packer thread, with join/is_alive/name 'passband-pack'/daemon True.",
+    "pack_hour with a non-int hour returns False instead of raising later inside path formatting.",
+    "The FLAC reader accepts 16-bit streams only, which is all the store writes. Other bit depths raise.",
+    "On Windows, an OS error code with no errno mapping is reported as EIO.",
+    "expire() takes the store's lock, so it cannot race a concurrent write. Python's expire does not lock.",
+    "Two concurrent pack_hour calls are serialized by a pack mutex. In Python, two calls on the same hour share one temporary file name and can corrupt each other.",
+    "The guard that stops pack_hour from packing an hour that is still being written adds an in-process write counter per hour to Python's mtime comparison. An in-process write that lands within the filesystem's mtime granularity is therefore still detected."
+   ],
+   "shared_changes_needed": [],
+   "insights": [
+    {
+     "kind": "performance",
+     "what": "FLAC size against soundfile/libFLAC, ours / theirs. Band noise: 1.21x (lowpassed) and 1.31x (narrower band), because libFLAC's LPC beats FIXED predictors on strongly coloured noise. TINY capture: at most 1.023x. White noise: 1.000x (both near verbatim). Mostly-unwritten hour: 1.20x (both mostly CONSTANT subframes, and the written part follows the band-noise ratio). This misses the ~10% target on coloured band noise by about 11 to 21 points. Closing the gap needs LPC, which the task ruled out. On real captures the target is met.",
+     "evidence": "measure.py in the scratchpad: band noise 1.21/1.31, TINY capture <=1.023, white 1.000, mostly-unwritten 1.20"
+    },
+    {
+     "kind": "performance",
+     "what": "Packing a full hour of band noise takes 1.43 s in C++ against 1.04 s for soundfile (libFLAC, optimized C with SIMD). The encoder became 2.5x faster this session with byte-identical output. The exact Rice-parameter search exploits convexity of cost(k) = sum(u>>k) + count*(k+1): it walks from an estimate and searches only the window [min,max] of the finest partition's optima plus k=14. A fused single pass computes all five fixed-order residual abs-sums, and std::bit_width replaces log loops.",
+     "evidence": "bench.py / prof.py: pack_hour 1.43 s vs soundfile 1.04 s; encoder 2.5x faster than the first version, output byte-identical (test_flac.cpp golden sizes and md5 of file bytes)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "In frontend.PassbandStore.pack_hour, `before = path.stat()` sits outside the try. If the raw file vanishes between listing and packing (an expire, or another process), FileNotFoundError escapes. Raised from the packer thread, it kills that pass of the packer and any later hours in its list.",
+     "evidence": "sstvae/qrss/frontend.py pack_hour (~lines 565-590)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Two pack_hour calls on the same hour (the background packer plus a direct call, or two stores sharing a root) write the same temporary .flac.tmp name and can rename a half-written or interleaved file into place. Nothing serializes them. The mtime guard compares stat times, which is coarse on some filesystems, and writers in other processes take no lock against the packer.",
+     "evidence": "inferred from code, sstvae/qrss/frontend.py pack_hour (~565-590)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "A store opened with a negative fs (from arguments or meta.json) makes read() loop forever: per_hour is negative, so the hour walk never advances past t_end.",
+     "evidence": "reproduced with a timeout during the port; frontend.py read loop"
+    },
+    {
+     "kind": "python-bug",
+     "what": "_HOUR_RE uses \\d, which matches non-ASCII digits such as Arabic-Indic, so a file named with them parses as an hour (int() accepts those digits too). Its `$` also accepts a trailing newline. Both are harmless with today's writers but make the directory listing broader than the writer.",
+     "evidence": "sstvae/qrss/frontend.py line ~458 (_HOUR_RE)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "_merge_ranges can return numpy integers when given numpy ranges, and json.dumps then raises TypeError when the ranges file is written. No caller passes numpy ranges today, so the path is unreachable.",
+     "evidence": "sstvae/qrss/frontend.py _merge_ranges (~line 775)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "write_capture with an inf sample raises OverflowError from int(round(...)) in the gain computation. A non-finite capture should probably be refused earlier, or stored as NaN-to-0 the way plain write quantises.",
+     "evidence": "found by the random-sequence parity test; frontend.py write_capture"
+    },
+    {
+     "kind": "numerics",
+     "what": "libsndfile (soundfile) cannot read two kinds of valid FLAC: a stream with 0 frames, and one at 65537 Hz or other rates above 65535 that are not multiples of 10. The STREAMINFO is legal, but libsndfile rejects the header. dr_flac reads both. The edge corpus checks those cases through dr_flac only.",
+     "evidence": "probe_sf.py: sf.read raises on the 0-frame and 65537 Hz files; dr_flac returns the input exactly"
+    },
+    {
+     "kind": "numerics",
+     "what": "Quantising to int16 must follow NEP 50: float32(x * float32 scale), round half to even, then clip, with NaN mapping to 0. Doing it in double, or with std::round, moves values across a .5 boundary, and the .i16 files then stop being byte-identical.",
+     "evidence": "byte-identical .i16 files across random sequences (tests/test_qrss_native_passband.py)"
+    },
+    {
+     "kind": "process",
+     "what": "A random-sequence parity test that draws rng inside a per-store loop gives each store different data. The first draft did this, and its failures looked like implementation disagreements. Hoisting the draws fixed it. Mutation runs (a mask flip, a 1-sample write shift, an off-by-one slot_t0) confirmed that the whole-caller A/B test actually notices a wrong row instead of passing on spies alone.",
+     "evidence": "scratchpad mut.py: all three mutants caught"
+    },
+    {
+     "kind": "simplification",
+     "what": "Emulating Path.mkdir(parents=True, exist_ok=True) exactly, including the error class and the failing path in OSError.filename, needed a recursive create_directory walk. std::filesystem::create_directories gives NotADirectoryError where Python gives FileExistsError (when the root is a regular file), and does not say which component failed.",
+     "evidence": "native/core/qrss/rawfile.cpp make_dirs; test_qrss_native_passband.py error-parity cases"
+    }
+   ],
+   "notes": "Everything is committed on branch worktree-wf_be3272b3-748-2 at a99dd64. Earlier work-in-progress commits on the same branch are 6c02a0f, c79b1a3 and 103d9fa, on base c0c830f. Nothing was pushed and the working tree is clean. No shared files needed editing: CMake globs pick up the new core, test and binding sources, and the rows module tests/qrss_native/passband.py is new. rx_types.hpp, tests/qrss_native/_rx.py, sstvae/ and the qrss_*.py scripts are untouched.\n\nFLAC result: the ~10% size target is met on real TINY captures (at most 2.3% larger) and missed on strongly coloured synthetic band noise (21-31% larger), because the encoder is FIXED-only as instructed. A full-hour pack takes 1.4 s against soundfile's 1.0 s. It runs on the background packer thread, which can be cancelled.\n\ndr_flac (public domain / MIT-0) is vendored at native/third_party/dr_libs with a README giving its version and source. The Windows LockFileEx path is compiled with mingw (syntax check) but has not been run.\n\nThe Store-lane rows from the other wave-8 lane are not in this worktree, so the whole-caller tests here substitute only this lane's rows (PassbandStore, _merge_ranges, slot_t0, dir_lock). Once both lanes merge, the combined --native-qrss=rx run of the frontend/live/live_l/em/cli suites should be repeated."
+  },
+  "review": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-2",
+   "branch": "worktree-wf_be3272b3-748-2",
+   "commit": "0335932e8247c68d6df1340194225219826d2132",
+   "files": [
+    "native/core/qrss/passband.cpp",
+    "native/core/qrss/passband.hpp",
+    "native/core/qrss/flac.cpp",
+    "native/core/qrss/flac.hpp",
+    "native/tests/qrss/test_passband.cpp",
+    "tests/test_qrss_native_passband.py"
+   ],
+   "api": "namespace sstvae::qrss::passband (passband.hpp), unchanged from the lane except StoreOptions::before_swap:\nstruct StoreOptions { int fs = config::FE_FS; double scale = 8192.0; double keep_hours = 48.0; bool pack = false; Clock clock; std::function<void(std::int64_t hour)> before_swap; /* test seam, empty in production */ };\nusing Clock = std::function<double()>;\nstruct Masked { std::vector<std::complex<float>> x; std::vector<std::uint8_t> mask; };\nstruct SlotCapture { std::optional<frontend::Capture> capture; double coverage; };\nstruct Written { double t_first; double gain; };\nexplicit PassbandStore::PassbandStore(std::string root, StoreOptions opt = {});\nvoid PassbandStore::write(double t0, std::span<const cf> x, bool expire = true);\nvoid PassbandStore::write_at(std::int64_t n0, std::span<const cf> x, bool expire = true);\nMasked PassbandStore::read(double t_start, double t_end) const;\nWritten PassbandStore::write_capture(const frontend::Capture& cap, bool expire = true);\nSlotCapture PassbandStore::capture(std::int64_t q, double dur_s, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S) const;\nstd::vector<std::int64_t> PassbandStore::slots(double dur_s) const;\nstd::vector<std::int64_t> PassbandStore::hours() const;  std::vector<std::int64_t> raw_hours() const;\nstd::vector<std::int64_t> PassbandStore::expire(std::optional<double> now = std::nullopt);\nbool PassbandStore::pack_hour(std::int64_t hour);\nvoid PassbandStore::maybe_pack(double now);\nbool packer_started() const; bool packer_alive() const; bool join_packer(std::optional<double> timeout_s = std::nullopt);\nstd::string raw_path(std::int64_t) const; std::string index_path(std::int64_t) const; std::string flac_path(std::int64_t) const;\nstd::int64_t slot_t0(std::int64_t q); std::vector<Range> merge_ranges(std::vector<Range>); std::optional<std::int64_t> hour_of_name(std::string_view); std::int64_t py_round(double);\nnamespace sstvae::qrss::flac: EncodeStats encode_file(const std::string& path, int sample_rate, int channels, std::uint64_t total_frames, const Source&, const EncodeOptions& = {}, const std::atomic<bool>* cancel = nullptr);  /* now fsyncs before return */\nclass Reader { explicit Reader(const std::string& path); const Info& info() const; std::vector<std::int16_t> read(std::uint64_t first, std::uint64_t n); };  /* open serialised process-wide */\nnamespace sstvae::qrss::dirlock: static std::optional<DirLock> DirLock::try_acquire(const std::string& dir); void close(); bool is_open() const; const std::string& path() const; long long native_handle() const;",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2 (sstvae_native, test_qrss_core_flac, test_qrss_core_passband, then the whole tree)",
+     "result": "built, 57/57 steps"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core --output-on-failure",
+     "result": "58/58 passed, 65 s; qrss_core_passband: ok (115 checks)"
+    },
+    {
+     "cmd": "SSTVAE_NATIVE_MODULE_DIR=$PWD/native/build-qrss/python pytest -q tests/test_qrss_native_passband.py",
+     "result": "19 passed in 27.2 s (includes new test_a_short_raw_hour)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_frontend.py tests/test_qrss_em.py",
+     "result": "29 passed, 11 deselected, 10.8 s; header lists passband among 421 substitutions / 64 from-import sites"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_frontend.py tests/test_qrss_em.py",
+     "result": "29 passed, 11 deselected, 21.8 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_live.py",
+     "result": "37 passed, 15.4 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_live.py",
+     "result": "37 passed, 24.1 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_live_l.py tests/test_qrss_cli.py",
+     "result": "20 passed, 7 deselected, 11.4 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_live_l.py tests/test_qrss_cli.py",
+     "result": "20 passed, 7 deselected, 12.3 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_infra.py tests/test_qrss_native_paths.py",
+     "result": "207 passed, 4 skipped, 37.7 s"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (492 files), includes ok (493 files)"
+    },
+    {
+     "cmd": "x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only on flac.cpp, passband.cpp, dirlock.cpp, rawfile.cpp, test_passband.cpp, test_flac.cpp",
+     "result": "clean (Windows code compiled, not run: no wine on this machine)"
+    },
+    {
+     "cmd": "mutation checks on passband.cpp swap conditions (restored afterwards)",
+     "result": "the lane's tests passed with both write-during-pack checks removed; with the new before_swap tests, removing the gen_ check fails 7 checks and removing the mtime check fails 5"
+    },
+    {
+     "cmd": "probe: 450 random C++ FLAC files (block sizes, fixed orders 0-4, rates 1..655350, mono/stereo) through strict libFLAC (MD5 checked) and ffmpeg -err_detect crccheck+bitstream; a full C++-packed hour through libFLAC",
+     "result": "all accepted, sample-exact"
+    },
+    {
+     "cmd": "probe: dr_flac partial reads of a soundfile-packed hour (no seektable) and soundfile/dr_flac partial reads of a C++-packed hour",
+     "result": "300/300 exact; exact"
+    },
+    {
+     "cmd": "probe: 60 s thread stress (writer, 2 readers, packer, back-writer forcing unpacks)",
+     "result": "0 errors, no deadlock, no temporary files left"
+    }
+   ],
+   "parity": "Byte-identical across implementations (asserted by _same_tree in tests/test_qrss_native_passband.py, both directions, a store started by one and extended by the other): meta.json, fe_<h>.json, and the sparse fe_<h>.i16 raw hours. Quantisation (complex64 -> NEP 50 float32 rint, clip, int16, NaN to 0) and read-back float32 are bit-exact. The behaviour for a short raw hour (0, 30 and 12000 bytes) now matches exactly: the read error text, the write that grows the file, and the resulting tree. FLAC files are not byte-identical to soundfile's (our encoder has fixed predictors and no LPC). They decode sample-exact both ways: dr_flac reads soundfile hours exactly, including partial reads by binary search with no seektable; soundfile reads C++ hours exactly; strict libFLAC with MD5 verification accepts every C++ file tried. Size is 1.238x soundfile's on FE band noise. Not compared: when the packer thread runs relative to Python's daemon thread (both are polled in the tests); durability across a power cut (reasoned from code, not measured); the Windows code paths (compiled with mingw, not run).",
+   "deviations": [
+    "Raw writes are not synced. Python's mm.flush() is msync(MS_SYNC), a device write on every call. The C++ write runs in feed(), the GUI/audio pump, so it should not wait on the device. After a power cut the index may name samples that read back as zeros. This is documented in passband.hpp.",
+    "The packed FLAC is fsynced (fsync / FlushFileBuffers) before it replaces the raw hour and the raw file is deleted. Python does not sync soundfile's output, and ext4's auto_da_alloc does not cover a rename to a new name.",
+    "Besides the reference's mtime comparison, the swap also checks an in-process write count per hour (gen_). This catches a write during the pack on file systems with a coarse mtime (FAT 2 s, exFAT 10 ms), where Python's mtime-only check can delete a write.",
+    "`pack` is honoured with nothing installed, because the encoder is ours. Python needs soundfile.",
+    "The packed FLAC bytes differ from soundfile's: fixed predictors 0-4 and no LPC, so the file is 1.24x larger on band noise. It is lossless, and both implementations read both kinds of file.",
+    "Hour file names accept ASCII digits only, up to HOUR_MAX = 2^62/3600. Python's \\d accepts other scripts' digits, and its int is unbounded.",
+    "Two pack_hour calls run one after another. In Python they would share a temporary name.",
+    "Opening a FLAC Reader takes a process-wide mutex while dr_flac parses the metadata.",
+    "StoreOptions::before_swap is a C++-only test seam (empty in production).",
+    "Unrealistic inputs not matched: pack_hour(True) packs hour 1 where Python looks for fe_True.i16 and returns False; a bool or str fs is converted differently; a FLAC with 3 or more channels and 0 frames; hour values beyond int64."
+   ],
+   "shared_changes_needed": [],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "PassbandStore's pack check compares only the raw file's mtime before swapping in the FLAC and deleting the raw hour. On FAT/exFAT (2 s / 10 ms mtime resolution) a write landing during the ~1 s pack leaves the mtime unchanged, so the write is deleted along with the raw file.",
+     "evidence": "inferred from code (frontend.PassbandStore.pack_hour). Reproduced against the C++ mtime-only path in test_pack_write_meanwhile mode 1 by restoring the mtime after an in-process write: without gen_ the pack swaps and the write is lost."
+    },
+    {
+     "kind": "python-bug",
+     "what": "The soundfile-written FLAC is never fsynced before os.replace and the unlink of the raw hour. ext4 delayed allocation does not protect a rename to a new name, so a power cut within the writeback delay can leave an empty fe_<h>.flac and no fe_<h>.i16, and the hour is gone.",
+     "evidence": "inferred from code (frontend.PassbandStore.pack_hour) and ext4 auto_da_alloc semantics."
+    },
+    {
+     "kind": "python-bug",
+     "what": "A packer daemon thread killed mid-pack (process exit) leaves fe_<h>.flac.<pid>.tmp behind for good. expire() and hours() match only _HOUR_RE names, so nothing ever deletes these files, each up to a packed hour in size. Stale _atomic_write '<name>.<pid>.<ident>.tmp' files after a crash are never cleaned either. The C++ inherits this, to keep the files identical.",
+     "evidence": "inferred from code (_HOUR_RE, expire, _maybe_pack's daemon thread)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "The reference handles a short raw hour asymmetrically. Reads use np.memmap mode 'r', which raises ValueError('mmap length is greater than file size') until a write, opened with mode 'r+', silently grows the file to the full hour. The lane's C++ refused the write as well, so a 0-byte hour left by a crash between creation and sizing failed every later write into that hour for the life of the listener.",
+     "evidence": "probe_short.py in the scratchpad; now pinned by test_a_short_raw_hour (sizes 0, 30, 12000) and test_short_raw_hour in test_passband.cpp"
+    },
+    {
+     "kind": "process",
+     "what": "The lane's write-during-pack tests could not fail. Removing both swap checks (mtime and gen) still passed, because the decode-and-compare verification catches most races first, and a random burst stress (about 3600 writes in 1.5 s) never hit the window between verification and swap. A deterministic seam (StoreOptions::before_swap) that places the write exactly there was needed. Mutation-checked afterwards: gen removed fails 7 checks, mtime removed fails 5.",
+     "evidence": "mutation runs on native/core/qrss/passband.cpp during this review"
+    },
+    {
+     "kind": "process",
+     "what": "dr_flac's drflac__init_cpu_caps writes global CPU-feature flags on every open on ARM, and on the first open on x86. The packer's verify decode, an unpack and a reader's capture() can open at the same time, so this was a data race in practice on Android/ARM. Opens are now serialised. The decode itself needs no lock.",
+     "evidence": "native/third_party/dr_libs/dr_flac.h drflac__init_cpu_caps (marked no_sanitize(\"thread\") upstream); native/core/qrss/flac.cpp Reader::Impl::open"
+    },
+    {
+     "kind": "process",
+     "what": "Before this fix, maybe_pack set packer_running_ before constructing std::thread. If the thread failed to start (std::system_error), the flag stayed true forever, so maybe_pack never ran again and join_packer() with no timeout waited forever. The flags are now set after construction. This is safe because the thread's last act takes packer_mu_, which maybe_pack holds.",
+     "evidence": "native/core/qrss/passband.cpp maybe_pack"
+    },
+    {
+     "kind": "performance",
+     "what": "The size of a packed hour against soundfile/libFLAC (LPC up to order 8) on FE band noise is 1.238x, short of the ~10% target. The cost is fixed predictors without LPC. pack_hour on a full hour takes 1.4 s against soundfile's 1.0 s.",
+     "evidence": "measured in this review (size ratio 1.238); lane notes (1.4 s vs 1.0 s)"
+    },
+    {
+     "kind": "simplification",
+     "what": "unpack_locked must close its FLAC Reader before removing the file. On Windows an open file is undeletable or stays delete-pending, so a later pack to the same name can fail. Scoping the reader in a unique_ptr and resetting it before remove_file was enough.",
+     "evidence": "native/core/qrss/passband.cpp unpack_locked (reader.reset() before util::remove_file)"
+    }
+   ],
+   "notes": "Review of the passband-flac-lock lane (diff c0c830f..a99dd64), with fixes in c0e8536 and 0335932 on the same branch; nothing was pushed. Every file in the diff was read against frontend.PassbandStore and the reference's lock and temp-file conventions.\n- Confirmed correct: the rows (the header lists passband; the whole-caller spies reach every row) and the vendored dr_flac sha256.\n- FLAC robustness: libFLAC and ffmpeg strict checks over 450 random files, cross reads exact in both directions.\n- Thread stress: clean.\n- Windows: the code compiles with mingw but was not run (there is no wine on this machine). The FlushFileBuffers and LockFileEx paths are therefore unexercised.\n- The FLAC size target (~10% of soundfile's) is still missed at 1.24x. LPC was out of scope for this lane.\n- Scratch probes are in /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/rv_pb/. No shared files were edited.\n- I did not rerun test_qrss_format.py, the file with the known shared-folder failure the task said to ignore.",
+   "findings": [
+    {
+     "what": "A raw hour shorter than an hour (e.g. 0 bytes after a crash between creation and sizing) made every C++ write into it fail with a FileError, for the life of the listener. numpy's memmap 'r+' grows such a file instead. The read error also carried a path prefix the reference's ValueError does not have. Fixed: a write now grows the file sparse to full size, and a read raises exactly 'mmap length is greater than file size'. Pinned by C++ and parity tests.",
+     "fixed": true
+    },
+    {
+     "what": "The packed FLAC was not synced before it replaced the raw hour, which is then deleted. On ext4 a power cut could leave an empty FLAC and no raw file. Fixed: FileSink::finish fsyncs (FlushFileBuffers on Windows) before close.",
+     "fixed": true
+    },
+    {
+     "what": "unpack_locked removed the FLAC while its dr_flac Reader still held the file open. On Windows the file is then undeletable or delete-pending, and a later pack or rename to that name could fail. Fixed by resetting the reader before remove_file.",
+     "fixed": true
+    },
+    {
+     "what": "The write-during-pack protection (the mtime and in-process write-count checks before the swap) had no test that could fail: with both checks removed the suite still passed. Fixed with a StoreOptions::before_swap seam and deterministic tests: an in-process write with the mtime restored (only gen_ sees it), an out-of-process pwrite (only the mtime sees it), and a control case. Each check was mutation-confirmed load-bearing.",
+     "fixed": true
+    },
+    {
+     "what": "maybe_pack set packer_running_ and packer_started_ before constructing std::thread. A thread-creation failure left 'running' set forever, which stopped all later packing and hung join_packer() with no timeout. Fixed by setting the flags after construction, under the same lock.",
+     "fixed": true
+    },
+    {
+     "what": "Concurrent dr_flac opens (packer verify, unpack, capture reads) race on dr_flac's CPU-feature globals, on every open on ARM/Android. Fixed with a process-wide mutex around drflac_open_with_metadata, and the thread-safety note in flac.hpp updated.",
+     "fixed": true
+    },
+    {
+     "what": "Packed hours are 1.238x soundfile's size on FE band noise, short of the ~10% target. The cause is fixed predictors without LPC; LPC was out of the lane's scope.",
+     "fixed": false
+    },
+    {
+     "what": "Minor divergences on unrealistic inputs were left alone:\n- pack_hour(True) packs hour 1 where Python returns False;\n- a bool or str fs is converted differently;\n- a FLAC with 3 or more channels and 0 frames;\n- hours beyond int64 / HOUR_MAX;\n- non-ASCII digits in hour names.",
+     "fixed": false
+    },
+    {
+     "what": "Stale temporaries are never cleaned up. A killed packer leaves fe_<h>.flac.<pid>.tmp, and a crash leaves '<name>.<pid>.<ident>.tmp' from the atomic writes. expire() and hours() never delete these. This is inherited from the reference, and the file layout is kept identical on purpose.",
+     "fixed": false
+    }
+   ]
+  }
+ },
+ "live": {
+  "build": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-3",
+   "branch": "worktree-wf_be3272b3-748-3",
+   "commit": "d666330",
+   "files": [
+    "native/core/qrss/live.hpp",
+    "native/core/qrss/live.cpp",
+    "native/core/qrss/rx_api.hpp",
+    "native/core/qrss/rx_api.cpp",
+    "native/bindings/module/qrss/live.cpp",
+    "tests/qrss_native/live.py",
+    "tests/qrss_native/_live.py",
+    "tests/test_qrss_native_live.py",
+    "native/tests/qrss/test_live.cpp"
+   ],
+   "api": "namespace sstvae::qrss::live  (native/core/qrss/live.hpp; constants RING_S, MERGE_HZ, PREAMBLE_S, CAPTURE_MARGIN_S, FINISH_SEARCH_MIN_HEARD, FINISH_MAX_CANDIDATES, FINISH_BUDGET_S, HEADERLESS_MAX_SNR_DB, RECOVER_HOURS, GUESS_NOTE, DIAL_FILE, LOG_FILE, LOG_FILE_BYTES, DIAL_GUARD_S, L_BELOW_HZ, PB_LEAD_S, PB_TAIL_S)\nusing cf = std::complex<float>; using Erase = std::vector<std::pair<double,double>>; using Selection = std::span<const frame::FrameSpec>;\nstd::int64_t slot_t0(std::int64_t q);\nstd::string utc_iso(double t);   std::string utc_iso_int(std::int64_t t);\ndouble frame_seconds(const frame::FrameSpec& spec);   double frame_seconds(Selection specs);\nbool in_band(double f_hz, int waveform = config::WAVEFORM_CE);\ndouble centre_of(double f_hz, int waveform);\nint waveform_id(std::string_view name);   std::int64_t waveform_id(const pyjson::Value& w);\nstd::int64_t due_waveform(const pyjson::Value& d);   std::optional<int> frame_waveform(std::string_view name);\nstruct FeSpan { std::vector<cf> x; std::vector<std::uint8_t> ok; };\nusing FeReader = std::function<FeSpan(std::int64_t a, std::int64_t b)>;\nclass FeRing { explicit FeRing(double span_s = RING_S); std::int64_t n() const; std::optional<std::int64_t> end() const; void write(std::int64_t n0, std::span<const cf> x); void clear(std::int64_t a, std::int64_t b); FeSpan read(std::int64_t a, std::int64_t b) const; void read_into(std::int64_t a, std::span<cf> x, std::span<std::uint8_t> ok) const; std::vector<cf> samples() const; std::vector<std::uint8_t> written() const; };   // thread-safe (shared_mutex), copies out\nErase spans(std::span<const std::uint8_t> mask, double fs, double origin);\nstruct CaptureSpan { std::int64_t a, b, origin; };   CaptureSpan capture_span(std::int64_t q, double frame_s, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S);\nstruct SlotRead { std::vector<cf> x; std::vector<std::uint8_t> ok; std::int64_t origin; };\nSlotRead capture_read(const FeRing& ring, std::int64_t q, Selection sel, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S);\nSlotRead capture_read(const FeReader& reader, std::int64_t q, Selection sel, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S);\nusing NoiseFn = std::function<std::vector<cf>(std::int64_t seed, std::size_t n)>;   std::vector<cf> default_noise(std::int64_t seed, std::size_t n);\nusing BlankFn = std::function<frontend::Blanked(std::span<const cf>)>; using NormaliseFn = std::function<frontend::Normalised(std::span<const cf>, std::span<const float>)>;\nstruct PrepareSeams { NoiseFn noise; BlankFn blank; NormaliseFn normalise; };   // empty = the C++ defaults\nstruct SlotCapture { receiver::Prepared prep; Erase erase; double heard; };\nSlotCapture capture_prepare(std::span<const cf> x, std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, double frame_s, std::optional<std::int64_t> seed = std::nullopt, const PrepareSeams& seams = {});\nSlotCapture capture_prepare(std::span<const cf> x, std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, Selection sel, std::optional<std::int64_t> seed = std::nullopt, const PrepareSeams& seams = {});\nSlotCapture slot_capture(const FeRing& ring, std::int64_t q, Selection sel, std::optional<std::int64_t> seed = {}, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S, const PrepareSeams& seams = {});\nstd::pair<std::int64_t,std::int64_t> py_slice(std::int64_t n, std::int64_t start, std::int64_t stop);\nstruct FinishGate { bool receive; std::int64_t k1; double heard; };\nFinishGate finish_gate(std::span<const std::uint8_t> ok, std::int64_t origin, double frame_s, bool have_dets, bool have_hints, double min_heard = FINISH_SEARCH_MIN_HEARD);\nenum class FinishBranch { Search, Known, Nothing };   FinishBranch finish_branch(double heard, bool have_dets, bool have_hints, double min_heard = FINISH_SEARCH_MIN_HEARD);\napi::ReceiveConfig finish_config(std::vector<frame::FrameSpec> frames, std::string estimator = \"joint\");\nstruct FinishOptions { double min_heard; std::optional<std::int64_t> seed; PrepareSeams seams; };\nstruct FinishResult { std::vector<types::PassResult> passes; double heard; };\nstd::vector<double> known_hz(std::span<const types::Detection> dets, bool joint);\nFinishResult finish_receive(std::span<const cf> x, std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, const api::ReceiveConfig& config, std::span<const types::Detection> dets = {}, std::span<const acquire::Hint> hints = {}, const FinishOptions& opt = {});\nstruct DialPoint { double t; std::int64_t dial_hz; };   struct DialSpan { double lo, hi; std::optional<std::int64_t> dial; };\nusing DialGuard = std::array<double,2>;   using DialEpochs = std::vector<std::pair<std::optional<std::int64_t>, std::vector<std::pair<double,double>>>>;\nstd::vector<DialPoint> parse_dial_text(std::string_view bytes);\nclass DialLog { explicit DialLog(std::string path); const std::string& path() const; void refresh(); std::vector<DialPoint> points() const; void set_points(std::vector<DialPoint>); std::vector<DialSpan> spans(double a, double b, const DialGuard& g = DIAL_GUARD_S) const; DialEpochs by_dial(double a, double b, const DialGuard& g = DIAL_GUARD_S) const; std::optional<std::int64_t> dial_at(double t, const DialGuard& g = DIAL_GUARD_S) const; DialSpan span_at(double t, const DialGuard& g = DIAL_GUARD_S) const; };   // thread-safe\nstd::vector<DialSpan> dial_spans(std::span<const DialPoint>, double a, double b, const DialGuard& = DIAL_GUARD_S);   DialEpochs dial_by_dial(std::span<const DialPoint>, double a, double b, const DialGuard& = DIAL_GUARD_S);   DialSpan dial_span_at(std::span<const DialPoint>, double t, const DialGuard& = DIAL_GUARD_S);\nbool same_dial(std::optional<std::int64_t> a, std::optional<std::int64_t> b);\nstd::optional<std::vector<std::pair<std::int64_t,std::int64_t>>> restrict_ranges(std::int64_t n, std::int64_t origin, std::int64_t q, std::span<const std::pair<double,double>> spans);\nstd::vector<std::uint8_t> restrict(std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, std::span<const std::pair<double,double>> spans);\nstruct Tile { id, q, slot_utc, frame, f_hz, dial_hz, status, snr_db, z_ref, callsign, grid, picture_id, mode, segment, cw_text, progress, heard, received, mean_w_db, confidence, passes, image, image_rev, updated, note, uid, waveform; pyjson::Value to_json() const; static std::optional<Tile> from_json(const pyjson::Value&); };\nstruct SlotState { std::int64_t q; std::vector<types::Detection> dets; std::vector<std::pair<std::string,Tile>> tiles; std::optional<double> last_refresh; bool done, finishing; FeReader reader; std::optional<std::vector<types::Detection>> cands; std::vector<acquire::Hint> hints; Tile* tile(std::string_view id); const Tile* tile(std::string_view id) const; };\nstruct LiveConfig { frame::FrameSpec spec; std::optional<std::vector<std::int64_t>> waveforms; double refresh_s, first_s, detect_until_s, recheck_until_s, empty_refresh_s, keep_done_s; std::string estimator, precision; std::optional<std::string> model; bool render, background, finish_process; std::vector<frame::FrameSpec> specs() const; std::vector<frame::FrameSpec> selection() const; bool joint() const; };\nnamespace sstvae::qrss::api (rx_api.hpp, added for finish_receive):\nstd::vector<types::PassResult> receive_slot(const receiver::Prepared& prep, const ReceiveConfig& config, std::optional<std::vector<types::Detection>> dets = std::nullopt);\nstd::vector<types::Detection> detect(const receiver::Prepared& prep, const ReceiveConfig& config, std::span<const double> skip_hz = {});\nreceiver::SlotSeams slot_seams(const ReceiveConfig& config);\nPython: sstvae_native.qrss.live: utc_iso, _utc_iso_int, frame_seconds, in_band, centre_of, _waveform_id, _due_waveform, FeRing, _spans, capture_read, capture_prepare, slot_capture, finish_receive, DialLog, same_dial, restrict (+ test hooks _tile_json, _tile_roundtrip, _live_config, _live_config_defaults, _default_noise, _parse_dial_text, _finish_gate, _finish_branch, _due_waveform_json, _waveform_id_json); rows in tests/qrss_native/live.py (STAGE=\"rx\").",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2 && timeout 200 ctest --test-dir native/build-qrss -R qrss_core -j2",
+     "result": "57/57 passed (qrss_core_live: 218+ checks, 0.11 s)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_live.py",
+     "result": "24 passed, 5 deselected in 15.4 s"
+    },
+    {
+     "cmd": "pytest -q -m slow tests/test_qrss_native_live.py (QRSS_PARITY_WORST=1 -s)",
+     "result": "5 passed (ce-tiny part, l-tiny whole/part, ce-short, l-short), run earlier in this session; timings and worst errors below"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_live.py",
+     "result": "37 passed in 15.9 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_live_l.py tests/test_qrss_smoke.py",
+     "result": "19 passed, 3 deselected in 7.1 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_cli.py",
+     "result": "3 passed, 4 deselected in 9.6 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_live.py tests/test_qrss_live_l.py tests/test_qrss_smoke.py tests/test_qrss_cli.py (no rows)",
+     "result": "59 passed, 7 deselected in 42.9 s"
+    },
+    {
+     "cmd": "QRSS_LIVE_NOISE=cpp pytest -q -m 'not slow' --native-qrss=rx tests/test_qrss_live.py tests/test_qrss_live_l.py tests/test_qrss_smoke.py",
+     "result": "55 passed, 1 failed: test_qrss_live.py::test_the_end_of_slot_receive_runs_in_its_own_process. Expected under the opt-in C++ noise: the child process runs the reference and fills unheard samples with numpy's noise, this process with the C++ generator's, so 64 of 1024 latents differ by up to 1.6e-4 (rtol 1e-4). Passes with the default noise."
+    },
+    {
+     "cmd": "pytest -q -m slow tests/test_qrss_native_receiver_slot.py -k test_whole_caller_finish_receive",
+     "result": "1 passed in 13.4 s (with the live rows applied)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_receiver_slot.py",
+     "result": "16 passed, 20 deselected in 30.2 s"
+    },
+    {
+     "cmd": "python tools/check_layering.py && python tools/check_includes.py",
+     "result": "layering ok (484 files), includes ok (485 files)"
+    }
+   ],
+   "parity": "Bit-exact or byte-identical, against the reference:\n- utc_iso: value or error type and text, over the microsecond rounding, the year range, time_t and gmtime edges, ints past 2^53, bools and numpy scalars.\n- frame_seconds: every preset of both waveforms, tuples, lists, duck-typed and native specs.\n- in_band, centre_of, _waveform_id, _due_waveform: value and type.\n- FeRing: every read, end, n and the storage itself, over 40x100 random ops on rings of 1..400 samples.\n- _spans: 3000 random masks.\n- capture_read: (x, ok, origin) bit for bit, typed and untyped.\n- capture_prepare and slot_capture: bit for bit given numpy's noise (QRSS_LIVE_NOISE default), typed and untyped, including the reference's refusal of a negative seed.\n- DialLog points, spans, by_dial, dial_at, span_at: over files with every bad-line kind, a time grid, and DIAL_GUARD_S changed at run time.\n- restrict: bool and int8 masks, plus errors. same_dial: value and type.\n- Tile.to_json: byte-identical to json.dumps(asdict(tile)).\n- LiveConfig: specs, selection, joint and errors.\n- finish_receive's decisions (300 stubbed random captures): the same calls, the same arguments with the prepared capture bit for bit, and the same result including heard, NaN for an empty slice.\n- Whole caller: LiveListener (CE+L, TINY, dial changes, a digital silence, a stall). Every receiver call, the log lines, the tiles and state.json are identical to the reference, both with all rows and with spies on the binding (captures typed).\n\nTolerance: finish_receive on the real receivers, typed C++ against the Python reference, worst measured:\n- report.z_ref: 7.93e-08 (ce-tiny whole) and 2.39e-09 (ce-short).\n- z elementwise: 6.13e-08.\n- f_hz: 2.27e-13 Hz.\n- tau0: 2.77e-13 CH samples.\n- Heard in part: z_ref 0, f_hz 6.82e-13 Hz.\n- w, ch, psi and hdr_llr: exact. The share heard: exact.\n\nTimings, one run each (C++ / Python):\n\n| case | C++ | Python | speed-up |\n|---|---|---|---|\n| ce-tiny whole | 0.89 s | 1.72 s | 1.9x |\n| ce-tiny part | 1.31 s | 2.6-3.2 s | 2-2.4x |\n| l-tiny whole | 0.75 s | 2.18 s | 2.9x |\n| l-tiny part | 1.11 s | 3.29 s | 3.0x |\n| ce-short whole | 1.79 s | 4.97 s | 2.8x |\n| l-short whole | 1.68 s | 5.48 s | 3.3x |\n\nNot compared bit for bit:\n- the C++ default noise (default_noise, xoshiro256**/Box-Muller). It is checked for distribution only: KS, moments and median on 400k samples in the parity file; E|n|^2 = 1/ln2, median |n|^2 = 1, zero mean and uncorrelated re/im in the ctest.\n- StreamFE and _FinishProcess (out of scope).",
+   "deviations": [
+    "A dial past int64, given as an int or a float (1e30, 10**30, 9223372036854775807, which float() rounds to 2^63), is skipped. The reference keeps it as a Python int; a radio's dial never reaches this.",
+    "An infinite dial (1e400, \"-Infinity\") or a time past float's range (10**400) is skipped. The reference raises OverflowError out of DialLog.refresh (round(inf), float(10**400)), so one bad line stops the dial log refreshing.",
+    "The dial file is decoded as UTF-8 with 'replace'. The reference's read_text(errors='replace') uses the locale encoding.",
+    "Numeric strings in the dial file (pynum::py_float) are ASCII-only. Python's float() also accepts Unicode digits and spaces.",
+    "utc_iso of a float past 2^53 rounds as a double before the int path. The binding's int path (_utc_iso_int) keeps an int exact, as the reference does.",
+    "The default noise (when no seam is given) is the C++ generator, not numpy's default_rng(q) samples. The distribution is the same. The rows hand in numpy's noise by default, so captures there are bit-identical; QRSS_LIVE_NOISE=cpp selects the C++ generator.",
+    "Tile.to_json writes null for a non-finite float, so state.json stays strict JSON. The reference's json.dumps writes NaN or Infinity for any field but snr_db and z_ref.",
+    "Tile.from_json refuses a value of the wrong JSON type (a str q, a float q). The reference's Tile(**d) keeps whatever it finds.",
+    "LiveConfig's error message shows the waveforms as a tuple even when the caller gave a list, since the C++ holds a vector.",
+    "FeRing's x and ok are copies (samples(), written()), not views of the storage.",
+    "A non-bool mask is taken as asarray(bool).",
+    "FeRing.write refuses non-1-D input.",
+    "restrict reads its spans once. Given a generator, the reference iterates it twice and returns an empty mask; the port gives what the list would give."
+   ],
+   "shared_changes_needed": [
+    "tests/test_qrss_live.py::test_the_end_of_slot_receive_runs_in_its_own_process: it fails under the opt-in QRSS_LIVE_NOISE=cpp, because the spawned child runs the reference with numpy's noise. When os.environ.get('QRSS_LIVE_NOISE') == 'cpp', skip the here-vs-there z/w comparison (or loosen it to a pass-count check). With the default noise it passes.",
+    "CLAUDE.md, the QRSS Commands bullet: add tests/test_qrss_native_live.py to the list of native parity files, and record that its fast tier is 24 tests in about 16 s, and its slow tier is 5 tests (SHORT slots and L l-tiny)."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "DialLog.refresh raises OverflowError (not caught: only ValueError/KeyError/TypeError/IndexError are) for a line whose dial is infinite (1e400, \"-Infinity\") or whose t is an integer past float range (10**400). One such line stops the dial log refreshing for good, because every later refresh re-reads it.",
+     "evidence": "sstvae/qrss/live.py:480-484 (int(round(float(...))) and float(d['t'])); pinned by test_dial_log_deviations"
+    },
+    {
+     "kind": "python-bug",
+     "what": "restrict iterates `spans` twice: once in the any(...) check and once in the loop. A generator is used up by the first pass, so restrict returns an all-False mask.",
+     "evidence": "sstvae/qrss/live.py:547-551; pinned in test_restrict"
+    },
+    {
+     "kind": "python-bug",
+     "what": "finish_receive's log line 'N signal(s) at X%' is emitted once per pass, inside the loop, not once per slot.",
+     "evidence": "inferred from code; seen in the whole-caller listener log"
+    },
+    {
+     "kind": "python-bug",
+     "what": "FeRing.end becomes an np.int64 when write is given an np.int64 n0 (max(end or 0, n0 + len)). The type then leaks into later arithmetic.",
+     "evidence": "sstvae/qrss/live.py FeRing.write; found by the ring fuzz type check"
+    },
+    {
+     "kind": "python-bug",
+     "what": "capture_prepare on a 1-sample capture raises 'array of sample points is empty' from deep in the front end, not a clear refusal.",
+     "evidence": "found by the stubbed finish fuzz (n in [0,1,...]); both implementations raise the same"
+    },
+    {
+     "kind": "python-bug",
+     "what": "state.json can carry NaN or Infinity tokens: Tile's to-dict guards only snr_db and z_ref, so a non-finite progress, heard, received, mean_w_db or confidence goes out as a non-JSON token.",
+     "evidence": "inferred from code (asdict + json.dumps default allow_nan)"
+    },
+    {
+     "kind": "python-bug",
+     "what": "A FeRing write older than the ring's window lands at index mod n, on the slots of newer samples, and marks them written. A stream that steps back can corrupt recent audio.",
+     "evidence": "pinned in test_live.cpp test_fe_ring r4: write(0, [9]) after end=305 overwrites index 280"
+    },
+    {
+     "kind": "simplification",
+     "what": "capture_prepare builds default_rng(q) and calls standard_normal(0) even when nothing is missing. The C++ draws nothing then, and the typed finish path draws nothing for a slot it will not receive.",
+     "evidence": "test_finish_receive_typed_draws_no_noise_for_nothing"
+    },
+    {
+     "kind": "performance",
+     "what": "finish_receive typed C++ against the Python reference: 1.9x (ce-tiny whole) to 3.3x (l-short), single run, 4 shared CPUs. Most of the time is the slot receiver in both.",
+     "evidence": "ce-tiny 0.89/1.72 s, l-tiny 0.75/2.18 s, ce-short 1.79/4.97 s, l-short 1.68/5.48 s"
+    },
+    {
+     "kind": "numerics",
+     "what": "pyjson holds int64 and json.loads holds any int. A big integer in the dial file (in t, or in any extra key) made the whole line unparseable in C++ where the reference kept it. The fix re-reads an out-of-range integer token outside strings as a float literal of the same digits: correctly rounded, the same double float() gives.",
+     "evidence": "native/core/qrss/live.cpp widen_big_ints; DIAL_FILES 'lines' case with 123456789012345678901234567890"
+    },
+    {
+     "kind": "numerics",
+     "what": "float(9223372036854775807) rounds to 2^63, so a dial of exactly INT64_MAX is past int64 after round(). Only dials up to 9223372036854774784 (the largest double below 2^63) survive.",
+     "evidence": "test_live.cpp parse_dial_text pins"
+    },
+    {
+     "kind": "process",
+     "what": "C++ argument evaluation order is unspecified. A binding that reads spec.keyed_end_pos and spec.t_sym as two arguments of one call raised the AttributeError for the wrong attribute when both were missing. Sequence the Python attribute reads into named locals before combining them.",
+     "evidence": "native/bindings/module/qrss/live.cpp FrameSeconds::of; found by test_frame_seconds duck-typed specs"
+    },
+    {
+     "kind": "process",
+     "what": "Rows that reference native functions directly (n.utc_iso etc.) are captured when rows() runs, so a spy on the binding must be installed before the rows are applied to see those calls. Rows that call n.<name> at call time see a later spy.",
+     "evidence": "tests/qrss_native/live.py rows(); test_whole_caller_live_listener third run"
+    },
+    {
+     "kind": "process",
+     "what": "The parity file skips entirely under --native-qrss (the reference modules are substituted), so the four suites under --native-qrss=rx are what check the rows, and the parity file must be run without the flag.",
+     "evidence": "pytest --native-qrss=rx tests/test_qrss_native_live.py: 24 skipped"
+    }
+   ],
+   "notes": "What the two commits hold:\n- WIP commit 3a84ddb: the core (live.hpp/.cpp), the binding, the rows (tests/qrss_native/live.py, _live.py) and an additive edit to native/core/qrss/rx_api.{hpp,cpp}.\n- Final commit d666330:\n  - the ctest native/tests/qrss/test_live.cpp (qrss_core_live);\n  - the parity file tests/test_qrss_native_live.py;\n  - parse_dial_text now widens integers past int64 (widen_big_ints);\n  - binding fixes: in_band returns the reference's comparison result for numpy input; frame_seconds reads its attributes in order; restrict and DialLog take their times through PyFloat_AsDouble, so a str is a TypeError as in the reference.\n\nThe rx_api edit is within \"finish_receive, through api::receive_slot\". It adds:\n- `api::receive_slot(const receiver::Prepared&, config, dets)`;\n- `api::detect(prep, config, skip_hz)`;\n- `api::slot_seams(config)`.\n\nThe existing `receive_slot(const Capture&, config)` is unchanged in behaviour; it was refactored onto the shared slot_options/slot_seams helpers.\n\nTile, SlotState and LiveConfig have C++ twins but no rows: the reference's listener sets their fields freely and keeps them in its own state, so they stay the reference's dataclasses in Python. Their twins are tested against them through the _tile_json, _tile_roundtrip and _live_config hooks. StreamFE and _FinishProcess are not ported, as the task excludes them; a C++ listener would run the end-of-slot receive on a thread.\n\nWhat blocks (documented in live.hpp):\n- FeRing::read holds a shared lock for its copy: about 10-20 ms for a FULL slot.\n- DialLog::refresh stats and reads the file without holding the points' lock.\n- finish_receive takes seconds (TINY) to minutes (FULL).\n\nNo lock is held across a seam, and Python objects are built only outside gil_scoped_release; the numpy noise is drawn under the GIL first.\n\nNothing was pushed, and nothing was written to /mnt/project-files."
+  },
+  "review": {
+   "worktree": "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-3",
+   "branch": "worktree-wf_be3272b3-748-3",
+   "commit": "1ef677619e192352b48880acf8702c8901a0b60b",
+   "files": [
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-3/native/core/qrss/live.hpp",
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-3/native/core/qrss/live.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-3/native/bindings/module/qrss/live.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-3/native/tests/qrss/test_live.cpp",
+    "/home/user/sstvae/.claude/worktrees/wf_be3272b3-748-3/tests/test_qrss_native_live.py"
+   ],
+   "api": "namespace sstvae::qrss::live. The lane's API is unchanged except finish_config and FinishOptions, where the review moved the budgets.\n\nChanged by the review:\nstruct FinishOptions { double min_heard = FINISH_SEARCH_MIN_HEARD; std::optional<std::int64_t> max_candidates = FINISH_MAX_CANDIDATES; std::optional<double> budget_s = FINISH_BUDGET_S; std::optional<std::int64_t> seed; PrepareSeams seams; };\napi::ReceiveConfig finish_config(std::vector<frame::FrameSpec> frames, std::string estimator = \"joint\");  // sets frames and estimator only; the budgets are no longer set here\nFinishResult finish_receive(std::span<const cf> x, std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, const api::ReceiveConfig& config, std::span<const types::Detection> dets = {}, std::span<const acquire::Hint> hints = {}, const FinishOptions& opt = {});  // max_candidates and budget_s now come from opt, not from config\n\nUnchanged, for the LiveListener (wave 9) and the EM (stage 4):\nstd::int64_t slot_t0(std::int64_t q);\nstd::string utc_iso(double t);\nstd::string utc_iso_int(std::int64_t t);\ndouble frame_seconds(const frame::FrameSpec&);\ndouble frame_seconds(Selection);\nbool in_band(double f_hz, int waveform = config::WAVEFORM_CE);\ndouble centre_of(double f_hz, int waveform);\nint waveform_id(std::string_view);\nstd::int64_t waveform_id(const pyjson::Value&);\nstd::int64_t due_waveform(const pyjson::Value&);\nstd::optional<int> frame_waveform(std::string_view);\nstruct FeSpan;\nusing FeReader = std::function<FeSpan(std::int64_t, std::int64_t)>;\nclass FeRing { explicit FeRing(double span_s = RING_S); std::int64_t n() const; std::optional<std::int64_t> end() const; void write(std::int64_t n0, std::span<const cf>); void clear(std::int64_t a, std::int64_t b); FeSpan read(std::int64_t a, std::int64_t b) const; void read_into(std::int64_t a, std::span<cf>, std::span<std::uint8_t>) const; std::vector<cf> samples() const; std::vector<std::uint8_t> written() const; };  // shared_mutex: one writer, many readers\nErase spans(std::span<const std::uint8_t> mask, double fs, double origin);\nCaptureSpan capture_span(std::int64_t q, double frame_s, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S);\nSlotRead capture_read(const FeRing&, std::int64_t q, Selection, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S);\nSlotRead capture_read(const FeReader&, std::int64_t q, Selection, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S);\nusing NoiseFn = std::function<std::vector<cf>(std::int64_t seed, std::size_t n)>;\nstd::vector<cf> default_noise(std::int64_t seed, std::size_t n);\nstruct PrepareSeams { NoiseFn noise; BlankFn blank; NormaliseFn normalise; };\nSlotCapture capture_prepare(std::span<const cf> x, std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, double frame_s | Selection, std::optional<std::int64_t> seed = std::nullopt, const PrepareSeams& = {});\nSlotCapture slot_capture(const FeRing&, std::int64_t q, Selection, std::optional<std::int64_t> seed = {}, double lead_s = PB_LEAD_S, double tail_s = PB_TAIL_S, const PrepareSeams& = {});\nstd::pair<std::int64_t, std::int64_t> py_slice(std::int64_t n, std::int64_t start, std::int64_t stop);\nFinishGate finish_gate(std::span<const std::uint8_t> ok, std::int64_t origin, double frame_s, bool have_dets, bool have_hints, double min_heard = FINISH_SEARCH_MIN_HEARD);\nFinishBranch finish_branch(double heard, bool have_dets, bool have_hints, double min_heard = FINISH_SEARCH_MIN_HEARD);\nstd::vector<double> known_hz(std::span<const types::Detection> dets, bool joint);\nstd::vector<DialPoint> parse_dial_text(std::string_view bytes);\nclass DialLog { explicit DialLog(std::string path); void refresh(); std::vector<DialPoint> points() const; void set_points(std::vector<DialPoint>); std::vector<DialSpan> spans(double a, double b, const DialGuard& = DIAL_GUARD_S) const; DialEpochs by_dial(double a, double b, const DialGuard& = DIAL_GUARD_S) const; std::optional<std::int64_t> dial_at(double t, const DialGuard& = DIAL_GUARD_S) const; DialSpan span_at(double t, const DialGuard& = DIAL_GUARD_S) const; };  // thread safe: refresh_mu_ plus mu_\nstd::vector<DialSpan> dial_spans(std::span<const DialPoint>, double a, double b, const DialGuard& = DIAL_GUARD_S);\nDialEpochs dial_by_dial(std::span<const DialPoint>, double a, double b, const DialGuard& = DIAL_GUARD_S);\nDialSpan dial_span_at(std::span<const DialPoint>, double t, const DialGuard& = DIAL_GUARD_S);\nbool same_dial(std::optional<std::int64_t>, std::optional<std::int64_t>);\nstd::optional<std::vector<std::pair<std::int64_t, std::int64_t>>> restrict_ranges(std::int64_t n, std::int64_t origin, std::int64_t q, std::span<const std::pair<double, double>> spans);\nstd::vector<std::uint8_t> restrict(std::span<const std::uint8_t> ok, std::int64_t origin, std::int64_t q, std::span<const std::pair<double, double>> spans);\nstruct Tile { ...; pyjson::Value to_json() const; static std::optional<Tile> from_json(const pyjson::Value&); };\nstruct SlotState { ...; Tile* tile(std::string_view id); const Tile* tile(std::string_view id) const; };\nstruct LiveConfig { frame::FrameSpec spec = frame::get(\"full\"); ...; std::vector<frame::FrameSpec> specs() const; std::vector<frame::FrameSpec> selection() const; bool joint() const; };",
+   "tests": [
+    {
+     "cmd": "timeout 600 ninja -C native/build-qrss -j2 sstvae_native test_qrss_core_live",
+     "result": "built clean, rebuilt after the last mutation"
+    },
+    {
+     "cmd": "timeout 200 ctest --test-dir native/build-qrss -R qrss_core_live",
+     "result": "1/1 passed (0.18 s)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_native_live.py",
+     "result": "26 passed, 5 deselected, about 17-18 s; run 3 times, all green"
+    },
+    {
+     "cmd": "pytest -q -m slow tests/test_qrss_native_live.py -k tiny",
+     "result": "3 passed in 12.0 s"
+    },
+    {
+     "cmd": "pytest -q -m slow tests/test_qrss_native_live.py -k short",
+     "result": "2 passed in 14.2 s"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_live.py",
+     "result": "37 passed"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_live_l.py",
+     "result": "17 passed, 3 deselected in 2.0 s (the header lists module 'live' among the 432 substitutions)"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_live_l.py tests/test_qrss_live.py (plain)",
+     "result": "54 passed, 3 deselected in 22.0 s"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_cli.py",
+     "result": "3 passed, 4 deselected in 7.0 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_cli.py (plain)",
+     "result": "3 passed, 4 deselected in 7.2 s"
+    },
+    {
+     "cmd": "pytest -q --native-qrss=rx -m 'not slow' tests/test_qrss_smoke.py",
+     "result": "2 passed in 3.3 s"
+    },
+    {
+     "cmd": "pytest -q -m 'not slow' tests/test_qrss_smoke.py (plain)",
+     "result": "2 passed in 7.1 s"
+    },
+    {
+     "cmd": "python tools/check_layering.py",
+     "result": "layering ok (484 source files checked)"
+    },
+    {
+     "cmd": "python tools/check_includes.py",
+     "result": "includes ok (485 source files checked)"
+    },
+    {
+     "cmd": "fuzz_dial.py SEED N (scratchpad): reference against native DialLog on random files (bad UTF-8, partial lines, big ints, NaN/inf, non-dicts, duplicates)",
+     "result": "agree apart from the documented OverflowError and Unicode-float deviations"
+    },
+    {
+     "cmd": "dial_threads.py (scratchpad): 4 threads call refresh, points and spans while a writer appends 4000 lines with partial ones",
+     "result": "no exception, 4000 points, same as the reference"
+    },
+    {
+     "cmd": "mutate.py: 12 mutants of live.cpp and the binding (budgets, gate threshold, py_slice, noise scale, restrict ceil, the DialLog publish lock, ...)",
+     "result": "All killed after the review's tests. M11/M12 (budgets dropped from finish) and M7 (gate >= became >) survived in pytest before the review; the DialLog publish-lock mutant is killed by the new test_dial_log_threads."
+    }
+   ],
+   "parity": "Bit-exact:\n- FeRing read and write, spans, capture_span and capture_read indices, restrict and restrict_ranges, and DialLog points, spans, by_dial, dial_at and span_at, against the reference on fuzzed inputs.\n- Tile and SlotState JSON round trips, which contain no NaN or Infinity tokens.\n- capture_prepare with the numpy default_rng(q) noise seam: prep.fe, keep, erase and heard equal to the bit.\n- finish_receive's decisions (k1, the heard shares, the branch taken, the budgets passed), including the new exact-threshold cases ok[:2000] and ok[:1999] of 4000.\n- The whole-caller A/B: LiveListener with every live row applied gives the same tiles, state and passes as the reference, and the spies confirm every LIVE_ROW was reached with the typed flags expected.\n\nTolerance (inherited from the receiver's parity, not this lane's):\n- finish_receive's PassResults go through receive_slot. They are compared with the receiver-slot parity harness's tolerances (P.WORST); the slow tier passed for ce-tiny, l-tiny (both modes) and ce-short / l-short.\n\nNot compared:\n- default_noise (xoshiro256** with Box-Muller) against numpy samples. It is by design a different generator with the same distribution; only its distribution and determinism are checked in the ctest.\n- LiveListener's own temp-file-and-replace writes (state.json, tile PNGs, log rotation): they are in the Python LiveListener, which is out of this lane's scope (wave 9), and live.cpp writes no files.",
+   "deviations": [
+    "DialLog.refresh: an infinite dial_hz, or a 't' beyond double range given as a huge int, makes the reference raise OverflowError out of refresh (int(round(inf)) and float(10**400)), which kills the listener's poll. The C++ skips that line as unparseable. This is deliberate and documented in test_dial_log_deviations: a corrupt line must not stop the dial log.",
+    "pynum::py_float (the shared helper DialLog uses for 't' and 'dial_hz' strings) does not accept Unicode whitespace such as U+00A0 or non-ASCII decimal digits such as Arabic-Indic, which Python's float() normalises. So float('12\u00a0') parses in Python and is skipped in C++. The helper is shared and was not edited; the case is exotic for an app-written file.",
+    "default_noise is not numpy's PCG64 stream: same circular Gaussian distribution, different samples. Captures are bit-identical only through the NoiseFn seam, which the parity tests use.",
+    "DialLog's change signature is (mtime ns, size), as in the reference. A same-size rewrite within the filesystem's mtime granularity is missed by both, faithfully."
+   ],
+   "shared_changes_needed": [
+    "tools/gen_qrss_rx_reference.py: add sstvae/qrss/live.py to PINNED (or give stage 3 a pin of its own), so that a change to live.py's constants or semantics is flagged as stale the way the receiver modules are. Today nothing ties the C++ live constants and ctest pins to the reference file's hash.",
+    "native/core/util pynum::py_float: accept Unicode whitespace (str.strip's set) and Unicode decimal digits (unicodedata.decimal) to match Python float() on str. This is low priority and affects only DialLog lines written by something other than the app.",
+    "native/tests/qrss/test_live.cpp pins (the dial-text and Tile JSON expectations) are hand-printed from Python, not generated by a script. A generator, like gen_golden_vectors.py, would make regenerating them reviewable."
+   ],
+   "insights": [
+    {
+     "kind": "python-bug",
+     "what": "DialLog.refresh raises OverflowError for a line with dial_hz Infinity or 1e999, or for a 't' that is a huge JSON integer. The except tuple is ValueError, KeyError, TypeError and IndexError, so one corrupt line in the app-written dial file aborts the listener's refresh on every poll until the file is rotated. Add OverflowError to the except.",
+     "evidence": "sstvae/qrss/live.py:481-483 (int(round(float(d['dial_hz']))), float(d['t'])); reproduced by fuzz_dial.py"
+    },
+    {
+     "kind": "python-bug",
+     "what": "Tile.mean_w_db (and the other float fields) are not guarded against NaN. json.dumps then writes a NaN token into state.json, which QJsonDocument in the app rejects whole, losing every tile. The C++ to_json never emits NaN or Infinity tokens.",
+     "evidence": "inferred from code: live.py Tile.to_json/_save_state, json.dumps default allow_nan=True"
+    },
+    {
+     "kind": "python-bug",
+     "what": "_load_previous catches only OSError and ValueError. A state.json that parses but has the wrong structure (a list at the top level, a tile missing a key) raises TypeError or KeyError and crashes the listener at start-up instead of starting fresh.",
+     "evidence": "inferred from code: sstvae/qrss/live.py _load_previous"
+    },
+    {
+     "kind": "python-bug",
+     "what": "DialLog.read_text(errors='replace') uses the locale encoding, which is cp1252 on Windows rather than UTF-8. So a non-ASCII byte in the dial file decodes differently per platform. The C++ always decodes UTF-8 with replace, which is what the app writes.",
+     "evidence": "sstvae/qrss/live.py:474"
+    },
+    {
+     "kind": "python-bug",
+     "what": "finish_receive takes ok[origin:origin+...].mean() even when the slice is empty, which gives NaN plus a RuntimeWarning, and proceeds; NaN then compares false against min_heard everywhere. This is harmless today because the k1 <= origin gate runs first, but it is fragile. The C++ FinishGate reproduces the NaN on purpose.",
+     "evidence": "inferred from code: live.py finish_receive heard computation; FinishGate comment in native/core/qrss/live.hpp:315-319"
+    },
+    {
+     "kind": "python-bug",
+     "what": "FeRing.write with n0 behind the ring's window (older than end - n) writes into slots that now belong to newer samples and marks them written, which corrupts recent audio. The C++ ports this faithfully for parity. A guard that drops samples older than end - n would fix both.",
+     "evidence": "reproduced in the FeRing semantics fuzz; live.py FeRing.write"
+    },
+    {
+     "kind": "performance",
+     "what": "FeRing is much faster in C++. A write of 8.5M samples (one ring) takes 7.8 ms against Python's 144 ms (18x); a read of a FULL slot takes 22.8 ms against 95.5 ms (4.2x). finish_receive as a whole is 1.9-3.3x faster: ce-tiny 0.89 s against 1.72 s; ce-short 1.79 s against 4.97 s; l-short 1.68 s against 5.48 s. The receive inside dominates, so the speedup is the receiver's.",
+     "evidence": "timed with QRSS_PARITY_WORST=1 and scratchpad microbenchmarks, 4 shared CPUs"
+    },
+    {
+     "kind": "process",
+     "what": "The lane put finish_receive's candidate and time budgets on the caller-supplied ReceiveConfig (set by finish_config). The reference always applies FINISH_MAX_CANDIDATES and FINISH_BUDGET_S whatever the listener's config says, so a caller passing its own ReceiveConfig (the obvious use from wave 9) would have run an unbounded search. The parity tests built their config with finish_config, so the gap was invisible. Mutants that dropped the budgets survived pytest until a test monkeypatched live.FINISH_MAX_CANDIDATES to 0 and checked the typed path honours it. Lesson: parameters the reference takes from module constants per call belong in the call's options, not in a config the caller owns.",
+     "evidence": "native/core/qrss/live.cpp Search/Known branches; tests/test_qrss_native_live.py::test_finish_receive_typed_budgets"
+    },
+    {
+     "kind": "process",
+     "what": "A thread-safety test has to be mutation-checked like any other test. Before this review DialLog's two-mutex design had no concurrent test at all. The new test_dial_log_threads (refresh and spans from 3 threads while the file is appended with partial lines) fails when the lock publishing refresh's points is removed.",
+     "evidence": "mutate.py on native/core/qrss/live.cpp DialLog::refresh publish lock: pytest FAILED (mutant killed)"
+    },
+    {
+     "kind": "process",
+     "what": "Exact-threshold cases need explicit tests. finish_receive's min_heard gate is >= in the reference, and a >= to > mutant survived the lane's parity cases because none sat exactly on FINISH_SEARCH_MIN_HEARD. Cases at 2000/4000 and 1999/4000 now pin the boundary.",
+     "evidence": "tests/test_qrss_native_live.py _finish_cases k=300,301"
+    }
+   ],
+   "notes": "Review of wave 8, stage 3, lane live-pieces (lane commit d666330, base c0c830f). The review made two commits on the branch:\n- 7b35fd8: finish_receive's budgets moved into FinishOptions; budget and threshold tests.\n- 1ef6776: DialLog thread test.\n\nChecked and found sound:\n- Rows apply: the --native-qrss=rx header lists module 'live', and the spies in the whole-caller A/B reach every LIVE_ROW with the expected typed flags.\n- GIL release: the released blocks touch no Python objects.\n- FeRing: its shared_mutex readers never see a torn write (thread test, plus TSan-style reasoning).\n- Tile and SlotState JSON round-trip both ways, Python to C++ and C++ to Python.\n- Windows/MSVC portability: the mingw-w64 compile of live.cpp is clean, file paths go through util::fs_path and open_file, and no <windows.h> is used.\n\nTemp-file-and-replace crash safety is not in this lane: the writes (state.json, tile PNGs, log rotation) live in Python's LiveListener (live.py:786, 830-832, 1545-1547), which is wave 9. When ported they must write the temp file in the same directory, flush, and replace atomically; on Windows that is MoveFileEx with MOVEFILE_REPLACE_EXISTING, since std::filesystem::rename fails over an open target there.\n\nNothing in sstvae/, the qrss_*.py scripts, rx_types.hpp or tests/qrss_native/_rx.py was edited. Nothing was pushed. Scratchpad probes are in /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/w8live_review/: fuzz_dial.py, dial_threads.py and mutate.py.",
+   "findings": [
+    {
+     "what": "finish_receive took max_candidates and budget_s from the caller's ReceiveConfig (set only by finish_config), where the reference always passes live.FINISH_MAX_CANDIDATES and FINISH_BUDGET_S. A wave-9 caller supplying its own config would have run an unbounded whole-slot search; the typed binding also read them into the config. Fixed: the budgets are now FinishOptions fields defaulting to the constants, applied in both the Search and Known branches, the binding sets them from live.FINISH_* on each call, and finish_config sets only frames and estimator.",
+     "fixed": true
+    },
+    {
+     "what": "Test gap: no parity case sat exactly on the min_heard gate, so a >= to > mutant in finish_gate/finish_branch survived pytest. Fixed: exact-threshold cases (ok[:2000] and ok[:1999] of 4000, TINY, no dets or hints) were added to _finish_cases.",
+     "fixed": true
+    },
+    {
+     "what": "Test gap: nothing checked that the typed finish path honours the reference's budgets (mutants dropping them survived). Fixed: test_finish_receive_typed_budgets monkeypatches FINISH_MAX_CANDIDATES to 0 and requires ([], 1.0) from both, with the native typed path never reaching the Python receiver.",
+     "fixed": true
+    },
+    {
+     "what": "Test gap: DialLog's concurrency (refresh_mu_ plus mu_, with refresh called with the GIL released) had no thread test. Fixed: test_dial_log_threads, mutation-checked by removing the publish lock.",
+     "fixed": true
+    },
+    {
+     "what": "pynum::py_float does not handle Unicode whitespace or non-ASCII decimal digits as Python's float() does, so such dial lines parse in Python and are skipped in C++. It is a shared helper and was not edited (listed in shared_changes_needed); the case is exotic for an app-written file.",
+     "fixed": false
+    },
+    {
+     "what": "FeRing.write behind the ring's window corrupts newer samples and marks them written. This is a Python reference bug, ported faithfully for parity and reported in insights.",
+     "fixed": false
+    },
+    {
+     "what": "DialLog.refresh in Python raises OverflowError on an infinite or huge value, which the C++ skips as an unparseable line. This deviation is documented and tested (test_dial_log_deviations); it is a Python bug, not a port bug.",
+     "fixed": false
+    }
+   ]
+  }
+ }
+}

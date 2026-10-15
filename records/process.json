@@ -1,0 +1,1217 @@
+[
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "The plan sized the whole port at about 23k lines of production C++ plus 7k of tests and bindings, with the receiver about 60% of the work. Stage 0 as built was far larger than its line estimate, because it carries the generated frozen tables.",
+  "evidence": "port_plan.md: stage 0 1.3k C++ + 0.9k Python; stage 1 4.0k + 1.5k; stage 2 12.3k (2a 5.9k, 2b 2.9k, 2c 3.5k); stage 3 5.0k + 1.4k; plan also names 4 frozen tables of ~27k doubles. Built: stage 0 commit 3843897, 24 files, +7521 lines.",
+  "status": "n/a",
+  "where": "port_plan.md",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "Stage 4 (no Python in the app) was deferred in the draft plan and became required after the owner's ruling.",
+  "evidence": "Draft: 'deferred (about 1.3k)'; after Jeff's 2026-10-13 05:00Z 'no Python in release builds' it became required (~2k). The app swap to the C++ transmitter landed as 2b6d29b at 06:31Z.",
+  "status": "n/a",
+  "where": "port_plan.md",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "The plan named churn in the Python receiver as the main schedule risk.",
+  "evidence": "port_plan.md: 8 receiver commits on 2026-10-11/10-12 cited as the churn risk.",
+  "status": "n/a",
+  "where": "port_plan.md",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "Default 9 (audio file format) changed between the draft and the approved plan.",
+  "evidence": "Draft: write raw .i16 and read FLAC via dr_flac. Approved plan: its own FLAC encoder.",
+  "status": "n/a",
+  "where": "port_plan.md",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "The plan's predicted parity tolerances were far looser than what was achieved.",
+  "evidence": "Predicted: L clipped audio ~1e-9, CE audio 1e-12. Achieved: L clip/frame_baseband max abs 7.9e-16 to 1.33e-15; CE bit-exact on the reference platform (falls back to 1e-12 elsewhere).",
+  "status": "n/a",
+  "where": "port_plan.md; native/core/qrss/ce, lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "The plan flagged pybind11 as missing and the venv's onnxruntime 1.31 as differing from the 1.28 pin. The ORT difference turned out to change only error texts.",
+  "evidence": "Stage-1 codec_cli: the encoder stayed bit-identical across ORT 1.28 and 1.31; only error texts differed.",
+  "status": "n/a",
+  "where": "port_plan.md; native/core/qrss/codec",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "The plan put shared helpers in util/ and io/, but the waves put them under core/qrss/.",
+  "evidence": "Plan: util/half, io/npz, util/numpy_sum, dsp/upfirdn. Built: core/qrss half, npz, npsum, filters.",
+  "status": "n/a",
+  "where": "native/core/qrss/",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "process",
+  "what": "The plan's task 15 specified new refusals for invalid combinations. Wave 2 implemented check_pilot through ce::check_carrier.",
+  "evidence": "Plan task 15: refuse L+OOK, an OOK .bin on L, and check_pilot below 322.07 Hz. Follow-up 0f1f9e3: 'check_pilot uses ce::check_carrier'.",
+  "status": "n/a",
+  "where": "port_plan.md; native/core/qrss/lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "process",
+  "what": "Stage 1 took about 9 hours of wall time from stage 0, a container restart included.",
+  "evidence": "Stage 0 at 2026-10-12 21:17Z (3843897) to stage 1 follow-ups 7268bc6 at 2026-10-13 06:16Z.",
+  "status": "n/a",
+  "where": "workflow journals",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3",
+  "kind": "process",
+  "what": "A container restart interrupted wave 3. Its two lanes were resumed from WIP commits in a rerun workflow.",
+  "evidence": "wf_8af3e0e3-a7f journal has only 2 'started' lines and no results; WIP commits 584110a and 60b0c73 at 02:55Z; rerun wf_5c80865c-1d3 at 06:02Z.",
+  "status": "n/a",
+  "where": "wf_8af3e0e3-a7f, wf_5c80865c-1d3",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "process",
+  "what": "The Write tool decodes \\uXXXX escapes into literal characters, which broke C++ raw-string literals written by agents.",
+  "evidence": "Reported by a wave porter (journal notes).",
+  "status": "n/a",
+  "where": "agent tooling",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "process",
+  "what": "Agents share one scratchpad, and one agent overwrote another's probe script.",
+  "evidence": "Journal notes from wave agents.",
+  "status": "n/a",
+  "where": "scratchpad",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "process",
+  "what": "A worktree started from the wrong base and had to be reset.",
+  "evidence": "It started at e303a0e, which does not descend from f95c14f.",
+  "status": "fixed",
+  "where": "wave 2 worktree",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "process",
+  "what": "The pybind pattern of a function-local static py::object, found first in filters, also existed in the frame binding.",
+  "evidence": "Destroyed after interpreter finalization, with a GIL deadlock risk; frame binding fixed in follow-up 0f1f9e3.",
+  "status": "fixed",
+  "where": "native/core/qrss frame binding",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "process",
+  "what": "Python startup costs about 1 s per CLI run, so the CLI parity tests run on 4 threads.",
+  "evidence": "codec_cli/integrate notes; cli+codec parity 121-134 s.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_* (cli)",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "process",
+  "what": "check_includes caught missing standard headers in the new C++.",
+  "evidence": "std::abs, std::min and <utility> misses caught.",
+  "status": "fixed",
+  "where": "tools/check_includes.py",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "process",
+  "what": "Reviewers mutation-checked their regression tests against the pre-fix code.",
+  "evidence": "codec_cli review: 12 of 148 checks failed against the old code.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_* (codec_cli)",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 1",
+  "kind": "process",
+  "what": "The adversarial reviews found nearly all bugs at argument boundaries and in refusal texts, and almost none in arithmetic.",
+  "evidence": "polar/header review: all six fixed findings were argument handling, no arithmetic bug. Similar across frame (13), infra (13) and filters (8).",
+  "status": "n/a",
+  "where": "wave 1 reviews",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "process",
+  "what": "The shared_changes_needed reported by lanes were applied in follow-up commits after each merge.",
+  "evidence": "f95c14f: PRECODER_BLOCK, sequences binding accepting numpy ints, parity skip. 0f1f9e3: picture/beaconfile/ce/lwave constants generated, lwave uses ce helpers, check_pilot uses ce::check_carrier, frame binding static fixed. 7268bc6: math.fma fallback in the ce test, picture.py docstring.",
+  "status": "fixed",
+  "where": "native/core/qrss, tests",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "process",
+  "what": "The pytest substitution header grew steadily as modules were ported.",
+  "evidence": "From 15 substitutions to 160, plus 46 from-import sites, by the end of stage 1.",
+  "status": "n/a",
+  "where": "tests/qrss_native/",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "4",
+  "kind": "process",
+  "what": "Hand-written ctest pins were wrong twice, each caught on the first ctest run. Every other pin was generated from Python by script and passed first time, so pins should never be typed.",
+  "evidence": "np.polyfit([1.0],[1.0],1) assumed [1,1], but numpy's minimum-norm answer is [0.5, 0.5] (test_npstats.cpp 'one point, degree 1'). TINY n_sym assumed 1024, actually 1753 (test_ce_rx.cpp \"sym has shape (3,), expected (1753,)\"). Generator scripts: scratchpad pins.py, fe/pins.py, pins2.py, from infra_testgen splitmix counters.",
+  "status": "n/a",
+  "where": "native/tests/qrss",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "process",
+  "what": "A missing top-level meta key first surfaced as an IndexError from the C++ JSON accessor, which reads like a bug in the port rather than a malformed file. A dedicated pyjson::KeyError, mapped to Python's KeyError and read in Python's key order, makes the first missing key reported ('header') match Python.",
+  "evidence": "native/core/qrss/pyjson.hpp KeyError; tests/test_qrss_native_types.py missing-key tests",
+  "status": "n/a",
+  "where": "native/core/qrss/pyjson",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "process",
+  "what": "The non-slow tier of the named --native-qrss=rx suites barely exercises the receiver. The per-module parity files and smoke/lunits/multipass carry the coverage, while test_qrss_receiver's real coverage is in a slow tier the agents were not allowed to run.",
+  "evidence": "test_qrss_track.py 5 passed / 8 deselected; test_qrss_receiver.py 4 passed / 55 deselected (wave 4 skeleton review); 'test_qrss_receiver.py's non-slow tier is only 4 tests, so most of its coverage of this lane under --native-qrss=rx comes from the slow tier, which was not run' (wave 5 A1/A2 review)",
+  "status": "n/a",
+  "where": "tests/test_qrss_receiver.py, test_qrss_track.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "process",
+  "what": "The required 1/64 Hz noise-mask sweep is too slow for the default tier, so it is marked slow. The default tier sweeps at 1/4 Hz and a ctest pins a digest of the one-hertz masks.",
+  "evidence": "17,922 positions, about 60 s per band in Python; run once with 0 mismatches. The ctest digest (cd464fb6...) covers 282 one-hertz masks over both bands (99,138 flat bins). The frontend review did not rerun the slow sweep.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_frontend.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "process",
+  "what": "The worktree sandbox refused compound shell commands (cd plus a heredoc, $PWD, computed command names). The working pattern was to write scripts to the scratchpad with Write and run python on their absolute path.",
+  "evidence": "several refusals in the frontend lane session; native/tests/qrss/test_*.cpp header comments carry the generating expressions",
+  "status": "n/a",
+  "where": "tooling",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "process",
+  "what": "Several parity tolerances were looser than the plan's bar or than what was measured, and reviewers tightened them. A tolerance helper deserves the same adversarial reading as the code it checks.",
+  "evidence": "Frontend: _fe_close skipped the '<=1e-5 of samples differ' count and exempted parts below 1e-3 of scale; _ch_close/_chan_same added atol 1e-6*max on top of rtol 1e-6 (tightened in commit 42005fa, all still pass). Wave 5 track timing: _carrier_lines was compared to a tolerance though exact, now bitwise. Wave 5 cwid: window tolerance allowed 0.1% of float32 values 1 ulp off against a measured 0, now 1e-4.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_frontend.py, chan.py, track_timing.py, cwid.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "process",
+  "what": "Several parity files ran near or over the ~40 s per-file budget, especially with agents sharing 4 CPUs. Timings were noisy for the same reason.",
+  "evidence": "frontend ~35-40 s of a 46.5 s three-file run; track 31.9 s; track_timing 42.8 s, trimmed by cutting the paths probe from 24 to 16 trials; acquire_a12 34.6 s; cwid ~35 s and acquire_tbd ~36 s under shared load. 'normalise ... swinging with machine load' (wave 4 frontend).",
+  "status": "open",
+  "where": "tests/test_qrss_native_*.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "process",
+  "what": "Bitwise parity checks over signed zeros and ties, plus return-type checks, caught two bugs that the digests and the --native-qrss suites could not.",
+  "evidence": "std::nth_element in median_filter's generic path returned -0.0 where scipy's NI_Select returns 0.0 (test_qrss_native_ndfilter.py::test_signed_zeros_and_ties); a1_gamma returned a Python float where acquire returns np.float64 (test_qrss_native_acquire_stats.py::test_scalars)",
+  "status": "fixed",
+  "where": "native/core/math/ndfilter, acquire_stats",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4+5",
+  "kind": "process",
+  "what": "Per-function parity on C-contiguous random inputs missed the preamble_p layout bug. Running acquire's real callers with every row monkeypatched and diffing whole results found it on the first run, and wave 5 made this whole-caller A/B mandatory in every parity file.",
+  "evidence": "test_acquire_end_to_end_on_the_cpp first failed at acquire[2].cell_lam (337.535874989212 vs 337.5358749892118) while the 35 existing parity tests passed. The wave 5 script COMMON requires 'WHOLE-CALLER A/B (required)' with that test as the pattern.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_acquire_stats.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "process",
+  "what": "A natural-looking erasure fixture tested nothing: erase_s=((5,15),) on TINY lands entirely in the preamble/CW region, so every output equalled the unerased pass. The fixture moved to (25,35) s, and a test now asserts that each fixture has the property its label names. Guard the guard.",
+  "evidence": "Erased positions 164-495; data starts at 661. tests/qrss_demod_tracks.py; tests/test_qrss_native_demod.py::test_the_tracks_cover_what_they_claim (>100 erased data symbols, header known/unknown, meas mask present).",
+  "status": "fixed",
+  "where": "tests/qrss_demod_tracks.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "process",
+  "what": "The demod review found the numeric core bit-identical on every probe, and all eight real bugs were in the bindings: how and when arguments are read, and refusals. Reviews should probe argument forms and refusals, not only values.",
+  "evidence": "tests/qrss_demod_probes.py and test_probe_* in the five parity files: 151 new tests, all passing only after review commits 7ff77c6 and 8e2c4d1 (266 tests, up from 115)",
+  "status": "n/a",
+  "where": "native/bindings/module/qrss demod/ldemod/ce_rx/lwave_rx",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "A pybind11 binding built a py::float_ inside a py::gil_scoped_release scope, crashing on one path only. Whole-caller tests missed it because the receiver never calls that path; keep the nogil block to the computation and build Python objects after it.",
+  "evidence": "segfault only on _kf_forward store=False (native/bindings/module/qrss/track.cpp kf_forward_py), found by test_kalman, fixed in ff2f7ba by the port agent",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/track.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "Pinning a synthetic end-to-end track() pass in the ctest was cheap and strong. A CE TINY signal over exact-binary-fraction 'noise' reproduces the capture bit for bit in both languages, so q, meas and the decisions are pinned exactly; it also hosts a two-thread reentrancy check.",
+  "evidence": "native/tests/qrss/test_track.cpp test_synthetic_pass (capture digest 134cbc75...)",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_track.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "For a long iterative routine the strongest check is a swap test: assign the C++ versions of the known non-bitwise leaves over the reference's, run the reference, and require bit-for-bit equality. It proves everything downstream is the reference's arithmetic and names each divergence seed; the same idea checked gate V's decision logic.",
+  "evidence": "test_track_is_the_reference_up_to_smooth_and_templates. Swapping _smooth alone still left P 2.0e-5 on the lead-in call, which revealed SIMD exp in sf as a second seed. test_gate_v_composition: bitwise equality in all 8 scenarios.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_track.py, test_qrss_native_track_timing.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "Absolute tolerances on an ill-conditioned output are fixture luck. The original u/P bounds passed their two fixtures by a 12x margin and failed on the first drifting lead-in scenario probed; the conditional bit-for-bit check is what carries the claim.",
+  "evidence": "test_track_on_the_receivers_calls held P at 1e-5; test_track_with_a_lead_in measured 2.0e-5 (bound 1e-4 plus the conditional check)",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_track.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "Spying on the reference made its internal intermediates checkable without copying its code into the test. The spy replaces the module's np with a proxy that records np.full's 2-D -inf grids and _segment_timing's calls.",
+  "evidence": "tests/test_qrss_native_track_timing.py _NpSpy and _ref_fit (FFT grid, x, sig2 and peak inputs compared directly)",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_track_timing.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "A whole-caller A/B that only compares results with the reference proves nothing if the rows silently never reach the C++. Each A/B must count calls into every native entry point, assert that each row target is the binding, and check that callers beyond receive_pass are reached; reviewers added this in every wave 5 lane.",
+  "evidence": "A1/A2: call counters and target-is-binding assertions; preamble_search count >= 20 in the acquire A/B; without them both A/Bs would pass on pure Python. Track timing: receive_pass alone never reached receiver._gate's second verify_track or em.pass_path; the test now asserts verify == 2 + len(gates), verify_track == len(gates) + 2*len(refs), line_path == refine_path == len(refs). A3/cwid: spies prove track_before_detect, _hit_to_detection, frame_map, keying_type, window_soft, window_llr, read and match ran.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_acquire_a12.py, track_timing.py, cwid.py, acquire_tbd.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "The brief's cwid A/B, receive_pass on CE TINY, would have been vacuous. TINY frames have no callsign windows, so cwid is never called; the A/B runs on SHORT and L_SHORT instead and is marked slow.",
+  "evidence": "receiver._cw_result: `if spec.n_win == 0: return None, None`; slow receive_pass A/B ce-short 7.3 s, l-short 6.7 s",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_cwid.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "Claiming bit-exactness on a numpy reduction requires knowing which kernel numpy dispatches to at this version. einsum's optimize path, np.angle and float32 np.log all leave the C library, and two of the three were found only by bit-level probes, not by reading the Python.",
+  "evidence": "scratchpad einprobe.py; test_numpys_float32_log",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "The receive-pass A/Bs compared Detection.uid exactly, but uid hashes the float32 z, so a 1e-13 Hz detection shift can flip it. The exact uid comparison was dropped, as cpp-port-plan 4.1 requires.",
+  "evidence": "test_receive_pass_on_the_cpp edit (A1/A2 review); track core: 'A pass_uid's sha8 suffix may differ (it hashes float32 z)'",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_acquire_a12.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "pybind11 without stl.h compiles fine but fails at runtime when a std::vector is passed to py::object.attr(...), such as reshape. Build shapes as py::tuple explicitly.",
+  "evidence": "first parity run: 'Unable to convert call argument' on reshape; fixed with shape_tuple() in both binding files",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss acquire_tbd.cpp, cwid.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "A synthetic OOK callsign stub must key the carrier in the plain units too, not only in key-down units. Without it read_ml on the OOK stub reads garbage while the FSK test passes, which looks like a port bug.",
+  "evidence": "Plain units are 0-4 and 184-191. scratchpad dbg_ook.py; the fixed stub reads K1ABC (gen_pins.py line 125).",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_cwid.cpp pins",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "Peak memory of one call inside a long-lived Python process can be measured without tracemalloc's overhead: write '5' to /proc/self/clear_refs to reset VmHWM, then read VmHWM after the call.",
+  "evidence": "scratchpad time_full.py; used for the +202 MB vs +100 MB track_before_detect figures",
+  "status": "n/a",
+  "where": "tooling",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "process",
+  "what": "Building a synthetic FULL capture is the slow part of any FULL-slot test. Cos/sin of exactly reduced turns plus a power-of-two FFT halved it, and the FULL-slot test stays slow-tier with the same sizes kept in the fast tier as matrices.",
+  "evidence": "np.exp of a 7 M complex array plus an odd-length ifft took 13.6 s, against about 6 s for the reduced-turns version on this VM. Fast-tier test_full_size_pieces ~2 s; slow test_track_before_detect_full_slot 13 s.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_acquire_tbd.py",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "In a whole-caller A/B, install the spies on the native entry points before rows(q) is built, or rows that bind native functions at build time escape them. Also compute the reference's detections before the rows are applied: Acquisition.detections is replaced at class level, so calling it afterwards silently compares native with native.",
+  "evidence": "tests/test_qrss_native_acquire.py: test_acquire_whole_caller precomputes 'want' before _every_row",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_acquire.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "The isolated-worktree Bash guard refuses chains such as 'git add && git commit && pytest' and 'mv; pytest; mv; git status'. Run each git command on its own.",
+  "evidence": "Two refusals in the acquire-arbitration session",
+  "status": "n/a",
+  "where": "workflow tooling",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "A counting spy over a class row (_Model) must subclass it. A plain function wrapper breaks isinstance and attribute access, so it would silently test a different object than the receiver uses.",
+  "evidence": "tests/test_qrss_native_ltrack.py _counted",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_ltrack.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "The l-tiny lead-in pass, marked slow, runs in 1.7 s and is the only configuration that reaches _lead_supported_l, so it moved to the fast tier. A slow-only mark would have left that row unexercised in the default run.",
+  "evidence": "pytest --durations: test_lead_in_pass 1.70 s; fast tier 25.1 s total",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_ltrack.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "Probing numpy's edge semantics turned up 0-d results that must be numpy scalars, not 0-d arrays (pilot_filter, _pilot_gain, data_mix at a scalar index), and row refusals with their own messages instead of numpy's. The port agent found and fixed four such row bugs itself (shaped_result helper). Only a test comparing type(), not just dtype and shape, catches the first kind.",
+  "evidence": "('_pilot_gain', '3.5', 0.0) array(0.656) vs np.float64(0.656); port:ltrack-core findings 0-3 (fixed)",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/ltrack.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "The receivers' fixtures never blank a symbol (keep's mean is 1.0), so psi never fell below PSI_MIN. The erase branches of _Model.streams and the pilot measurement, and _hold_ends with interior infinite R, were untested until the ltrack review's blanked fading probe.",
+  "evidence": "test_probe_blanked_fading_pass: Impulses at 40 dB, 1/s, 3 crashes/min, moderate fade, l-tiny -6 dB, seed 2; asserts psi and psi_pl are under PSI_MIN",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_ltrack.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "report_l on a withheld track returns z_ref = NaN in both implementations, so a plain dataclass == on TrackReport fails even when the two agree. Compare NaN-aware.",
+  "evidence": "The first run of test_probe_track_l_from_threads failed only on z_ref nan != nan",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_ltrack.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "Parity tests skip under --native-qrss=rx, because they need the reference unsubstituted. With the flag, '-k probe' reports '8 skipped', which reads like success at a glance. Run them without the flag.",
+  "evidence": "pytest --native-qrss=rx tests/test_qrss_native_ltrack.py -k probe: 8 skipped; acquire parity file 15 skipped",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_*.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "A whole-caller A/B can only show that a row is reached and correct when that row's caller stays Python. With every row installed, the C++ verify_l never calls the Python-visible fit_timing_l or resid_ratio. CONFIGS that keep verify_l, then verify_track_l, then fit_timing_l in Python each caught a mutated row.",
+  "evidence": "Pytest-plugin mutation check: 4 mutants (fit_timing_l, _segment_timing_l, _lag_phase shifted, resid_ratio scaled), each caught in exactly the config that keeps its caller",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_ltrack_timing.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "Building the from-import site list from sys.modules by object identity found cwid.rx_index and ltrack's PathFn and freq_path_spline. The hand-written list in the track_timing test had missed them.",
+  "evidence": "Sites dump: ltrack 38 names including PathFn and freq_path_spline; cwid rx_index",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_ltrack_timing.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "process",
+  "what": "Exact orchestration parity is cheap with deterministic stubs. When every stage is a stub whose answer depends only on its question, the C++ reaches them as seams, and call logs (with argument types) and results compare exactly. That gives fast-tier coverage of branches that real captures reach only in slow runs.",
+  "evidence": "test_acquire_orchestration_stubbed: 240 seeds in about 2.3 s, against about 1-5 s per real acquisition; at least 10 offset triples, 300+ preamble hits and 100+ hinted lines",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_acquire.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b-run1, 6b",
+  "kind": "process",
+  "what": "The first wave 6b run was stopped by accident mid-tests. Its WIP commits survived in the worktree, and a resumed agent got a RESUME prompt naming them, read the WIP diff and finished the work. The notes count this as the third time 'commit early' paid off. Wave 6b then merged with no conflicts.",
+  "evidence": "wf_6a5030c8-827 agent ends '[Request interrupted by user]'; qrss-cpp-wave6b.js RESUME1 (worktree-wf_6a5030c8-827-1, HEAD cb7a31d, two WIP commits 345e006 and cb7a31d on 40c3910); w6b_insights_entries.py section 5",
+  "status": "n/a",
+  "where": "workflow",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "The strong swap test runs every receiver function as the reference's, glue included, over the native primitives, and is bit-exact. That pins every remaining difference to a primitive measured in its own parity file. The weak form (only receive_pass as the reference) also passes bit for bit.",
+  "evidence": "tests/test_qrss_native_receiver.py test_receive_pass_composition 'all/prep' variants, on tiny-6, drift, short-6, l-tiny-6, l-ppm+100 and l-short-6 (the review added v1 SHORT and heavy erase)",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_receiver.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "The receiver parity file's fast tier first ran 93-107 s, because each SHORT reference receive_pass is 4 s of Python. Moving the pure-reference SHORT passes to slow, caching captures and native passes separately, and shrinking the options matrix brought it to about 43 s. SHORT bit-exactness stays in the fast tier through the cheaper composition test.",
+  "evidence": "51 passed in 107 s, then 42 passed in 43 s",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_receiver.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "A whole-caller test's scenario assumption was wrong, not the port: a CE Neighbour's header is drawn at random and never decodes, even at 0 dB, though its callsign reads. The joint SHORT test now asserts the L header and the neighbour's callsign.",
+  "evidence": "receive_slot on _mixed('l-short', snr) for snr -6, -3 and 0: CE header None, cw 'N7NBR' each time",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_receiver.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "Running a scratch script with 'uv run python' in a worktree that has no .venv silently creates a new 4-package .venv there (no pytest), which then fails on import. Use the main checkout's .venv/bin/python with SSTVAE_NATIVE_MODULE_DIR pointing at the worktree's build.",
+  "evidence": "First L timing run: ModuleNotFoundError: pytest after 'Creating virtual environment at: .venv'",
+  "status": "n/a",
+  "where": "workflow tooling",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "test_qrss_receiver.py has only 4 non-slow tests (55 slow), and the QRSS acceptance file had all 18 tests slow, so '--native-qrss=rx -m not slow' barely reaches the native receiver end to end. The parity files' fast tiers and chosen slow node ids are what actually cover it.",
+  "evidence": "'4 passed, 55 deselected'; 'test_qrss_acceptance.py: 18 deselected'",
+  "status": "open",
+  "where": "tests/test_qrss_receiver.py, test_qrss_acceptance.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "The typed/Python-mode switch must identify rows by where they are defined (module plus rows.<locals>.name), never by the __qrss_native__ mark. Spies copy that mark, so trusting it would skip the spy and break the whole-caller reach assertions.",
+  "evidence": "tests/qrss_native/receiver_slot.py _defined_in/_typed",
+  "status": "n/a",
+  "where": "tests/qrss_native/receiver_slot.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "Constants exported as rows are a hazard for any harness that wraps every row in a callable spy: live._plausible reads receiver.GHOST_HZ, so a wrapped constant would turn a float into a function. Fixed in the shared _counted at the 6b merge.",
+  "evidence": "2671a6b: tests/test_qrss_native_receiver.py _counted 'if key[0] != RECEIVER or not callable(fn)'",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_receiver.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "CLAUDE.md said a SHORT pass is 10-15 s, which was stale at wave 6b: Python receive_slot on SHORT CE took 4.0 s, joint 7.3 s, and 1.6 s in C++.",
+  "evidence": "Measured 4.04 s / 7.29 s (receiver-slot port). CLAUDE.md now reads '10-15 s each at the time'.",
+  "status": "n/a",
+  "where": "CLAUDE.md",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "The receiver_slot parity file's fast tier ran 83-115 s. Wave 7 brought it to 33 s by keeping one typed CE, L and joint scenario, a Python-mode run with spies, the typed-stays-typed assertions and the whole-caller test with every _SLOT_ROWS reached (10.6 s), and moving the 9 other scenarios, dets_given, ce_resid_ratio, finish_receive (12 s), scenarios_reach_the_rules and threads to slow.",
+  "evidence": "Porter 25 passed in 83 s; reviewer 30 passed in 103.8-109.5 s; wave 7 --durations: before 30 passed in 104.00 s, after 16 passed in 32.61 s",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_receiver_slot.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "The author's WAV parity test passed every case while the reader departed from scipy on many file shapes, because it only tried well-formed files from one writer. A grammar fuzz of chunk orders, lying sizes and truncations, plus a direct _read_wav window compared bitwise with warnings, is what reached them. Pattern noted for the port: the arithmetic is clean, and edges and I/O are where the bugs are.",
+  "evidence": "f6a9124 wavread.cpp:72, :94, :86-87, :108/:124, :66; test_wav_scipy_fuzz now passes 3000/3000",
+  "status": "fixed",
+  "where": "native/core/qrss/wavread.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "Each finished subcommand broke test_dispatch, which pinned that subcommand as not built. 2671a6b repointed the pin at 'listen'; wave 7 derived the not-built set from the binary's --help and the qrss_*.py scripts.",
+  "evidence": "tests/test_qrss_native_cli.py:335-336 failed once receive registered; wave 7 paths item 4",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_cli.py test_dispatch",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "The CLI's codec-only sources need a CMake decision: the glob covers apps/sstvae_qrss/*.cpp and filters only encode.cpp. --image was verified with a temporary, reverted CMake hook and wired in at the merge. A wave that adds codec-dependent CLI code should name CMakeLists.txt as editable.",
+  "evidence": "native/CMakeLists.txt sstvae_qrss_cli block (_qrss_cli_codec_only); 2671a6b adds 3 lines",
+  "status": "fixed",
+  "where": "native/CMakeLists.txt",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "Running the side-by-side CLI cases in a 4-way thread pool keeps the fast tier at 32-39 s while still running 2 Python SHORT receives and 24 Python refusal runs. The L, noise and old-rules cases went to a 28 s slow test, and FULL --image is two slow tests (44-48 s each).",
+  "evidence": "pytest --durations on tests/test_qrss_native_cli_receive.py",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_cli_receive.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "zipfile.ZipFile.writestr stamps the current local time, whereas ZipFile.open(name, 'w') (what np.savez uses) stamps 1980-01-01. A hand-built archive in a pin generator therefore made the committed pins nondeterministic until switched.",
+  "evidence": "Two runs of gen_simfile_pins.py differed at simfile_pins.hpp:1325 (efbc4d5d vs b8bb4d5d); fixed by z.open(k, 'w', force_zip64=True)",
+  "status": "fixed",
+  "where": "native/tests/qrss/gen_simfile_pins.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "process",
+  "what": "The decimal-comma locale test is layered redundantly and cannot detect a single regression: main.cpp resets LC_NUMERIC after QCoreApplication adopts the environment, and frame::py_format independently maps any locale decimal point to '.'. In a build without the fetcher it holds by construction. A py_format locale ctest was suggested.",
+  "evidence": "A mutant main.cpp without the reset passed pytest -k locale; a Qt 6.4.2 probe printed 'after LC_NUMERIC: de_DE.UTF-8 ... 1,50'",
+  "status": "open",
+  "where": "tests/test_qrss_native_cli_receive.py locale test; native/core/qrss/frame.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Wave 7 merged with no conflicts, and stage 2 is done. --native-qrss=rx fast tier green on every QRSS suite, the reverse chain (Python transmits, C++ receives) tested, A-7 rechecked with no constant moving, and statistical acceptance against 13 committed references with hash pins on 30+ sources.",
+  "evidence": "w7_insights_entries.py section 5; pushed c0c830f",
+  "status": "n/a",
+  "where": "stage 2",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Reviews kept finding tests that could not fail: the cw.agrees JSON test, a runners-up test that counted candidates but not which timings were tracked, and a CRLF test that re-implemented the normalisation it claimed to cover. Mutation-checking each new test is the habit that caught all three.",
+  "evidence": "review:reference-fixes findings 0-1; review:acceptance finding 1",
+  "status": "fixed",
+  "where": "tests",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "A slow test run by node id without -m slow is silently deselected ('1 deselected', exit 0 through a pipe), because pyproject's addopts deselects slow. Always pass -m slow with the node id.",
+  "evidence": "First run of test_noise_slots_on_the_cpp[tiny] printed only '1 deselected in 0.09s'",
+  "status": "n/a",
+  "where": "pytest configuration",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Two hazards in background work. A waiter 'until ! pgrep -f \"ninja -C ... sstvae_native\"' never exits, because pgrep -f matches the waiter's own command line; wait on a pid or a marker file. And the scratchpad is shared between concurrent agents: another agent's build log overwrote this one, so keep a per-task subdirectory.",
+  "evidence": "Task b6g7nop2y still running long after ninja finished; build1.log overwritten",
+  "status": "n/a",
+  "where": "workflow tooling",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "The 60 SHORT noise slots did not fit one 3-minute node id and were split into short-1 and short-2. Half of each slot's cost is _listen re-running acquisition in Python to count A2/A3 hits, since the typed C++ receive_slot does not expose its Acquisition. A binding that returned it would halve the cost; not done.",
+  "evidence": "First [short] run timed out at 200 s; halves 110-133 s; each slot about 2.8 s C++ plus 5-9 s on the reference",
+  "status": "open",
+  "where": "rx_api receive_slot binding; tests/test_qrss_native_calibration.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Moving a refusal earlier in a script breaks every parity test that reached a later refusal through that script. Grep for every test reaching the old refusal before calling the change done.",
+  "evidence": "tests/test_qrss_native_api.py, not on the task's list, failed 4 cases (q=-1) after parse_slot started refusing pre-1970; fixed in 4277897",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_api.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Timings taken while other agents share the 4 CPUs were off by up to 4x. Only pinned, repeated runs (OMP/BLAS threads 1, first run discarded) gave usable before/after numbers.",
+  "evidence": "ab_before.log 3.15 s vs bench_acq.py 0.838-1.01 s for the same CE SHORT acquire",
+  "status": "n/a",
+  "where": "measurement method",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "The codec tree's first build (160 steps, -j2) took 9.5 min, just under the 600 s cap. A later lane touching core headers is safer reusing it incrementally than reconfiguring.",
+  "evidence": "time ninja -C native/build-qrss-codec sstvae-qrss sstvae_native: real 9m27s",
+  "status": "n/a",
+  "where": "native/build-qrss-codec",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Fast-tier wall times are now a constraint: test_qrss_native_cli.py has to be split to stay under 200 s, and the parity files together run about 12 minutes of fast tier on 4 CPUs, so they are run in groups. One merge-verification group timed out and was rerun as two.",
+  "evidence": "CLI fast 40.9 s (transmit cases) + 115.5 s (rest); paths 37.7 s; receiver_slot 28.1 s; cli_receive 39.9 s; ctest qrss_core 56 tests 60.7 s with a build beside it, 33.8 s idle. w6_pE.log ends 'exit 124' at 93%; split as w6_pE1.log (308 passed, 122 skipped, 153.61 s) and w6_pE2.log (1502 passed, 201.73 s).",
+  "status": "n/a",
+  "where": "test tiers",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Hashing pinned sources raw would fail the staleness pin on every Windows checkout, because .gitattributes has no eol rule for *.py. The hashes normalise CRLF to LF. The review also found that repo paths compared as strings must be built '/'-separated.",
+  "evidence": ".gitattributes (no *.py rule); tools/gen_qrss_rx_reference.py source_hashes(); review:acceptance findings 0-1",
+  "status": "fixed",
+  "where": "tools/gen_qrss_rx_reference.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "A hand-written pin list goes stale without anyone noticing. A static AST import closure from receiver.py, channel.py and render.py found four modules the hand list had missed. The review then found the closure could not see importlib.import_module (channel.py reaches ce and frontend that way). test_pins_cover_the_imports now fails on any new import that is neither pinned nor excused.",
+  "evidence": "Missed modules: picture, beaconfile, sstvae/modem/framing, golay; sstvae/qrss/channel.py:220, :352",
+  "status": "fixed",
+  "where": "tools/gen_qrss_rx_reference.py, tests/test_qrss_native_acceptance.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "QRSS_OLD_EDGE_NOISE and QRSS_OLD_GATING are environment variables the Python rules read; references written with one set would silently encode the old rules. The generator clears both, and the C++ API takes them only as arguments. The tool also verifies each simulated neighbour's latents bit for bit against channel._neighbour_symbols before trusting them as truth.",
+  "evidence": "tools/gen_qrss_rx_reference.py _clean_rules_env and _neighbour_truth; native/core/qrss/rx_api.hpp",
+  "status": "n/a",
+  "where": "tools/gen_qrss_rx_reference.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "Mutation testing found two equivalent mutants, which shows where a test cannot reach rather than where it is weak: the 3-byte lead mask 0x0F vs 0x1F (bit 4 of E0..EF is zero), and with_name's fs_decode (a path with no name is always '.', '/' or '//').",
+  "evidence": "test_qrss_core_paths under six mutants: four caught by family digests, two survive by construction",
+  "status": "n/a",
+  "where": "native/core/qrss/pypath.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "A Windows-only branch of a byte decoder can be checked on Linux by compiling a copy with the #ifdef forced on and comparing against Python-generated pins. With no wine available, this was the only execution of the surrogatepass arithmetic before a Windows CI job.",
+  "evidence": "Probe: pypath.cpp with '#ifdef _WIN32' changed to '#if 1', 0 mismatches against STDERR_*_WINDOWS and DECODE_*_WINDOWS",
+  "status": "n/a",
+  "where": "native/core/qrss/pypath.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "process",
+  "what": "The shared project folder went read-failing (rclone I/O errors) during the wave 7 merge. That failed test_morse_table_matches_the_spec_sim, which reads the spec's sims, in both verification runs. Logging waves 7-10 insights into port-insights.md was still pending for the same reason.",
+  "evidence": "w6_nA.log / w6_yA.log: '1 failed, 349 passed ... FAILED tests/test_qrss_format.py::test_morse_table_matches_the_spec_sim - OSError'; session task #119 'Log wave 7-10 insights in port-insights.md (shared folder EIO)' pending",
+  "status": "open",
+  "where": "/mnt/project-files, tests/test_qrss_format.py, port-insights.md",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "Lanes ran in parallel git worktrees, with three agents sharing 4 CPUs. The rules: builds at -j2; every command wrapped in timeout 200 (a first build in timeout 600) under a ~3-minute cap; never the whole QRSS suite, and never all the parity files at once (over 10 minutes); parity files run a few per command.",
+  "evidence": "The scripts' BUILD AND TEST and HARD RULES sections; CLAUDE.md now says to run the parity files in groups of about ten.",
+  "status": "n/a",
+  "where": "workflow scripts",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "/mnt/project-files returned I/O errors from about 03:00Z on 2026-10-14. Agents read the port plan and earlier insights from scratchpad copies (port_plan.md, w5-w7 insight files, the w8/w9a/w9b result JSON), and test_qrss_format.py::test_morse_table_matches_the_spec_sim, which reads that folder, failed throughout and was ignored.",
+  "evidence": "READ FIRST paragraphs of the wave 9a, 9b and follow-up scripts.",
+  "status": "n/a",
+  "where": "environment",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "Each lane tested against only its own rows, so cross-lane problems surfaced at the integration. The two lanes' rows did not apply together until the live rows accepted passband.py's native slot_t0 as typed. The whole-caller listener A/B compared two error texts until its fake store's associate was stubbed.",
+  "evidence": "Commit 136c208 message. The passband lane also noted that the combined --native-qrss=rx run had to be repeated after the merge.",
+  "status": "fixed",
+  "where": "tests/qrss_native rows, test_qrss_native_live.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "A shared generator edited by one lane is a merge conflict point: the store lane appended store and associate to tools/gen_qrss_rx_config.py's MODULES and regenerated rx_config.hpp, which collides with any other lane appending a module.",
+  "evidence": "w8 store build shared_changes_needed [2].",
+  "status": "n/a",
+  "where": "tools/gen_qrss_rx_config.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "A random-sequence parity test that draws rng inside a per-store loop gives each store different data, and the failures looked like implementation disagreements. Hoisting the draws fixed it. Mutation runs confirmed the whole-caller A/B notices a wrong row rather than passing on spies alone.",
+  "evidence": "Scratchpad mut.py: a mask flip, a 1-sample write shift and an off-by-one slot_t0 were all caught.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_passband.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "Deterministic noise for association pins must be decorrelated across seeds, not just non-repeating. Sawtooth noise (i*13 + seed*7) % 29 made every seed a shifted copy of the others, and the intended rule-1 collision silently became a 'header' attach. A 32-bit integer hash (lowbias32) fixed it.",
+  "evidence": "gen_store_pins.py h32; probe_x0.py measured validate_header_match t=20.09 against t_expected=90.14.",
+  "status": "n/a",
+  "where": "native/tests/qrss/gen_store_pins.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "A tree comparison taken after expire() compares two nearly empty directories and passes vacuously. Snapshots taken before expiry, and four checkpoints in the ctest session, fixed it.",
+  "evidence": "tests/test_qrss_native_store.py '-mid' copytree. Flipping twin's '>=' to '>' now fails 8 checks across both ctests.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_store.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "Trap in the store suite's norm(x, root) helper: root='' makes str.replace('', '<root>') insert '<root>' between every character, so the comparison is silently wrong.",
+  "evidence": "The first draft of test_expire_at_the_cutoff failed this way.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_store.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "C++ argument evaluation order is unspecified. A binding that read spec.keyed_end_pos and spec.t_sym as two arguments of one call raised the AttributeError for the wrong attribute; Python attribute reads must be sequenced into named locals.",
+  "evidence": "native/bindings/module/qrss/live.cpp FrameSeconds::of; found by the duck-typed specs in test_frame_seconds.",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/live.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "process",
+  "what": "Rows that reference native functions directly are captured when rows() runs, so a spy on the binding must be installed before the rows are applied. Also, the parity files skip under --native-qrss by design, so they must run without the flag, and the substituted suites are what check the rows.",
+  "evidence": "tests/qrss_native/live.py rows(); pytest --native-qrss=rx tests/test_qrss_native_live.py reports 24 skipped.",
+  "status": "n/a",
+  "where": "tests/qrss_native",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "A module constant that the reference's tests reassign at run time (live.DIAL_GUARD_S) cannot be seen by a compiled port, so it became a seam. For the same reason, the seams look up the monkeypatched module functions (receiver.*, live.finish_receive) at each call rather than capturing them at construction.",
+  "evidence": "listener.hpp Seams::dial_guard; tests/qrss_native/_listener.py receivers().",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.hpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "The real receivers need a real receiver.Prepared, not the rx_types dict, because Python code reads prep.fe and prep.q as attributes.",
+  "evidence": "The first binding draft failed with \"'dict' object has no attribute 'fe'\", fixed by prep_py.",
+  "status": "fixed",
+  "where": "native/bindings/module/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "The headerless SNR cut (HEADERLESS_MAX_SNR_DB = -6) makes a strong TINY test signal vanish without a trace, so a 0 dB benchmark measured nothing. Any benchmark or test of TINY frames must stay under -6 dB.",
+  "evidence": "The first measure.py run logged 'frame over, 1 pass(es)' with tiles [].",
+  "status": "n/a",
+  "where": "listener benchmarks",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "A random-scenario fuzz of both listeners was the review's most productive probe: 190 seeds were identical, real stores included. It needs real PassResult dataclasses on store seeds, otherwise duck-typed stubs fail only on the Python side and read as false divergences.",
+  "evidence": "FUZZ_N 40/30/120: 190/190 identical. The first runs failed with \"'_Pass' object has no attribute 'save'\".",
+  "status": "n/a",
+  "where": "listener review probes",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "argparse's nargs='?' semantics are subtle in CPython 3.13. Generating 69 command-line pins from CPython and mutation-testing the rule was cheaper than reasoning it out.",
+  "evidence": "native/tests/qrss/gen_argparse_nargs_pins.py; a mutation failed 9 of 403 checks.",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/argparse.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "Side-by-side CLI tests on stores need a plain-tree mode: point the script at a nonexistent model dir so it stops at render.load exactly where the codec-less subcommand refuses, then compare stdout exactly. Copy the store per side (not a symlink) and compare the trees afterwards, since Store() creates directories.",
+  "evidence": "tests/test_qrss_native_decode.py check().",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_decode.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "Two Win32 C++ traps: a seam type named Sleep in the live namespace shadows ::Sleep for unqualified calls, and a nested Options struct with member initializers cannot be a default argument inside its own class.",
+  "evidence": "sources.cpp:322 calls ::Sleep explicitly; StreamOptions and WavOptions are at namespace scope (sources.hpp:151-152).",
+  "status": "n/a",
+  "where": "native/core/qrss/sources.*",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "The sandbox refused shell variables, compound commands, loops over a variable command and time -v. Agents worked around it with scratch Python scripts using literal paths and several files per compiler invocation. pkill -f or ps|grep|kill on a script name kills the agent's own bash command line.",
+  "evidence": "9a sources and 9b leftovers notes; exit 144 seen twice in the 9b leftovers review.",
+  "status": "n/a",
+  "where": "agent sandbox",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "A reference fix in one lane breaks other lanes' parity tests that pinned the old reference behaviour. test_qrss_native_listener.py asserted pytest.raises on the reference's bad state.json and failed after the merge; in 9b, fixing store.due broke a test that expected the 'hints:' line. Pin a deviation as 'the C++ does X', or fix the reference before writing the parity tests.",
+  "evidence": "Listener lane tests/test_qrss_native_listener.py:854, fixed at a12c3b8; 9b leftovers: test_a_later_pass_due_through_the_refresh.",
+  "status": "fixed",
+  "where": "tests/test_qrss_native_listener.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "rx_pins.json hashes every Python source the C++ receiver mirrors, frontend.py and live.py included. Reference fixes to the store or listener halves of those files therefore force 'gen_qrss_rx_reference.py --all' even when no receiver output moved.",
+  "evidence": "0be27ca: a 4-line rx_pins.json diff with every summary byte-identical; regenerated again at a12c3b8 and fb7853e.",
+  "status": "n/a",
+  "where": "tools/gen_qrss_rx_reference.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "Keeping a copy of the old reference in the scratchpad (oldref/) made 'the regression test fails on the old code' a cheap, checked claim rather than an assumption.",
+  "evidence": "18 live cases plus the store/multipass and frontend cases, each failing at 136c208.",
+  "status": "n/a",
+  "where": "reference-fixes lane",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "An item touching a function owned by another lane falls between the two lanes. 'Log once per slot' (item v) was assigned to the reference-fixes lane, but the log call sat in LiveListener._refresh in the listener lane's region, so neither did it; the integration had to.",
+  "evidence": "live.py ~1320 against listener.cpp ~1734; done at a12c3b8.",
+  "status": "fixed",
+  "where": "wave planning",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "process",
+  "what": "A plain MinGW cross-compile cannot catch MSVC's min/max macros, because libstdc++'s mingw os_defines.h predefines NOMINMAX. A faithful probe uses a wrapper windows.h (#include_next, then define min/max unless a renamed NOMINMAX is set).",
+  "evidence": "The probe fails on base d501f75's sources.cpp at std::min( and passes on the fix.",
+  "status": "n/a",
+  "where": "Windows portability checks",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "process",
+  "what": "Round trips through dr_flac and libFLAC cannot show that a stream fits 32-bit prediction, because both decoders switch to 64 bits on their own; that claim needed a strict decoder that measures the prediction sums. The 64-bit fallback was also unreachable through the public encoder, so it is now tested directly through detail::lpc_residual.",
+  "evidence": "The precision-clamp mutation was caught only by the strict check (27 failures). gcov of the fallback: 0 hits before, 646 after; the skip-redo mutation gives 201 failures.",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_flac_lpc.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "process",
+  "what": "The new LPC encoder held up against adversarial content: no decoder rejected or misread any stream.",
+  "evidence": "probe2.py: 7000 adversarial cases, 0 failures through libFLAC 1.4 (MD5) and dr_flac. probe1.py: 24000 cases, 0 failures. ASan+UBSan clean on both C++ FLAC tests.",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "process",
+  "what": "A ctest flake exposed a real ordering bug in the listen API, found by the build lane itself: Session::ended()/wait_ended() turned true before on_ended had returned, so a waiter could miss the callback's effects. Fixed with an ended_done flag; the test makes on_ended sleep 100 ms so the race is deterministic.",
+  "evidence": "listen_api.cpp ended_done; test_a_replay_ends_by_itself failed about 1 time in 5 before the fix. Reverting to shut_done gives 'on_ended once: got 0, want 1'.",
+  "status": "fixed",
+  "where": "native/core/qrss/listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "process",
+  "what": "The listener cannot have CLI-level picture parity at TINY or SHORT, because live._render draws only passes carrying all 50,600 latents (FULL frames, about 30 minutes). Building the codec tree was still worth it, since listen_render.cpp had never been compiled; pointing SSTVAE_ONNXRUNTIME_DIR at the main checkout's runtime configures it in seconds with no download.",
+  "evidence": "live.py:1538; native/build-qrss-codec configured in 1.9 s; sstvae-qrss built in 129 steps.",
+  "status": "n/a",
+  "where": "native/core/qrss/codec/listen_render.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "process",
+  "what": "ThreadSanitizer found no data race in any QRSS code: listener, sources (including the new self-pipe), passband with dirlock, store, live, and the threaded receive_slot, acquire, receiver and track tests. The only TSan failure was a timing assumption in a test: fixed 30 ms pauses that never held a whole pack once packs ran about 6x slower.",
+  "evidence": "qrss_core_passband: 0 packs and 82 refused in 20 s under TSan before the fix; 16.5 s after scaling the pauses to 3x the longest measured pack.",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_passband.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "process",
+  "what": "A ctest that times out under a sanitizer can still be race-checked within a 3-minute command cap: recompile the test source in the scratchpad with a main() that calls a subset of its test functions, link it against the instrumented libraries, and run each piece.",
+  "evidence": "receiver_slot pieces ran 152 s + 103 s + 0.1 s, all clean.",
+  "status": "n/a",
+  "where": "TSan workflow",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "process",
+  "what": "In the follow-up's tests, only a stop with the session thread held mid-step can show a guard leaking a state.json write; the receive-held tests stop the thread at a safe point. The reviewer then made the listener's check-then-act windows deterministic by calling abandon() from inside the log seam.",
+  "evidence": "test_stop_with_the_thread_mid_step (HeldNameSource): mutant A1 fails it on both listener.log and state.json. test_abandon_from_the_log_seam kills mutants M1 and M4, which had survived every earlier test, in both builds.",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_listener.cpp, test_listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "process",
+  "what": "Under TSan, tests that count receives must pace their feeders by completed receives rather than by audio. A PassbandStore opened with fs=40 is a cheap real passband store that a listener test can compare byte for byte.",
+  "evidence": "test_abandon_racing waits up to 60 s for receives >= 2. fs=40 gives 576 kB per hour against 57.6 MB at FE_FS; the whole listener test takes about 5 s optimized and 60 s under TSan.",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b-followup",
+  "kind": "process",
+  "what": "After the follow-up, the held-receive listen test ran its pushes 6 s past the end of the TINY slot. The slot's finish then raced stop() and on a loaded machine logged 'frame over' after 'audio ended'.",
+  "evidence": "Commit 9139841: seen once under ctest -j3, reproduced every time with the finish stub slowed by 0.8 s; the pushes are now 0.05 s, and the test checks the clock is short of the slot's end.",
+  "status": "fixed",
+  "where": "native/tests/qrss/test_listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "process",
+  "what": "In every wave, mutation-checking was how reviewers found tests that could not fail. Wave 8: write-during-pack, the expire boundary, the min_heard threshold, finish budgets. 9a: the resync boundary, i % 4 ages, the 'later pass is due' line. 9b: the Rice plan, the mid channel, the EOF lower bound. Follow-up: four abandon checks.",
+  "evidence": "Review findings across waves 8-9b (see the review-bug items).",
+  "status": "n/a",
+  "where": "review practice",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "process",
+  "what": "The sstvae-qrss executable is the ninja target 'sstvae-qrss'; 'sstvae_qrss_cli' is the CLI library's phony target and does not link the binary. Until the executable exists, tests/test_qrss_native_decode.py skips almost everything ('sstvae-qrss not built'), which looks like a pass.",
+  "evidence": "ninja -C native/build-qrss -t query sstvae_qrss_cli / sstvae-qrss; decode tests went from 7 skipped to 1 skipped",
+  "status": "n/a",
+  "where": "native/build-qrss, tests/test_qrss_native_decode.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "process",
+  "what": "Keep uids out of cross-implementation pins: replace the uid in a refusal text with <uid> on both sides and key pinned queries by the formula pass's name, which honours the never-compare-pass_uid rule and still pins the refusal.",
+  "evidence": "gen_em_pins.scenario_results / test_em.cpp test_scenarios",
+  "status": "n/a",
+  "where": "native/tests/qrss/gen_em_pins.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "process",
+  "what": "A pinned soft-header scenario needs a premise the generator asserts: a weak LLR amplitude of 3/16 (exact in float32) gives one, two or three passes summed failing to decode and six decoding, so 'soft-split3' (six passes as three segments of two) proves the soft header is summed per segment, not over all members.",
+  "evidence": "gen_em_pins.check_weak; em_pins.hpp soft-split3 -> None, soft -> header",
+  "status": "n/a",
+  "where": "native/tests/qrss/gen_em_pins.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "process",
+  "what": "Keep both the ctest pins and the Python parity file: the ctest pins caught em.cpp mutations the parity file's scenarios did not (known_keying tie-break, template_z chunk sum, prior_from weighting, gamma_logsf median split were all caught), and the parity file caught the LLR mutation the pins did not.",
+  "evidence": "mutation runs during review, em.cpp restored from scratchpad/rv10/em.cpp.orig",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_em.cpp, tests/test_qrss_native_em.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10",
+  "kind": "process",
+  "what": "Every lane's first-build ctest pins passed with large margin, so each lane mutation-checked them to prove they can fail; some mutations were caught only by a stub/seam test.",
+  "evidence": "skeleton: three em_pins.hpp results changed by hand -> exactly those 3 of 1061 checks failed; EM lane (pins worst 1.48e-8 vs 1e-5): swapping which parity run supplies the report/LLRs -> 19 failures, dropping the per-member path hand-back -> 6 failures caught only by the EmSeams stub test; retro lane: (drift / 60.0) -> (drift / 61.0) -> 11 failures; integrate review: retro's estimator check reverted -> 1 of 173 failed",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_em*.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "process",
+  "what": "The A/B helper first recorded the C++/Python time ratio for every em_refine call, including rounds 0 and -2 (pure store I/O), and reported a 'worst' ratio that suggested the C++ loop was barely faster; time ratios must be taken only on calls that do the work being compared.",
+  "evidence": "tests/test_qrss_native_em_refine.py _ab (the `if any(_LINE.match(x) for x in lr)` gate): ungated worst 0.885, gated 0.19-0.22",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_em_refine.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "process",
+  "what": "After restoring a mutated source, rebuild before probing: a probe against the stale mutant binary showed a flat C++ EM history that read like a real port bug; after rebuilding it matched Python to 1 ulp.",
+  "evidence": "probe_seg against native/build-qrss/python during the EM review: history [6.198, 6.198, 6.198]",
+  "status": "n/a",
+  "where": "review practice",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "process",
+  "what": "A ctest needing a capture with a real detection can be built without committed sample data: plant the formula store's own template (prior_from + make_classes + chunk_template with chunk 1) at a chosen lag/step/bin into splitmix noise, phases from libm cos/sin on an exactly-reduced turn, rounded to float32. C++ and Python then agree to ~2e-16 on Z, giving 1e-9 pins six orders of margin.",
+  "evidence": "native/tests/qrss/test_em_search.cpp ch_capture; mutation run (drift/61.0) fails 11 checks",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "process",
+  "what": "The build agent's own SHORT receive_template test asserted a decoded header at -30 dB while the reference's pass had header None; the header-equality parity comparison already covered it, so the extra expectation was wrong, not the port.",
+  "evidence": "tests/test_qrss_native_em_search.py::test_receive_template_short, first slow run",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_em_search.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "process",
+  "what": "em_refine's progress contract is not 'total never falls': when EM converges early its last call is (done, done, 'converged after round r'), lowering total to done. em_api.hpp first documented it wrong and test_em_api's monotonicity check caught it on the first run; the contract is what a progress bar needs (close at done, not the planned total).",
+  "evidence": "first test_em_api run: 'FAIL refine converging: total never falls at call 3'; native/core/qrss/em_refine.hpp:194-202",
+  "status": "fixed",
+  "where": "native/core/qrss/em_api.hpp, em_refine.hpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "process",
+  "what": "em_refine numbers rounds from 1 on every invocation, so a second `--em 1` leaves every member at 'EM round 1' again, not 2: a member's em_round is the round of its last re-receive within one call, not a cumulative count. The build's reverse test assumed cumulative and failed; worth knowing for an app showing 'EM round' across button presses.",
+  "evidence": "sstvae/qrss/em.py:377-390; test_decode_em_reverse first run",
+  "status": "n/a",
+  "where": "sstvae/qrss/em.py em_refine; app UI",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "process",
+  "what": "Making the no-Python chain test honest: a TINY pass in a recording listened with --frame short is 'missed' trivially, so the chain uses a weak SHORT pass at -30 dB in slot q+1 (TINY also has no header, n_hdr=0, so a strong TINY pass alone can never create an accumulator), and it checks the listener's passes/ directory holds one .npz before asserting that --retro finds the weak pass by corr.",
+  "evidence": "native/tests/qrss/test_em_chain.cpp (listen: the live receiver stored the strong pass only); --retro finds q+1 at Z 28.8; frame tiny n_hdr=0",
+  "status": "n/a",
+  "where": "native/tests/qrss/test_em_chain.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10",
+  "kind": "process",
+  "what": "Reviewers checked the classic side-by-side trap (a row silently substituting the C++ on both sides) and found it absent: the parity files skip under --native-qrss, the em_refine whole-caller test computes its Python reference before monkeypatching, and the decode parity harness runs Python as a subprocess with PYTHONPATH popped, so it is truly cross-implementation.",
+  "evidence": "skeleton review notes; integrate review parity: 'subprocess Python with PYTHONPATH popped, so truly cross-implementation'",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_*.py",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10",
+  "kind": "process",
+  "what": "Build and test costs on the shared box: touching a widely included header rebuilds most of a tree, and the decode parity file's fast tier is far over the ~40 s per-file target. The EM lane's parity file also ran slightly over target, so two tests were moved to slow.",
+  "evidence": "pyjson.hpp/store.hpp touch ~7.5 min per tree at -j2; EM review: the CMake glob re-check rebuilt 197 steps; decode parity file 136 s fast tier on 4 shared CPUs; em_refine parity fast tier 33 tests in 42.5 s at load ~1.4 (moved test_pass_path[short-6] and test_rereceive[short-6-hdr-noprior-cw] to slow); ctests: qrss_core_em 1061 checks 3.7 s, qrss_core_em_refine 413 checks 4.5 s, qrss_core_em_search 1217 checks 7.5 s, em_api 165-174 checks 5.1-5.7 s, em_chain 12.7-12.8 s",
+  "status": "n/a",
+  "where": "native/build-qrss, native/build-qrss-codec",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10",
+  "kind": "process",
+  "what": "Shared scratch hygiene: the skeleton build deleted the whole scratchpad/bt directory at the end, not only its own basetemps, which could have deleted another lane's live pytest tmp dirs; later agents removed only their own and left bt/emr1 and bt/emr2 alone. The script's rule (own --basetemp, delete afterwards) exists because /tmp filling the disk had already happened.",
+  "evidence": "skeleton build notes ('I removed the whole scratchpad/bt directory'); EM/retro/integrate review notes; wave 10 script HARD RULES",
+  "status": "n/a",
+  "where": "scratchpad/bt",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10",
+  "kind": "process",
+  "what": "Operating constraints for the wave: 4 CPUs shared by up to two agents (-j2, never two heavy commands at once), about 19 GB free disk for every worktree, no command longer than ~3 minutes (timeout 200; 600 for a first build), never the whole QRSS suite. The shared folder /mnt/project-files had returned I/O errors since about 03:00Z, so the plan was read from a scratchpad copy and test_morse_table_matches_the_spec_sim (which reads that folder) was ignored. The release bar (Jeff and Andrew, 2026-10-13) is that decoded pictures and headers match, with per-module intermediate parity kept as the harness.",
+  "evidence": "qrss-cpp-wave10-wf_a592d942-17c.js COMMON; skeleton review notes ('test_morse_table_matches_the_spec_sim (shared folder down, as instructed)')",
+  "status": "n/a",
+  "where": "workflow script",
+  "group": "stage4-wave10"
+ }
+]

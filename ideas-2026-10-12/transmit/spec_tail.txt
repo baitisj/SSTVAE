@@ -1,0 +1,287 @@
+
+| Function | Quiet | Moderate | Disturbed |
+|---|---|---|---|
+| Live acquisition from the 20 s preamble | -31 dB | -29 dB | -27 dB |
+| Whole-slot detection (pilot and references, track-before-detect) | -34 dB | -32 dB | -30 dB |
+| Known-waveform search (partly received picture as template) | -40 dB | -37 dB | -35 dB |
+| Header decode | -27 dB | limited by tracking | limited by tracking |
+
+These are unchanged from rev 5 apart from the header. Blind whole-slot detection (-34 dB on a quiet path) is now the practical floor for the deepest averaging: a good picture after 64 passes (-34.9 dB per pass), a usable one after 16 (-34.3 dB) and a recognizable one after 16 (-37.7 dB) all need passes at or below it. Such passes are found with the known-waveform search, which needs an accumulator first (section 8). The deep levels are therefore reached when some passes of a picture are strong enough to be detected blindly and the rest are found retroactively. If every pass is below -34 dB, nothing bootstraps. Waveform CE's stronger carrier lowers this floor to about -38 dB (section 6.6). Open question: whether weak-signal pictures should keep one frequency for all their passes, so that a receiver can add detection statistics across passes, at the cost of the frequency diversity in section 10.
+
+**Phase errors cost little at low per-pass SNR.** A residual phase error θ turns a fraction sin²θ of the signal into I/Q crosstalk. When per-pass, per-latent SNR is well below 0 dB, which is the averaging regime, that crosstalk is small next to thermal noise, and it averages down across passes because phase errors are independent between passes. What remains is the gain factor E[cos θ] (about -0.5 dB at 0.3 rad rms), which the tracking model above already includes.
+
+**Consumer-rig oscillator phase noise is not a factor.** Integrated phase noise of a typical TCXO-referenced synthesizer between 0.1 and 10 Hz offset is well under 0.01 rad², even counting both ends. Ionospheric Doppler spread dominates by orders of magnitude. Slower frequency wander, over seconds to a minute, is the oscillator effect that does matter, especially for free-running crystals (section 2.6).
+
+### 6.6 Waveform CE thresholds
+
+Waveform CE (section 2.5) delivers s_latent = SNR₂₅₀₀ + 17.1 dB per pass, and its average power equals its peak. Its tracking reference is the carrier plus the reference symbols, 54.8% of its power (53.0% while the spread header of section 5.1 is unknown) against L's 20.1% (23.9% once L's header is known, counting its spread copy). The tables use the same tracking model and fading loss as sections 6.1 to 6.4, with CE's own distortion: 13.2 dB below the latents in one pass, of which a part 23.1 dB down repeats every pass (section 2.4; `sims/ce/ce_link.py`).
+
+A transmitter is usually limited by its peak power, so L is shown here at the same peak power as CE: its figure from section 6.3 plus 3.2 dB.
+
+**Good mode A picture (+2.2 dB per latent)**, required SNR₂₅₀₀ per pass:
+
+| Passes N (air time) | 1 (0.5 h) | 2 (1 h) | 4 (2 h) | 8 (4 h) | 16 (8 h) | 32 (16 h) | 64 (32 h) |
+|---|---|---|---|---|---|---|---|
+| CE, steady signal, no tracking loss | -14.9 | -17.9 | -20.9 | -23.9 | -26.9 | -29.9 | -32.9 |
+| CE, quiet path (0.1 Hz) | **-10.9** | -16.1 | -19.9 | -23.3 | **-26.4** | -29.3 | -32.0 |
+| CE, moderate (0.5 Hz) | -10.7 | -15.9 | -19.6 | -22.9 | -25.7 | -28.3 | -30.6 |
+| CE, disturbed (1 Hz) | -10.5 | -15.6 | -19.3 | -22.4 | -25.1 | -27.5 | -29.7 |
+| L at the same peak power, quiet | -10.8 | -16.2 | -20.1 | -23.4 | -26.4 | -29.1 | -31.7 |
+| L at the same peak power, disturbed | -9.1 | -15.2 | -18.9 | -21.9 | -24.4 | -26.6 | -28.6 |
+
+**Other quality levels:**
+
+| Target per latent | CE, 1 pass: quiet / moderate / disturbed | CE, 16 passes: quiet / moderate / disturbed | L at the same peak power, 16 passes: quiet / disturbed |
+|---|---|---|---|
+| Very good, +5.7 dB | -2.5 / -2.2 / -2.0 | -23.0 / -22.5 / -22.1 | -23.1 / -21.8 |
+| Good, +2.2 dB | -10.9 / -10.7 / -10.5 | -26.4 / -25.7 / -25.1 | -26.4 / -24.4 |
+| Usable, -3.6 dB | -18.9 / -18.5 / -18.2 | -31.8 / -30.3 / -29.4 | -31.1 / -27.7 |
+| First recognizable, -9 dB | -25.1 / -24.4 / -23.8 | -36.1 / -33.9 / -32.7 | -34.5 / -30.3 |
+
+**Other thresholds, single pass, quiet path** (rough, ±3 dB, scaled from section 6.5 by each function's share of the power): live acquisition from the preamble about -31 dB, whole-slot detection about **-38 dB**, known-waveform search about -40 dB, and header decode with both copies, measured: -30.3 dB on a steady path, -29.0 dB on the quiet path and -26.9 dB on the moderate one (sections 5 and 5.1). In the reference receiver, blind whole-slot detection found all 8 passes tried at -32 dB on a steady path.
+
+- **At the same peak power the two waveforms nearly tie** for good and very good pictures on a quiet path (within 0.3 dB). CE does better where tracking is hard, because its carrier is 9 dB stronger than L's tone at the same peak power: by 0.7 to 2.4 dB on disturbed paths and at the usable and recognizable levels after 16 passes.
+- **At the same average power** (a linear rig run below its peak rating) CE needs about 3.2 dB more than L.
+- **Deep pictures can be found blind.** CE's whole-slot detection reaches about -38 dB, against -34 dB for L at its average power (-31 dB at the same peak power). So a good picture after 64 passes (-32 dB), a usable one after 16 (-31.8 dB) and a recognizable one after 16 (-36.1 dB) all come from passes CE's receiver can detect on their own, where L needs the retroactive template search (section 6.5).
+- **WSPR spots predict it.** WSPR is constant-envelope too and reports SNR in 2500 Hz, so a beacon's WSPR spots predict CE from the same board, give or take the dB or two of WSPR's own SNR estimate. On a quiet path, a beacon spotted at -20 dB would give a good mode A picture after about 4 passes (2 hours); one spotted at -28 dB, a recognizable picture after 2 passes, a usable one after 8 and a good one after about 32.
+- **Oscillator wander** costs CE about half what it costs L (section 2.6).
+
+---
+
+## 7. Coherent receiver: single pass
+
+**Front end.** 8 kHz audio is turned into complex baseband covering 300 to 2700 Hz (in the reference receiver, 4 kHz complex centred on 1500 Hz), and each signal then gets its own 250 Hz channel. The whole passband is stored for **48 hours** (1 to 1.4 GB per day as complex int16, depending on the sample rate) so that passes can be re-processed later (section 8). A receiver may also keep each detected pass's 250 Hz channel (3.6 MB) for the EM loop, but not instead of the passband: passes too weak to detect when they arrive exist only there, and the deepest thresholds depend on finding them later (sections 6.5 and 8).
+
+**Impulse handling.** Static crashes are blanked sample by sample before anything else, and symbols touched by blanking get reduced weight. RX AGC must be off or slow, because a fast AGC reacting to crashes or other signals modulates the amplitude that the latents are carried in.
+
+**Acquisition.** At each quarter hour plus 1 s, ±2 s:
+
+1. **Live:** correlate the known preamble over 2 s coherent chunks, searching the full passband (the rig may be off by ±35 Hz at 14 MHz, ±70 Hz at 28 MHz). This gives the initial frequency, phase and timing.
+2. **Retrospective:** at the end of each slot, search the stored slot for pilot tones with a frequency-drift path search (track-before-detect, like reading a QRSS trace by eye). This catches signals too weak for the preamble. The spectrum's shape tells the waveforms apart: L's data sit entirely below its pilot, while CE's sidebands are symmetric about its carrier (section 14, step 7).
+3. **Template:** once an accumulator exists, search stored slots for the full expected waveform of that picture, with that slot's scrambling (section 8).
+
+**Tracking.** A Kalman filter tracks the channel as a joint state: carrier phase, frequency, frequency rate (warm-up drift up to ~1 Hz/min), complex channel gain (fading), and sample-clock offset and symbol timing. Sound cards at both ends can be off by ±100 ppm each, which slips timing by up to about 6 symbols over a pass (12 of CE's shorter symbols), so timing must be tracked. Measurements come from the tone (continuously) and the reference symbols (1 in 16). The process noise follows the estimated Doppler spread plus the oscillator wander the tracker measures (section 2.6). The reference receiver splits this state into a frequency path, a smoothed complex gain that also holds the phase, and one timing model fitted over the whole pass, since sound-card clocks do not wander on the scale of a symbol. Any structure that estimates the same quantities will do.
+
+- **Live view** uses the causal filter.
+- **Final processing** of each pass uses a forward-backward (Rauch-Tung-Striebel) smoother over the whole stored pass, which roughly halves channel-estimate error compared with the causal filter and largely removes cycle slips.
+- **Callsign windows** (section 2.7) carry no latents. The receiver drops them from the symbol stream, follows the pilot through them and reads the callsign from them.
+- SSTVAE's receiver solves the same problem per frame (`modem._lmmse_channel`): it measures the Doppler spread from its own pilots, centres the Doppler model on the measured residual rotation, and removes timing steps before smoothing. Each of those was worth 0.5 to 4 dB there, and the same lessons apply here.
+
+**Per-latent outputs.** After the matched filter and the smoothed channel estimate ĥ, each data value is y = √2 · Re or Im of (r / ĥ) (undoing the 1/√2 of the latent mapping), divided by the clipper's known data gain (section 2.2). In L, once the header is known, the spread copy is then subtracted and the value multiplied by √(1 + ρ) (section 5.1). Each block of 64 values then goes back through the Walsh-Hadamard transform and the sign flips are undone (section 2.4), which gives each latent's estimate z. Each value's error variance is (σ² + P_e) / |ĥ|² plus the waveform's own one-pass distortion (section 2.4), where σ² is the noise, measured in 10 s windows from the power just outside the signal, and P_e is the smoother's error variance, all after the same gain correction. Blanked symbols' variance grows by the inverse square of their unblanked share. One factor per pass, between 0.5 and 2, then scales the variances to match the reference-symbol residuals, which cannot set them alone: a 10 s window holds only 10 (L) to 20 (CE) references, too few for a stable inverse variance. The transform averages it over the block, so a latent's weight w is the inverse of its block's mean error variance. On average this gives the s(1-ε)/(1+sε) of section 6.4. Faded, interfered or blanked stretches therefore get little weight automatically, spread over the 64 latents of each block they touch.
+
+**Waveform CE** uses the same front end, acquisition, tracker and weights, with its own preamble searched at every quarter hour; section 2.5 says how its latents are taken from the phase.
+
+**Reference receiver.** Its choices that do not change what is sent, such as the tracker's structure, the impulse blanker, the acquisition statistics, the association test and the accumulator files, are listed in `../qrss-build/spec-notes-from-build.md`.
+
+---
+
+## 8. Multi-pass combining (the core of the design)
+
+### Accumulator
+
+One accumulator per (callsign, picture ID), holding for each latent:
+
+- S = Σ w·z (weighted sum of estimates)
+- W = Σ w (total weight, which equals the effective per-latent SNR)
+
+That is two float32 values per latent: ~0.4 MB per segment, ~1.2 MB for a mode C picture. Accumulators persist on disk and expire after a configurable age (default 7 days).
+
+### Decoder input
+
+SSTVAE's decoder takes two planes per latent: the latents multiplied by a weight between 0 and 1, and the weights themselves, with weight 0 meaning erased (`autoencoder.Decoder`, `codec.decode`). Its own receiver sets each latent to the equalized value and its weight to |h| / median |h|, capped at 1 (`modem.py`), and SSTVAE measured that MMSE shrinkage on top of this gains nothing (`docs/todo.md`, "Rejected: explicit Wiener shrinkage"). Build step 1 measured what the decoder wants from the accumulator (`measure/decoder-measurements.md`):
+
+- **latent** = g(W) · S / W, with **g(W) = 0.785 · √(W / (W + 0.39))** computed from each latent's own W. This is the same shrinkage SSTVAE's modem delivers on AWGN (0.77 on a clean channel, 0.71 at 0 dB channel SNR, 0.58 at -6 dB), which the decoder was trained on. Feeding the unbiased S / W instead costs 0.7 dB of PSNR at every SNR, and a fixed 0.8 costs 1 dB at -6 dB per latent. Modes B and C are best about 5% lower, which costs under 0.1 dB if ignored.
+- **weight** = min(√(W / W̃), 1), where W̃ is one reference for the whole picture: the largest of the transmitted groups' median W. Normalizing each group to its own median instead (rev 6) makes a weak refinement group cost up to 2.2 dB; against one reference, a weaker group never hurt and always helped. The cap at 1 matters, and √ against linear is a wash (within 0.3 dB either way).
+- **Every group with any data is shown.** With one reference, a weak group gets small weights automatically, so rev 6's display floors are gone.
+- **Never-sent latents** (2,200 per group) and groups with no data have weight 0.
+- **Full-strength latents keep weight 1.** Lowering every weight to tell the decoder the SNR is low gains at most 0.08 dB and can lose 1.4 dB.
+
+The decoder estimates the overall noise level from the latents themselves; the weights only say which latents are more or less reliable. On a single faded pass they are worth 7.5 dB of PSNR over uniform weights.
+
+### Data-aided tracking with leave-one-out references
+
+Once a picture is partly received, its own latents become a known reference for tracking:
+
+1. For each stored pass i, form a reference from the accumulator **minus pass i's own contribution** (leave-one-out). This stops a pass from confirming its own noise.
+2. Re-modulate that reference into the expected waveform, scrambled, precoded and clipped (L) or phase-modulated (CE) as pass i was sent, and use it together with the pilots as the Kalman measurement. For L, usable reference power rises from 20% of the signal (pilots) to 20% + 74% × s_acc / (1 + s_acc): 66% at the +2.2 dB target, about 5.2 dB more than pilots alone. For CE it rises from 55% to 55% + 32% × s_acc / (1 + s_acc): 75% at the target, 1.3 dB more.
+3. Re-demodulate pass i with the improved channel estimate and replace its contribution in the accumulator.
+4. Iterate over all passes of the picture (2 to 5 rounds). This is an EM loop: latents given channels, then channels given latents. Section 6.4 shows it converges even when every pass starts below what pilots alone can track.
+
+Because the passband is stored, each new pass also improves every older weak pass of the same picture. It also enables **retroactive detection**: once an accumulator is good, the template search finds earlier passes from the last 48 hours that were too weak to detect when they arrived.
+
+### Deterministic error floor
+
+The transmitter's own distortion is a fixed function of the latents. With the sign flips and the precoder (sections 2.2 and 2.4), it and the rig's intermodulation change every pass and average down, except for a part 22 to 23 dB below the latents that costs the decoder under 0.1 dB at any level. Sign flips alone would leave a fixed part 14.2 dB down for L and 13.4 dB for CE, costing 0.9 and 1.7 dB at the good level; with no scrambling at all, clipping would cap the accumulated SNR near 12 dB. Also fixed are the clipper's or phase modulator's data gain, which is a known scale, the 8-bit latents in a CE beacon's memory (37 dB down), and float16 storage of the latents, which is negligible.
+
+### Mergeable accumulators (optional, network)
+
+(S, W) pairs from different receivers add directly, since both are already normalized. A reporting server, like WSPRnet or PSKReporter, could merge accumulators from many receivers into one composite picture, gaining a further 10·log10(R) dB from R receivers. Each receiver should verify merged data against its own passes by correlation before trusting it.
+
+---
+
+## 9. Associating passes with pictures
+
+A pass is attached to an accumulator by the first of these that succeeds:
+
+1. **Header decoded on this pass** gives (callsign, picture ID) directly.
+2. **Soft-combined header:** undecoded soft header bits are combined with other undecoded passes. Each pass's soft bits are the sum of its block and its spread copy (section 5.1), in either waveform; both are the same in every pass and in both waveforms, so the sum adds across passes. The header gains about 10·log10(N) like the latents; two CE passes measured 2.4 dB, against the ideal 3 dB (section 5.1).
+3. **Latent correlation:** correlate the pass's soft latents against every open accumulator, and accept above 6/√M for M compared latents. With unequal weights the test takes the self-normalised form t = Σ v·z·m / √(Σ v²·z²·m²) > 6, with z the pass's latents, m the accumulator's and v = wW/(1 + w + W) from their weights. At -34 dB on a quiet path, one pass demodulated with pilots alone reaches about -16 dB per latent. Against a +2.2 dB accumulator its expected correlation is about 0.12, against an acceptance level of 0.027 over a full segment, and it clears the bar after about 2,500 latents (about 80 s of the pass). The latents are a far more sensitive fingerprint than the header.
+4. **Provisional:** an unmatched pass is held, and pairs of provisional passes are cross-correlated, so repeats of a picture whose header has not yet decoded find each other. Until a pass is matched, the display may show a guessed picture for it (section 11). Two passes at -28 dB on a moderate path correlate at about 0.07, still well above the bar, and clear it after about 7,000 latents.
+
+Correlation also validates 1 and 2. A header-matched pass that does not correlate with its accumulator is rejected, which guards against picture-ID collisions and against a station reusing an ID for a re-encoded picture.
+
+---
+
+## 10. Operating practice
+
+**Repeat schedule (default).** Spread passes across the day so they sample different propagation (gray line, day path, night path) and different fading:
+
+- Mode A: 8 passes in 24 h, one in each 3-hour window at a random quarter hour, optionally repeated the next day. Sixteen passes give a good picture at about -30 dB on a quiet path.
+- Mode B or C: the same schedule for every segment (section 3 says when this beats more mode A passes).
+- Cross-band is fine, for example 30 m by day and 40 m by night. Combining happens after equalization, so band, rig and frequency may differ between passes.
+
+**Frequency choice.** Listen first and pick a spot at least 30 Hz from any signal you can see (a CE signal's carrier 50 Hz from another CE carrier and 25 Hz from the edge of an L signal), choosing randomly among free spots and **changing frequency on every pass**.
+
+- A station's receiver and transmitter share one oscillator, so placement by listening is correct whatever the rig's absolute offset. No fixed frequency grid is used, since ±35 Hz of rig error would defeat it.
+- Changing frequency every pass gives frequency diversity against persistent QRM and against repeated collisions with the same station.
+- **An Si5351 beacon cannot listen.** It picks a random spot in the channel on every pass and needs its reference calibrated to about 1 ppm (±14 Hz at 14 MHz) to land where it meant to. Receivers search the whole passband, so the calibration is for its neighbours, not for decoding. It should keep its oscillator running between passes (section 2.6).
+- Drift during a pass moves a signal toward its neighbours. A warmed-up transmitter drifts a few hertz at most over a pass, which these spacings absorb with only a little more leakage; a cold one can drift tens of hertz, so warm up first (section 2.6).
+
+**Capacity and collisions.** 2400 Hz / 30 Hz gives ~80 positions for L signals, or ~48 for CE at 50 Hz. Stations that cannot hear each other will sometimes overlap. Two 22 Hz signals placed at random overlap with ~1.8% probability, two CE signals with ~4%. With ~20 signals audible at a receiver, and listening first avoiding some overlaps, roughly 15 to 30 percent of passes see a partial collision. A collided pass is not lost:
+
+- The combiner down-weights the interfered stretches.
+- If either colliding picture already has a good accumulator, the receiver re-modulates and subtracts it (successive interference cancellation), then demodulates the other.
+
+**Air time.** Per picture, N × segments × 30 min. Mode A × 16 is about 8 h; mode C × 16 is about 24 h.
+
+**630 m (472 to 479 kHz).** Waveform CE fits this band well. The 7 kHz band has room for well over a hundred CE signals. Ionospheric Doppler spread and oscillator wander, in hertz, are about 30 times smaller than at 14 MHz, so the 0.1 Hz wander target is about 0.2 ppm and the quiet-path thresholds should apply. An Si5351 generates 475 kHz directly, and the constant envelope suits the class-D and class-E amplifiers many stations there use. Power there is limited as radiated power (EIRP), typically 1 to 5 W; if the limit counts peak power, CE gives up nothing to L. The main noise is lightning crashes, so impulse blanking (section 7) matters most there. US stations must notify the Utilities Technology Council (UTC) at least 30 days before first transmitting on the band (47 CFR 97.303(g)), and the US limits are 5 W EIRP and 500 W PEP from the transmitter (97.313(l)).
+
+---
+
+## 11. Receiver display
+
+- **Waterfall** of the whole 2.4 kHz, with pilot tones visible as QRSS-like traces.
+- **One tile per (callsign, picture ID)** showing the accumulated image, passes per segment, and effective SNR per segment (10·log10 of the median W), with the callsign read from the Morse windows and whether it matches the header's (section 2.7).
+- **Per pass:** the waveform and the frequency offset, drift and oscillator wander the tracker measured, so a sender can see whether its oscillator limits its pictures (section 2.6).
+- **Live pass view** refreshing every few seconds from the causal tracker. Latents arrive in SSTVAE's interleaved order, so the whole picture sharpens at once, the way SSTVAE's own receiver shows a partial reception, rather than block by block. When the pass ends, the smoothed and EM-refined result replaces it. Measured on the decoder, a strong pass's live view becomes recognizable a fifth to a third of the way through (19 dB PSNR with 20% received, 21 dB with 35%, clean channel). v5 was never trained for partial groups, so this is a lucky property of v5, not a guarantee (section 12).
+- **Before the header decodes.** The header carries what the decoder needs to use a pass: the segment (which latent group, and so which interleaver), the mode, the codec ID, and the callsign and picture ID that passes combine under (section 5). A receiver may still show a pass whose header has not decoded, not yet or not at all, as a guessed picture: it assumes segment 0, mode A and its own default codec, and labels the tile as a guess (the reference receiver says "no header: assuming first pass"; Jeff, 2026-10-10). The guess is right for every mode A picture and for the first segment of modes B and C. For any other segment it draws noise. As soon as a header decodes, or section 9 matches the pass to an open accumulator by latent correlation, the real picture replaces the guess, and the codec ID check still applies: a receiver without the header's codec refuses to decode rather than using its default.
+  - **Display only.** The guess is never written to an accumulator or the picture store, since it has no callsign or picture ID to file under. The pass's soft latents are held as an unmatched pass (section 9) and join an accumulator only through one of section 9's matches, each of which fixes the segment and the picture. Nothing on the air changes.
+  - **When it matters.** On a steady path, CE's header decodes from the block alone down to -28.7 dB, and with its spread copy down to -30.3 dB (sections 5 and 5.1). That is below the -26 dB where one steady pass first gives a recognizable picture, since a CE latent gets SNR₂₅₀₀ + 17.1 dB. So a CE pass that shows a picture usually has a header, unless its block was lost to a fade, a static crash or a late start. Even then the spread copy decodes the header down to about -27 dB, or about 3 dB higher when only half the pass is heard. On fading paths the header with both copies still decodes about 2.5 to 4 dB below where one pass first gives a recognizable picture: -29.0 dB against -25.1 dB on the quiet path, and -26.9 dB against -24.4 dB on the moderate one (section 6.6). L's header block is estimated at -27 dB, close to its first recognizable picture at -27.8 dB on a quiet path (section 6.3), and its spread copy should take that about 1.5 dB deeper (section 5.1). The guessed picture covers what is left: weaker passes, and passes of which little was heard.
+- Compute: demodulation is trivial at 16 or 33 symbols/s. SSTVAE's decoder takes about 90 ms per picture on a CPU through ONNX (`docs/onnx.md`), and a tile only needs redecoding when its accumulator changes, so even tens of live tiles are affordable; the template searches and EM rounds run in the background.
+
+---
+
+## 12. Cross-checks and alternatives
+
+### The reviewer's "flatten 25 OFDM carriers" estimate (resolved)
+
+SSTVAE has 24 carriers at 50 Hz spacing (950 to 2100 Hz, about 1200 Hz occupied; 23 carry latents and 1 the beacon), 20 ms symbols plus a 4 ms cyclic prefix, and modes of 32, 64 and 95 s.
+
+- 25× the time: 13 to 40 minutes. Correct.
+- 4% of the bandwidth: about **50 Hz** (one carrier), not 13 Hz. The 13 Hz figure was an arithmetic slip, and Jeff's latent counts are right (52,800 per group, 50,600 sent), so rev 5's "open discrepancy" is gone.
+- 14 dB less SNR: correct (10·log10 24 = 13.8 dB).
+- This spec is the same idea, stretched further: one 22 Hz carrier for 30 minutes instead of one 50 Hz carrier for 13 minutes, without a cyclic prefix and with its own pilot layout.
+- Flattening is sound at these rates. A 61 ms symbol is 30× longer than worst-case HF delay spread and the channel is flat across 22 Hz, so OFDM's cyclic prefix and per-carrier equalization are unnecessary. What OFDM supplied implicitly is added back explicitly: pilots for tracking, interleaving across time (SSTVAE's own interleaver) and timing recovery.
+
+### Alternatives considered and rejected
+
+| Alternative | Why not |
+|---|---|
+| Digital: quantize latents, LDPC, slow FSK | 50k latents × ~4 bits ≈ 200 kbit per image: hundreds of Hz and roughly -10 dB-class thresholds, with cliff-edge failure. Abandons SSTVAE's analog design |
+| Frequency-position analog (tone frequency encodes a latent) | Needs ~500 Hz at this payload, and non-coherent detection is less efficient |
+| Retraining before the first version | The first version uses v5 as published, so it can be built and tested now; a QRSSTVAE model comes later (below) |
+| Sub-2 Hz coherent signals | Need GPSDO-class stability; ruled out |
+| Constant-envelope phase modulation for every station | Now waveform CE (section 2.5), for transmitters that can only set frequency and phase. From the same peak power it roughly ties L and does better on disturbed paths, but it is more than twice as wide, so linear rigs keep L |
+| Analog FM (latents set the frequency) | Constant-envelope too, but the phase becomes the running sum of the latents and wanders without bound, so there is no carrier to serve as a pilot, and the latents come from differentiating the phase, which tilts the noise toward the band edges. CE's phase modulation keeps a carrier for coherent detection |
+| Polar synthesis of L on an Si5351 (phase from the chip, envelope from the amplifier's supply) | The Si5351 has no amplitude control, and an envelope modulator with amplitude correction is no longer a simple beacon |
+| Receiver-side correction or sender pre-distortion instead of the precoder | Tried for CE: inverting the modulator's compression at the receiver, a posterior-mean mapping and cancelling the fixed part from the received signal all made the picture worse at the noise levels that matter, and pre-distortion at the sender only worked by shrinking the deviation. The precoder solves it at no cost (section 2.4) |
+| 15-minute slots | Either twice the width (~45 Hz) or half a segment per slot, and the fixed 100 s of preamble and header overhead doubles, with no sensitivity gain per hour of air time. Quarter-hour *starts* are kept instead |
+| Few-carrier OFDM inside 22 Hz | No gain: the channel is already flat at 22 Hz, Gaussian latents give the same PAPR either way (SSTVAE's precoder study, `docs/slot-domain-precoder.md`), and OFDM adds cyclic-prefix and pilot overhead |
+| Repetition inside one pass (spreading) | Same energy as repeating passes, but no time diversity and no flexibility to spread passes across days |
+| Spread header variants for CE (section 5.1): no header block; shrinking the latents to make room; the header bit as each symbol's phase sign | Passes sit on a fixed 30-minute grid, so dropping the block frees nothing and costs 1.5 dB of header threshold. Shrinking the latents loses 0.08 to 0.09 dB once the header is known, where adding on top loses nothing. Keeping every value on one side of zero for a sign costs 5 to 10 dB |
+| A higher pilot share ("robust profile", rev 5) | With EM tracking it buys nothing measurable (section 6.4) |
+
+### A QRSSTVAE model (later)
+
+The first version uses SSTVAE's published v5 model unchanged, and the receiver feeds it plainly: the decoder gain g(W) and the weights of section 8 are its only accommodations, and no further tricks to suit v5 are planned. QRSSTVAE is a separate mode with no compatibility to keep, so it can have its own model snapshot later, as SSTVAE's author has suggested, trained on this mode's own conditions:
+
+- One carrier through the clipper (L) or the phase modulator (CE), with the scrambler and precoder in the loop, instead of SSTVAE's 24 OFDM carriers.
+- Fading as one slow carrier sees it, and the uneven per-latent SNR that averaging N passes leaves (section 6.1).
+- Any share of a pass received, for the live view. v5 was trained only on one, two or three groups plus random erasures, so its recognizable picture at a fifth of a pass (section 11) is luck, not design.
+- Possibly a different latent layout, such as all 52,800 latents per group or fewer latents for a narrower signal.
+
+The header's codec ID (section 5) already tells a receiver which model to use, and the picture ID covers the codec (section 4), so passes encoded by two models never mix in one accumulator. Every threshold in this spec is for v5; a model trained for these conditions would be expected to improve on them, the single-pass fading loss most, but nothing here counts on it.
+
+### Possible extensions, not in the base spec
+
+- A ×3 wide profile (~60 Hz, mode C in one slot) for strong paths.
+- A half-rate CE profile (~26 Hz, at L's symbol rate, so one segment takes two slots) for crowded channels.
+- Sending the 2,200 never-sent latents per group: +4.3% width (22.9 Hz in all) and its own interleaver order instead of SSTVAE's. Measured: worth about +0.3 dB of SNR at the good level and nothing at usable or below.
+
+---
+
+## 13. Codec facts verified against the SSTVAE source
+
+Source: arodland/SSTVAE v0.6.3 (commit cc06e87, 2026-09-23), checkpoint v5 (`arodland/sstvae`, `v5.pt` on Hugging Face), wiki pages "Performance" and "How it works". Paths are relative to the repository.
+
+| Item | Rev 5 assumed | Verified | Where | Effect on this spec |
+|---|---|---|---|---|
+| Latents per mode | A ≈ 50k, B ≈ 100k (guess), C ≈ 150k | 132 × 30 × 40 = 158,400 in 3 groups of 52,800; A / B / C send 1 / 2 / 3 groups; 50,600 per group on air, 2,200 never sent | `sstvae/config.py` lines 335-351, 583-587 | Segment = group, K = 50,600; mode B confirmed |
+| Peeling | prefix, importance-ordered | Nested: mode A is a prefix of mode C; group 0 coarse; no order inside a group; decoder trained with missing groups as zero weight | `sstvae/models/autoencoder.py` docstring; `sstvae/codec.py` `pad_to_full` | Segment 1 = mode A; latent order from SSTVAE's interleaver |
+| Latent distribution | zero-mean, fixed scale | tanh-bounded; unit RMS over the transmitted groups; near-Gaussian (kurtosis 3.40 to 3.47 in SSTVAE's docs, 3.09 measured on v5); group RMS 1.036 / 1.000 / 0.962, ±1% between pictures (measured) | `autoencoder.py` lines 68-76; `sstvae/modem/modem.py` lines 481-484; `docs/slot-domain-precoder.md`; `measure/` | Waveform treated as Gaussian; each segment at unit RMS, no RMS field |
+| Encoder determinism | posterior mean, stored once | Deterministic, but fp16 and fp32 differ by 4.6e-4 RMS; optional latent optimization is an iterative search | `docs/onnx.md`; `docs/latent-optimization.md` | Store once, hash the stored latents (unchanged) |
+| Current modem | 25 carriers, rest unknown | 24 carriers × 50 Hz, 950 to 2100 Hz; 20 ms + 4 ms cyclic prefix; frame = 1 pilot + 5 data symbols; 1 beacon carrier; 8 kHz audio; modes 32 / 64 / 95 s | `config.py` lines 9-41 | The critic's 13 Hz should be ~50 Hz; no discrepancy remains |
+| Real vs complex latents | 2 per complex symbol | Consecutive slot pairs go to I and Q, scaled by 1/√2 | `sstvae/modem/framing.py` `slots_to_symbols` | Same mapping reused |
+| Decoder quality vs SNR | good at 10 dB per latent | Measured (rev 7): good at +2.2 dB per latent, usable at -3.6, recognizable at -9, no cliff; SSTVAE's own modem matches at equal per-latent SNR | `measure/decoder-measurements.md`; wiki "Performance" | Image thresholds about 8 dB lower |
+| Decoder input | MMSE estimate S/(W+1) | Inputs are latents × weights and the weights, in [0, 1], 0 = erased; SSTVAE's receiver uses the zero-forcing estimate and \|h\| / median; explicit shrinkage measured and rejected | `autoencoder.py` lines 109-111; `codec.py` lines 122-129; `modem.py` line 595; `docs/todo.md` line 99 | Feed g(W)·S/W with weight min(√(W/W̃), 1), one W̃ per picture (measured) |
+| Latent scale at the decoder | (not considered) | Measured: best gain 0.785·√(W/(W+0.39)), the same shrinkage SSTVAE's modem delivers (0.77 clean, falling to 0.51 at -8 dB channel SNR) | `measure/`; `docs/todo-done.md` line 136; `docs/todo.md` line 943 | g(W) per latent |
+| Existing sync, header, ID | none assumed | Preamble = 4 repeats of the pilot symbol; Golay(24,12) header (mode, protocol version); beacon carrier with an 8-character callsign (6-bit alphabet), frame counter, mode and a CRC-16 (polynomial 0x1021, register starting at 0xFFFF, check value 0xA69D; its docstring calls it CCITT-FALSE, which it is not); no picture ID; an optional on-off keyed CW ID after each transmission (18 wpm, 1 kHz) | `config.py` lines 43-129; `framing.py` lines 163-190; `sstvae/modem/beacon.py`; `native/core/tx/engine.hpp` | Callsign alphabet and CRC reused; picture ID is new; callsign also sent in Morse inside each pass (section 2.7) |
+| Model versioning | codec version 1 | Published checkpoints are immutable (`v5.pt`); each ONNX file carries its checkpoint's SHA-256 | `sstvae/checkpoint.py` lines 21-22; `codec.py` line 94 | Codec ID = first 16 bits of that hash |
+| Clipping | 5 dB PAPR, -22 dB distortion | SSTVAE: three overshoot clip passes, 3.4 dB PAPR, 15.2 dB clipping SINR, encoder trained through it | `config.py` lines 355-420 | Same recipe here, scrambled and precoded so it averages away |
+| Latent optimization | (not considered) | +1.4 to 1.8 dB PSNR end to end, sender side only, objective channel 5 dB | `docs/latent-optimization.md` | Optional, unproven on the air; nothing here counts on it |
+| Real HF Doppler | quiet path 0.1 Hz | One measured 4000 km path: 0.05 to 0.3 Hz, about 2 ms selectivity | `sstvae/hfchannel.py` lines 37-50 | The quiet row is the typical case |
+
+**Measured in build step 1** (rev 7, `measure/`): the quality curve with noise added straight to the latents, the decoder gain, the weight mapping and normalization, groups at unequal SNR, the never-sent latents, partial passes, the fading loss and each group's RMS. **Measured for rev 8** (`sims/ce/`): the clipper's and the phase modulator's distortion on real v5 latents and what it costs the real decoder, with and without the precoder. **Still unverified:** a refinement group stronger than group 0, fading with a steady dominant mode (Rician), the precoder on fast fading, waveform CE from a real Si5351, and real oscillators' wander (build steps 2 and 3).
+
+---
+
+## 14. Build and test order
+
+1. **Measure the decoder** with noise added straight to the latents. **Done 2026-10-08** (`measure/`; results in sections 6.1 and 8). Downloads from Hugging Face need `huggingface.co` and `*.cdn.hf.co`.
+2. **Waveform CE and the single-pass receiver, inside the SSTVAE codebase.** CE comes first (Jeff, 2026-10-09). Reuse SSTVAE's 8 kHz audio and rig layers (`native/core`), the ONNX codec, the latent layout and interleaver (`framing.py`), the callsign alphabet and CRC (`beacon.py`), and its channel simulator (`hfchannel.py`, which already has the ITU-R F.1487 Doppler spectrum and band-limited clock-offset modelling). Build CE with the scrambler, precoder, callsign windows and spread header (section 5.1). The spread header's checks on fading paths, acquisition and combining across passes are done. Test on Watterson channels (quiet: 0.1 Hz Doppler spread and 0.5 ms delay; moderate: 0.5 Hz and 1 ms; disturbed: 1 Hz and 2 ms; and SSTVAE's measured slow, selective "mps": 0.15 Hz and 2 ms) with consumer impairments: ±400 Hz offset for an uncalibrated Si5351, 1 Hz/min warm-up drift, oscillator wander up to 0.5 Hz rms, ±100 ppm sound cards at both ends, impulsive noise including lightning crashes (for 630 m) and a fast AGC. Confirm the distortion figures of section 2.4 in the real modem, and compare the precoder's per-block estimate with the joint one on fast fading.
+3. **Bench test an Si5351 board** on 630 m and on an HF band. Synthesize waveform CE with about 1 kHz frequency updates, check its spectrum against section 2.5 and its decode against the simulated modem, and measure its wander over 3 to 60 s against a GPS-disciplined reference, in a box and in open air.
+4. **Multi-pass accumulator, association, scrambler and EM / leave-one-out loop.** Check the thresholds of section 6.6.
+5. **Two-station over-the-air trial** with CE on 630 m and on one HF band, with the default 8-passes-a-day schedule, including a 10 mW Si5351 beacon checked against its own WSPR spots.
+6. **Receiver GUI** as a mode in SSTVAE's app: waterfall, tiles and live view.
+7. **Waveform L** for SSB rigs. It reuses everything above except the modulator and the pilot-tone tracking. **The transmitter is built (2026-10-11)**, with the spread copy, and its clipper is measured on real latents (section 2.2; `../qrss-build/waveform-l.md`). Still to do: a listener that recognises L, the L receiver, and checks of section 6.3's thresholds and of L's header on Watterson paths. **L must not go on the air until the listener at least recognises it.** A CE-only listener takes an L pilot for a CE candidate and spends its blind search at the end of each slot on it, 60 to 80 s per L signal, so a few L signals would crowd out the weak CE candidates behind them. The spectrum's shape tells L apart (section 7).
+8. **A QRSSTVAE model snapshot,** trained on this mode's conditions (section 12), once the first version has produced on-air recordings to train and test against.
+
+---
+
+## Revision notes
+
+**Rev 13 (2026-10-11).** The build thread built waveform L's transmitter, and this revision writes in what it settled (`../qrss-build/waveform-l.md`). The pilot is exactly 12207/970 Hz above the data band's centre and is the frequency a sender names, and Rs is exactly 16000/970 Bd. The clipper filters only its own correction, at 250 Hz over the whole frame. The lead-in and the callsign windows send the pilot at the data's average power, 0.63 on the clipper's scale, with 8-unit ramps. L's data section starts mid reference period (sections 2, 2.2, 2.7 and 2.8). Measured on real v5 latents, L's PAPR is 3.15 dB, its clipping SINR 12.2 dB and its 99% width 21.5 Hz. At Jeff's request L now carries the spread copy of the header too (section 5.1), by scaling its latents to make room, which costs 0.23 dB on every latent. Section 6.3's thresholds and L's figures in sections 2.5 and 6.6 are recomputed with it (`sims/l_spread.py`), mostly 0.1 to 0.2 dB higher. Section 14 adds that L must not go on the air until the listener recognises it. Rev 12 is kept at `archive/qrsstvae-options-rev12.md`.
+
+**Rev 12 (2026-10-10).** Section 5.1 adds the build thread's checks of the spread header, which Jeff had put on the air before they were done; none changes the format. On Watterson fading paths the header with both copies decodes at -29.0 dB (quiet) and -26.9 dB (moderate), 2.0 and 1.7 dB deeper than the block alone. Blind detection finds every pass tried at -32 dB, below where the header decodes, with or without the spread copy, and two passes' soft headers combine 2.4 dB deeper than one. Sections 5, 6.6, 9 and 11 are updated to match. Rev 11 is kept at `archive/qrsstvae-options-rev11.md`.
+
+**Rev 11 (2026-10-10).** Section 5.1 adds Andrew's spread header to waveform CE, as Jeff decided: every data symbol also carries the coded header as a small extra phase (ρ = 0.054). A pass whose 80 s header block is lost can still decode its header, and an intact pass decodes it 1.6 dB deeper. Once the header is known, the latents lose nothing. The format version becomes 2. CE's header thresholds are now measured on a steady path: -28.7 dB from the block alone and -30.3 dB with the spread copy, 5 dB better than rev 9's estimate. Section 11's note on when the guessed picture matters is revised to match. Jeff put it on the air the same day; fading paths, acquisition with the spread copy on and combining across passes are being measured in parallel. Rev 10 is kept at `archive/qrsstvae-options-rev10.md`.
+
+**Rev 10 (2026-10-10).** Section 11 lets a receiver show a guessed picture for a pass whose header has not decoded, at Jeff's request: it assumes segment 0, mode A and its default codec, labels the picture as a guess, never accumulates it, and replaces it once a header decodes or section 9 matches the pass. This is display only; nothing on the air and no threshold changes. Rev 9 is kept at `archive/qrsstvae-options-rev9.md`.
+
+**Rev 9 (2026-10-09).** The first version uses SSTVAE's v5 model as published, without further tricks to suit it, and a model trained on this mode's own conditions is planned for later (section 12, design constraint 5). Transmit-time latent optimization is no longer counted on (section 4). The tracking-reference denoising experiment and the uneven-power extension, both ways of working around v5, are dropped. No threshold changes, since none counted on either. The build order now puts waveform CE first (section 14), and sections 2.5, 2.6 and 10 carry notes from the 630 m amplifier work (`../qrss-hw/`). Section 2.7 adds callsign windows, one every 7.5 minutes and one at the end of each pass, because amateur rules require identification at least every 10 minutes; each pass grows by 46.6 s to 1,782.7 s and nothing else changes. Section 2.8 adds an optional 10 s lead-in carrier before the preamble. Rev 9 also adopts the points the build thread had to pin down while designing the implementation (`../qrss-build/spec-notes-from-build.md`): the timing origin, the pulse cut, the reference positions, the sequences, the picture-ID bytes, the polar header code and field encoding, the beacon file's 8-bit scale and the callsign-window details. It corrects the header CRC's name, since SSTVAE's beacon CRC is not CRC-16/CCITT-FALSE, and three small numbers: the stream is 1,736.1 s, CE's timing slip is up to 12 symbols, and CE's tracking reference is 54.8% of its power. Rev 8 is kept at `archive/qrsstvae-options-rev8.md`.
+
+**Rev 8 (2026-10-09).** Adds waveform CE for Si5351-class beacons (section 2.5) with its thresholds (section 6.6), and a frequency-stability budget for both waveforms (section 2.6), at Jeff's request. Working out CE's distortion showed that rev 7's sign flips do not make the transmitter's distortion average away: the part that depends on each latent's own size and its neighbours' energy repeats in every pass. That would have made rev 7's multi-pass thresholds about 0.9 dB optimistic at the good level. A 64-point Walsh-Hadamard precoder after the sign flips (section 2.4) fixes it for both waveforms at no cost, so rev 7's thresholds for L stand. Rev 7 is kept at `archive/qrsstvae-options-rev7.md`, and this revision's scripts and results are in `sims/ce/`.
+
+**Rev 7 (2026-10-08).** Rev 7 replaced rev 6's decoder estimates with measurements on the real v5 decoder (build step 1, done 2026-10-08). The record, scripts, results and sample pictures are in `measure/`, starting with `measure/decoder-measurements.md`. Rev 6 was the first revision checked against the SSTVAE source: release v0.6.3 (commit cc06e87, 2026-09-23), codec checkpoint v5, and the project wiki; section 13 lists every codec fact the design relies on. Rev 6 is kept at `archive/qrsstvae-options-rev6.md` and rev 5 at `archive/qrsstvae-options-rev5.md`. The link-budget scripts are in `sims/`.
+
+**What rev 7's measurements changed.**
+
+1. **The decoder needs a little less than rev 6 estimated, and it has no cliff.** A good mode A picture needs +2.2 dB SNR per latent (rev 6: +3) and a very good one +5.7 dB (rev 6: +7). Below that, quality falls smoothly: a usable picture at -3.6 dB and a recognizable one at -9 dB per latent. The collapse below -4 dB that rev 6 took from SSTVAE's wiki is SSTVAE's acquisition, not its decoder.
+2. **Fading costs the decoder up to 3 dB in a single pass.** On a fading path each latent's SNR follows the fade, and the decoder does worse than with a steady signal of the same mean SNR. Rev 6 left this out. It is 3 dB at the good level in one pass, but only 0.15 dB after 16 passes, because independent fades average out.
+3. **So one pass needs a stronger signal than rev 6 said, and many passes a weaker one.** Good mode A picture on a quiet path: -14 dB in one pass (rev 6: -17), -30 dB after 16 passes (rev 6: -29). The lower levels go much deeper: after 16 passes, a usable picture at -34 dB and a recognizable one at -38 dB, as long as the passes can be found.
+4. **The decoder input gain must follow the SNR.** The decoder was trained on the shrinkage SSTVAE's modem applies, which grows as SNR falls, and it wants the same: g = 0.785·√(W/(W+0.39)). A fixed 0.8 (rev 6) loses 1 dB of PSNR at -6 dB per latent, and an unbiased estimate loses 0.7 dB everywhere.
+5. **Weights need one reference for the whole picture.** Normalizing each group's weights to its own median, as rev 6 did, makes a weak refinement group cost up to 2.2 dB. Against the strongest group's median a weak group never hurts, so the group display floors are gone and unequal repetition of segments is safe.
+6. **Mode C is the better use of air time unless signals are weak.** It beats mode A by 0.5 to 1 dB of PSNR once mode A alone would reach about +1 dB per latent. Below that, mode A wins by at most 0.4 dB, not rev 6's 4 dB. Mode A stays the default for weak paths.
+7. **Smaller items.** The header's segment RMS field is dropped, since the groups' RMS barely varies and the decoder does not care. The never-sent latents would help a little (+0.3 dB at the good level, nothing below), so they stay an option. Partial-pass quality for the live view is now measured.
+
+Rev 6's changes from the source check (latent counts, decoder weights, harder clipping with a per-pass scrambler, the gradual tracking model, and the parts reused from SSTVAE) all stand.

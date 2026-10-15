@@ -1,0 +1,6 @@
+pass 1990584_1500036_59cd6bf1   CE short
+  frequency   1500.036 Hz at t0   drift -0.004 Hz/min   wander 0.030 Hz rms
+  doppler    0.108 Hz   clock -47.9 ppm   Z_ref 13.0   SNR2500 -24.3 dB   kappa 1.00
+  header     K1ABC FN42 picture 7b202aad mode A segment 0 codec d1d8
+  callsign   (not read)   match Z 10.0   keying fsk   agrees
+  mean W     -7.58 dB

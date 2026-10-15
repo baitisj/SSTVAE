@@ -1,0 +1,15 @@
+tiles in state
+2026-10-15T00:07:47Z listening: /tmp/claude-0/-home-user-sstvae/92006b74-04c2-5210-829f-64b8a831fdbf/scratchpad/measure/live/full.wav (replay from 2025-09-30T23:59:49Z), frame full, waveforms CE (full) and L (l-full)
+2025-09-30T23:59:49Z slot 2025-09-30T23:45:00Z: frame started
+2025-10-01T00:00:01Z slot 2025-10-01T00:00:00Z: frame started
+2025-10-01T00:00:26Z slot 2025-10-01T00:00:00Z: signal at 1200.0 Hz, waveform CE
+2025-10-01T00:00:26Z slot 2025-10-01T00:00:00Z: 1 signal(s) at 1% (6 s)
+2025-10-01T00:10:26Z slot 2025-10-01T00:00:00Z: 1 signal(s) at 35% (5 s)
+2025-10-01T00:14:48Z slot 2025-09-30T23:45:00Z: frame over, 0 pass(es) (37 s)
+2025-10-01T00:15:01Z slot 2025-10-01T00:15:00Z: frame started
+2025-10-01T00:20:26Z slot 2025-10-01T00:00:00Z: 1 signal(s) at 69% (5 s)
+2025-10-01T00:44:49Z slot 2025-10-01T00:30:00Z: frame started
+2025-10-01T00:44:49Z slot 2025-10-01T00:00:00Z: 1 signal(s) at 100% (6 s)
+2025-10-01T00:44:49Z slot 2025-10-01T00:00:00Z: frame over, 1 pass(es) (11 s)
+2025-10-01T00:44:49Z slot 2025-10-01T00:15:00Z: frame over, 0 pass(es), 50% heard: no whole-slot search (0 s)
+2025-10-01T00:44:49Z audio ended

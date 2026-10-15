@@ -1,0 +1,686 @@
+[
+ {
+  "wave": "wave 1",
+  "kind": "performance",
+  "what": "The C++ polar list decoder is roughly an order of magnitude faster than Python's.",
+  "evidence": "C++ decode_list ~1.5 ms against Python's 12 ms (port notes); the map put Python decode at ~15-20 ms.",
+  "status": "n/a",
+  "where": "native/core/qrss/polar",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "performance",
+  "what": "lwave.resample in C++ runs at about scipy upfirdn speed.",
+  "evidence": "Porter: ~125 ns per output sample against scipy upfirdn ~100 ns. Reviewer: ~230 ns, attributed to the slow shared host.",
+  "status": "n/a",
+  "where": "native/core/qrss/lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 2",
+  "kind": "performance",
+  "what": "C++ frame_baseband is about twice as fast as Python's.",
+  "evidence": "l_tx notes: ~2x.",
+  "status": "n/a",
+  "where": "native/core/qrss/lwave",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "performance",
+  "what": "A full transmit pass is faster in C++. Sources give two different Python baselines.",
+  "evidence": "Stage 1 notes: Python 2.8 s full, 2.5 s l-full, C++ ~3x faster on CE. App commit 2b6d29b: C++ 2-4 s per pass against Python ~8 s (CE) / ~20 s (L) on 4 shared CPUs.",
+  "status": "n/a",
+  "where": "native/core/qrss tx; app",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "performance",
+  "what": "A FULL pass is large in memory, so the API offers a streaming renderer.",
+  "evidence": "Python FULL pass 14,381,304 samples, 115 MB float64. api::pass_audio ~14.4 M samples (~58 MB float32); pass_stream/PassAudio renders in blocks.",
+  "status": "n/a",
+  "where": "native/core/qrss/codec/api.hpp",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "performance",
+  "what": "The map measured Python receiver baselines for the later stages.",
+  "evidence": "SHORT pass 4.6 s (1.48 s in 152 _kf_forward, 1.40 s in 62 symbol_mf); blind FULL fit_timing 14.8 s (588 FFT pairs of 2^19); l-full fit_timing_l ~20 s (~590 FFTs at ~34 ms); audio_to_fe 0.18 s per 60 s; A2 ~0.2 s; joint SHORT acquisition 1.85 s; A3 0.3/0.8/~2.3 s, peaking ~200 MB on FULL; C beacon phase generator 2.048M samples in 0.52 s.",
+  "status": "n/a",
+  "where": "sstvae/qrss receiver",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "map",
+  "kind": "performance",
+  "what": "The map measured the Python QRSS test suite's runtime.",
+  "evidence": "Fast tier 579 tests ~200 s; slow tier 149 tests ~2 h.",
+  "status": "n/a",
+  "where": "tests/test_qrss_*",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "wave 3 rerun (stage 1 completion)",
+  "kind": "performance",
+  "what": "The parity files are slow, which is why CLAUDE.md says to run them in groups.",
+  "evidence": "tx_audio parity ~54-57 s; polar parity 44 s; header 34 s; cli+codec 121-134 s; the other 12 parity files 111 s; 2280 parity tests in all.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_*.py",
+  "group": "plan-and-stage1"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "The skeleton's PathFn and median run faster than numpy through the binding.",
+  "evidence": "Through the pybind11 binding, conversion included: PathFn fit of 4000 points over 1800 s 4.4 ms vs Python 9.0 ms; evaluating 20000 points 1.05 ms vs 1.40 ms; np.median of 100001 float32 1.06 ms vs 1.41 ms (measured on 4 shared CPUs).",
+  "status": "n/a",
+  "where": "native/core/qrss/trackbase, math/npstats",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "Without -mfma, std::fma is a library call per operation, and numpy's fused complex multiply needs two. freqz's Horner loop and oaconvolve's spectral product now run an AVX2+FMA target clone chosen at run time with __builtin_cpu_supports, giving the same bits on both paths.",
+  "evidence": "_fe_power went from about 3x slower than numpy to 1.7 ms against Python's 5.4 ms (native/core/math/convolve.cpp mul_spectra / horner dispatch; timing measured before compaction)",
+  "status": "n/a",
+  "where": "native/core/math/convolve.cpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "Building oaconvolve's whole rows x n buffers at once made the C++ 2x slower than scipy. Processing about 54 blocks at a time gives the same bits much faster.",
+  "evidence": "3400 x 2420 complex buffers, about 130 MB each: 0.85 s against scipy's 0.36-0.39 s, although pocketfft's batched transform alone matches ducc0 (0.083 s vs 0.094 s). Batched: 0.50 s including binding copies (timing2.py: before 0.829-0.850 s, after 0.501 s). FULL-slot audio_to_fe is then 0.61 s against Python's 0.68 s.",
+  "status": "n/a",
+  "where": "native/core/math/convolve.cpp oaconvolve",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "Front end on a FULL slot (920 s): everything is faster in C++ except normalise, where numpy's AVX2 sort of 512x400 blocks beats the sliding-window median. The port and the review report different Python times for audio_to_fe.",
+  "evidence": "Port (min of 3): audio_to_fe 0.61 s vs Python 0.68 s; channelise 0.17-0.21 vs 0.32-0.34 s; blank 0.62 vs 1.15 s; normalise 0.47-0.49 vs 0.26-0.49 s (load-dependent). running_median over 92,000 windows of 400 samples is ~4 us/window with a sorted sliding window (nth_element: 0.54 s; C++ 100 ms/10 ms 0.369 s, 1 s/50 ms 0.509 s). Review (4 shared CPUs), Python vs C++: audio_to_fe 3.05 vs 0.69 s; channelise 1.38 vs 0.21 s; running_median 1.07 vs 0.53 s; blank 1.03-1.59 vs 0.86-0.88 s; oaconvolve 5M x 121 1.30 vs 0.31 s; normalise 0.27-0.45 vs 0.42-0.64 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/frontend",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "The math lane's special functions and median filter run at scipy's speed, as expected from a port of the same C. The real win is the spectrogram, which reuses one buffer with fft_inplace; preamble_p is slower in C++.",
+  "evidence": "Native (RelWithDebInfo -O2, including pybind conversion) vs scipy/numpy, min of 5 (timing_math.py): spectrogram 73 frames x 9601 bins at fs 4000 25.2 vs 41.1 ms (1.63x); cfar_normalise 21.8 vs 24.3 ms; spectral_shape 11.6 vs 12.3 ms; median_filter n=9601 w=161 0.50 vs 0.62 ms, w=321 0.58 vs 0.53 ms; gammaincc k=10 on 21x400 0.85 vs 0.80 ms; gammainccinv over 300 A1 shapes 0.24 vs 0.22 ms; CubicSpline n=5161 build 0.71 vs 0.67 ms, evaluate 660 points 0.026 vs 0.031 ms; preamble_p (21,73,10) 1.51 vs 1.28 ms and (21,400,10) 8.7 vs 7.1 ms; one 16000-point fft 0.211 vs 0.205 ms.",
+  "status": "n/a",
+  "where": "native/core/math/special, ndfilter, cubic_spline, npfft; acquire_stats",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "The 2-D fft binding first went through fft_rows' vector API (np.asarray, a vector copy, a transform buffer, a copy into the result) and ran 3x slower than numpy. Copying each row into the result and calling fft_inplace there closed most of the gap.",
+  "evidence": "150 x 16000: 93-97 ms vs numpy 29-30 ms before, 36-39 ms after (timing_rows.py, commit 775e51f); the remaining gap is -O2 vs numpy's -O3 pocketfft and forcecast",
+  "status": "n/a",
+  "where": "native/bindings npfft",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "Under --native-qrss=rx the acquire suite ran only slightly faster than on Python, so the claimed 2.5x does not hold. FFTs and medians dominate and run in C on both sides; the C++ wins mostly on spectrogram framing.",
+  "evidence": "tests/test_qrss_acquire.py -m 'not slow': 20.6 s native vs 22.4 s Python; FULL spectrogram 0.39 s vs 0.50 s; cfar 0.353 s vs 0.380 s; gammaincc on 150k points 11.7 ms vs 11.5 ms",
+  "status": "n/a",
+  "where": "acquire_stats (wave 4 math review)",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "extract/extract_l gain little, because the work is gathers plus a hypot per element (np.abs must match bit for bit) plus vector allocation, which numpy already does near memory speed. Either way it costs about 10 ms per 30-minute pass.",
+  "evidence": "FULL pass, 50600 latents, genie track, best of 5 (port), Python vs native: CE joint 14.4 vs 8.0 ms (1.8x); CE plain 14.2 vs 7.9 ms; L joint 8.8 vs 5.7 ms (1.6x); L plain 7.9 vs 5.3 ms. Review (full stub, AVX-512): extract full 34.9 vs 21.3 ms (x1.6), short 2.7 vs 1.5 ms (x1.8); extract_l l-full 16.3 vs 8.7 ms (x1.9), l-short 1.8 vs 0.8 ms (x2.3); block_estimate 4.35 vs 1.23 ms (x3.5).",
+  "status": "n/a",
+  "where": "native/core/qrss/demod, ldemod",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "np::index, numpy's negative-index and bounds rule, cost a third of extract as an out-of-line call per gathered element. Inlining it with a [[noreturn]] cold thrower fixed this; every numpy-index-emulating gather should take that shape.",
+  "evidence": "callgrind: np::index 39M Ir of ~98M per extract; native extract on the FULL stub went from 24.9 ms (Python 19.3 ms) to 13.2 ms; native/core/qrss/demod.hpp index()/index_error()",
+  "status": "n/a",
+  "where": "native/core/qrss/demod.hpp",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "what": "The receive-side kernels are 1.1x to 7.6x faster in C++. _mean_template_grid gains least because exact phase arithmetic and exp dominate it.",
+  "evidence": "Port, FULL at 250 Hz: ce.matched_filter 160.9 vs 46.5 ms (3.5x); lwave.matched_filter 236.1 vs 45.8 ms (5.2x); _mean_template_grid 55.2 vs 50.9 ms; decoder_planes 8.4 vs 5.1 ms. Review, best of 3: ce.matched_filter FULL complex 190 vs 48.5 ms (x3.9), real 123 vs 16 ms (x7.6); lwave.matched_filter l-full 246 vs 46 ms (x5.3); mean_template FULL 623 vs 126 ms (x4.9); _mean_template_grid 55 vs 50 ms (x1.1); matched_filter call overhead for 3 positions 52.8 vs 8.7 us (x6).",
+  "status": "n/a",
+  "where": "native/core/qrss/ce_rx, lwave_rx, render",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "performance",
+  "what": "track() and refine_timing are several times faster in C++ on the receiver's own calls.",
+  "evidence": "Port: FULL pass track total 19.6 s -> 3.67 s (5.3x; per call 2.41/8.64/8.55 s vs 0.36/1.58/1.74 s); SHORT 0.39/1.04/1.18 s vs 0.04/0.18/0.23 s (5-10x); TINY 0.12/0.31 vs 0.01/0.06 s; refine_timing FULL 0.8767 s -> 0.2230 s (3.9x), SHORT ~3x. Review (4 shared Xeon CPUs): symbol_mf over a FULL grid 0.07-0.20 vs 0.31-0.94 s; track per call SHORT 0.18-0.36 vs 1.1-1.7 s, MEDIUM 0.10-0.50 vs 0.95-2.55 s, TINY 0.05 vs 0.30 s; refine_timing MEDIUM 0.05-0.28 vs 0.29-1.04 s; l-short receive_pass with the rows 1.71 vs 3.46 s; test_qrss_smoke 3.9 vs 7.4 s, test_qrss_ltrack 3.5 vs 6.1 s, test_qrss_lreceiver 2.5 vs 3.2 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/track",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "performance",
+  "what": "fit_timing ported as a direct sparse gather confirms plan 2b's 10-20x claim for long frames; on short frames the speed-up is mostly overhead. The gather is cheap because a run of lags within one binade shares a rounding offset, so it becomes contiguous and vectorises (AVX2 target clone, same bits).",
+  "evidence": "Port: blind n_best=8, FULL -12 dB Python 13.98 s vs C++ 1.40 s; SHORT -6 dB 0.31 vs 0.11 s; one FULL grid 0.22-0.28 s (0.29 ns per term); fit_statistic x4 0.25 s. Run-based gather took a FULL grid from 0.5 s to 0.22-0.28 s; lag/delta blocking was slower (3.12 s vs 2.26 s per FULL fit); an AVX-512 clone gave no measurable gain. Review: FULL n_best=8 Python 13.74 vs C++ 1.52 s (9.0x); one grid Python FFT 2.99 s vs 0.225 s (13.3x); SHORT 0.32 vs 0.15 s (2.1x), one grid 0.04 vs 0.009 s (4.1x). FULL nlag 1255, 147 rows, nfft 524288.",
+  "status": "n/a",
+  "where": "native/core/qrss/track_timing fit_timing",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "performance",
+  "what": "verify_track (blind fit plus the withheld track) is about 9x faster on FULL and 4.5x on SHORT.",
+  "evidence": "FULL -12: Python 16.88 s, C++ 1.85 s. SHORT -6: Python 0.63 s, C++ 0.14 s. verify on SHORT 0.27 s vs 0.67 s; on TINY 0.09 s vs 0.22 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/track_timing verify/verify_track",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "performance",
+  "what": "A1/A2 in C++ is at or slightly ahead of Python end to end, but the preamble sums and preamble_p lose to numpy. numpy does S as a BLAS zgemm, and the build is baseline SSE2 with FMA forbidden by parity. These are the levers if A2 costs too much on Android.",
+  "evidence": "Port, best of 5: A1 on a 600 s capture 11.9 vs 8.7 ms (x1.4). preamble_search per candidate from FE: CE 53.9 vs 43.4 ms (x1.2), L 59.1 vs 40.7 ms (x1.5); from a precomputed _A2Input CE 30.6 vs 39.3 ms, L 28.7 vs 29.0 ms. C++ CE breakdown: a2_input 7.2, a2_mf 0.55, preamble_sums 17.6, preamble_p 26 ms. Via binding: _a2_input CE 16.8 -> 6.9 ms, L 18.8 -> 11.2 ms; lead_in_span CE 7.9 -> 3.6 ms, L 12.6 -> 7.4 ms. S: numpy 5.5-8.6 ms vs C++ 12.7-20.4 ms; restructuring as a per-(c,f,q) correlation with a 4-way unrolled MAC cut it from 29.6 to ~18 ms with no order change. preamble_p gammaincc 26 ms vs scipy 17.5 ms. Review, best of 7, Python vs C++: _preamble_sums CE 0.0172 vs 0.0220 s, L 0.0079 vs 0.0131 s; _a2_mf 0.0013 vs 0.0006; A1 FULL 0.011 vs 0.008; preamble_search CE 0.048 vs 0.045, L 0.050 vs 0.041; lead_in_span CE 0.008 vs 0.004, L 0.013 vs 0.007.",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "performance",
+  "what": "For the whole live-only joint acquire() with only the acquire_stats rows applied, the C++ was slower than Python because of preamble_p. With the A1/A2 rows added it is faster; A3, still Python at that point, dominates.",
+  "evidence": "CE SHORT: Python 1.286 s; acquire_stats rows only 1.49 s; stats + acquire_a12 rows 1.118 s (scratchpad time_acq.py)",
+  "status": "n/a",
+  "where": "sstvae/qrss/acquire.py acquire()",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "performance",
+  "what": "A FULL-slot track_before_detect is 3-6x faster in C++ at half the peak memory. Python's biggest single cost was TbdHit.f_hz recomputing np.polyfit inside the dedup loop.",
+  "evidence": "Port: 896 frames, all_hits: Python 2.12 s / +202 MB vs C++ 0.68 s / +100 MB; with shape (FULL, L_FULL) 4.44 s vs 0.78 s; cProfile: 3816 polyfit calls = 0.97 s of 2.99 s (acquire.py:1282 and :1080). Review: 1.97, 4.54 and 2.3 s Python vs 0.64, 0.86 and 0.64 s C++ for a single CE spec, the joint shape test and the L spec; +202 MB vs +100 MB.",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_tbd",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "5",
+  "kind": "performance",
+  "what": "cwid.read_ml is 50-90x faster in C++. In Python the margin pass, a second constrained DP per character, dominates.",
+  "evidence": "2x176 LLR stack: margin=True 24.2 ms vs 0.27 ms (90x); margin=False 5.67 ms vs 0.112 ms (50x)",
+  "status": "n/a",
+  "where": "native/core/qrss/cwid read_ml",
+  "group": "stage2-waves4-5"
+ },
+ {
+  "wave": "6a",
+  "kind": "performance",
+  "what": "acquire() on a FULL slot (1800 s FE) with A3 is about 2-3x faster in C++. The live-only path barely gains.",
+  "evidence": "Port agent (time_full.py/smoke_acq.py, 2 reps, 4 shared CPUs), Python vs C++: CE alone with A3 2.88-3.14 s vs 1.15-1.33 s (2.2-2.7x). Joint (FULL, L_FULL) with A3 4.11-4.82 vs 2.24-2.42 s (1.7-2.2x). Joint live-only 1.43-1.81 vs 1.32-1.73 s (1.05-1.09x). SHORT live: single CE 0.75 vs 0.69 s, joint 1.59 vs 1.28 s. Reviewer: CE alone 2.82 s vs 0.97-1.14 s (2.5-2.9x). Joint 3.90-4.09 vs 2.14-2.17 s (1.8-1.9x). Raw complex128 single-frame SHORT live_only: 2.01 s vs 1.02 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "performance",
+  "what": "The live acquisition gains little because A2 dominates it, and A2 costs about the same in both: Python's Lambda grid is already one batched BLAS zgemm (einsum). The orchestration itself costs nothing measurable.",
+  "evidence": "prof_stages.py, best of 3, Python vs C++: preamble_search(CE) 0.052 vs 0.042 s; L 0.035 vs 0.034 s; _a2_input 0.018 vs 0.012 s; carrier_line_stats 0.015 vs 0.011 s. Joint FULL had 11 lines plus 9 pilots, i.e. 31 A2 searches.",
+  "status": "n/a",
+  "where": "acquire_a12 / acquire",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "performance",
+  "what": "ltrack's track_l and refine_timing_l are 3-7x faster in C++, unlike wave 5's track(). The gain shrinks with pass length, because the FFT filters and Kalman passes dominate there, not the interpreter.",
+  "evidence": "Port, Python/C++. l-short -6 dB: gate V 0.26/0.03 s, round A 0.93/0.21, round B 1.37/0.40, refine x4 0.68/0.22. L FULL -6 dB: gate V 1.51/0.27, A 8.92/3.54, B 11.64/3.45, refine x4 9.47/4.69. l-medium: A 4.09/1.83, B 7.26/2.10, refine 5.77/2.64. Reviewer: l-short -12 dB gate V 0.25->0.05 (4.9x), A 0.81->0.23 (3.5x), B 1.35->0.32 (4.25x), refine x4 0.68->0.24 (2.8x). L FULL -6 dB gate 1.58->0.22 (7.2x), A 10.0->3.5 (2.9x), B 11.1->3.3 (3.4x), refine x4 9.2->4.8. The whole Python receive_pass is 40.4 s on FULL and 3.2 s on l-short.",
+  "status": "n/a",
+  "where": "native/core/qrss/ltrack.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "performance",
+  "what": "For L, fit_timing_l's direct sparse gather in C++ beats Python's FFT correlation by about 9-11x on FULL. On CE the port had been 9-10x slower than Python. The reference's FFT path pays for 2x4 transforms of 2^19 points per clock error.",
+  "evidence": "Port (prof_lt.py, l-full -6 dB): blind 1529 ms vs 13253 ms (8.7x); n_best 8 1637 vs 13815 ms. fit_grid_l is about 310 ms per carrier estimate, 0.40 ns per (known x delta x lag x gather) element (2100 x 73 x 1255 x 4); fit_mixed 34 ms. l-short: 79.5 vs 250.8 ms blind, 166 vs 405 ms at n_best 8. Reviewer: L FULL blind Python 17.8 s, C++ 1.6 s (11x); n_best 8 19.5 vs 1.6 s; l-short blind 0.25 vs 0.09 s, n_best 8 0.63 vs 0.25 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/ltrack_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6a",
+  "kind": "performance",
+  "what": "verify_track_l and verify_l (gate V for L) are about 3-8x faster in C++.",
+  "evidence": "Port, C++ vs Python. l-short verify_track_l: fit=False 63.7 vs 185.9 ms, local fit 77.7 vs 249 ms, blind 131 vs 410 ms. verify_l l-short 146 vs 466 ms. L FULL verify_track_l fit=False 239 vs 1194 ms. Reviewer, Python vs C++: verify_l blind l-full 18.5 vs 2.3 s; verify_track_l fit=False l-full 1.43 vs 0.32 s (Z_ref bit-identical); local fit 1.98 vs 0.54 s; l-short verify_l 0.47 vs 0.18 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/ltrack_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "performance",
+  "what": "receive_pass in C++ against Python. The speed-up grows with frame length: about 3x on TINY, 3.5-5x on SHORT, 5-6x on CE FULL, and about 3-4x on L FULL. prepare() itself is only 1.7x (FFT/filter bound in both).",
+  "evidence": "Porter (time_full.py, 4 shared CPUs). SHORT -6: 0.83-0.94 vs 4.07-4.57 s. l-short -6: 0.97 vs 3.67 s. TINY 0.14 vs 0.5-0.7 s. CE FULL -12, verified detection: 4.5 vs 23.7-27.4 s; with gate V: 6.5 vs 40.7 s (6.3x). L FULL -12, verified: 8.3-9.0 vs 26.2-28.6 s (2.9-3.4x); with gate V: 10.3 vs 40.0 s (3.9x). Reviewer (FULL -12 seed 3): CE 6.38 vs 38.03 s, L 9.23 vs 37.17 s; prepare 2.35 vs 4.0 s; SHORT 0.66-0.83 vs 2.97-3.45 s; l-short 0.77-0.87 vs 2.78-2.91 s; TINY 0.12-0.17 vs 0.35-0.55 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/receiver.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "performance",
+  "what": "In Python, gate V alone costs 16.4 s (CE) and 18.6 s (L) per FULL pass. That is about 40% of a pass that receives an unverified detection, which is what the EM and live callers hand receive_pass every time.",
+  "evidence": "Measured: Python FULL -12, gate V vs verified-detection runs",
+  "status": "n/a",
+  "where": "sstvae/qrss/receiver.py gate V",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "performance",
+  "what": "receive_slot is 2.5-3.5x faster in C++. The per-pass tracker dominates both implementations; the slot orchestration is not where the time goes.",
+  "evidence": "Python vs C++, one run each, -O2 -ffp-contract=off: SHORT CE 4.04 vs 1.62 s (2.5x); SHORT joint 7.29 vs 2.83 s (2.6x); FULL CE 32.39 vs 9.13 s (3.5x); FULL joint 51.59 vs 16.29 s (3.2x); TINY about 1.5-2x. FULL CE split: candidates 3.08 vs 1.31 s, gate 5.81 vs 1.78 s, passes 22.03 vs 5.38 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/receiver_slot.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "performance",
+  "what": "For a plain 8 kHz int16 file, the C++ WAV read is slower than numpy's fromfile plus a vectorised divide. With resampling it is faster. Either cost is negligible against receiving the slot.",
+  "evidence": "15 min 8 kHz int16: C++ 0.074 s warm (0.124 s before replacing a checked per-sample span unpack), numpy 0.023 s. 5 min of 48 kHz stereo float32 with resampling: C++ 1.685 s, Python 2.332 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/wavread.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "performance",
+  "what": "sstvae-qrss receive is 2.3-3.5x faster than qrss_receive.py --no-store and uses less memory. These figures are what a release build does.",
+  "evidence": "runm.py, getrusage maxrss, 4 shared CPUs, C++ vs Python. SHORT CE .npz: 1.93 s / 86 MB vs 6.80 s / 204 MB. SHORT L: 2.65 s / 86 MB vs 6.00 s / 208 MB. FULL CE with --image fp32: 9.79 s / 508 MB vs 34.39 s / 667 MB. FULL L with --image: 12.48 s / 519 MB vs 31.59 s / 702 MB.",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/receive.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "performance",
+  "what": "The negative-q refusal path costs acquisition and tracking up to the first detection in both implementations. C++ 2.0 s vs Python 5.4 s on SHORT CE.",
+  "evidence": "'ce.npz --slot 1969-12-31T23:45Z py 5.37 nat 2.00', 'e-qneg.npz py 3.41 nat 1.78' (wall, 4 shared CPUs)",
+  "status": "n/a",
+  "where": "sstvae-qrss receive",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "6b",
+  "kind": "performance",
+  "what": "The FULL .npz reader holds the file buffer and a copy of fe at the same time: about 123 MB transient for 57 MB of fe. A move or mmap would halve it. Reading the truth arrays the receiver never uses costs about 9 MB.",
+  "evidence": "FULL .npz members: fe c8 7,190,652 (57.5 MB), truth_impulse_mask 7.2 MB, the other truth members about 1.9 MB",
+  "status": "open",
+  "where": "native/core/qrss/simfile.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "performance",
+  "what": "Per A-7 calibration capture the C++ is 2.0-2.4x faster. Viterbi is 9.4x faster, but CFAR (a per-frame median over 2000 bins plus the local spectral shape) is only 1.1x and is now the dominant C++ stage, so it is where the next speed-up is.",
+  "evidence": "stage_time.py, 20 captures per length, Python -> C++: 11.7->4.9, 40.7->21.1, 101.1->51.0, 273.5->138.8 ms. At 896 frames: Viterbi 133->14 ms, spectrogram 40->31 ms, CFAR 60->53 ms. numpy noise generation is 27% of the C++ capture time. test_a7_measure_tbd_gumbel under rx 42.8 s vs about 85 s; A2 tail test: reference 7.1 s, C++ 2.2 s.",
+  "status": "open",
+  "where": "acquire_stats cfar_normalise",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "performance",
+  "what": "On one joint SHORT + L_SHORT noise slot, receive_slot is 2.4x faster in C++, but C++ acquire takes 1.24 s on a TINY slot and on a SHORT one alike. Acquire's cost does not depend on length, so the length-dependent stages are not where to look first.",
+  "evidence": "slot_time.py: 'short cpp: receive_slot 1.45 s, prepare 0.29 s, acquire 1.24 s, tbd 0.08 s' vs Python 3.51 / acquire 3.16 / TBD 0.49 s (6x); 'tiny cpp: ... acquire 1.24 s' (136 s of audio vs 542 s)",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "performance",
+  "what": "Caching TbdHit.f_hz (reference fix item 4) saves under about 1 ms per acquire. The premise of thousands of polyfit calls came only from the test-only all_hits=True mode. The builder's and the reviewer's fit counts disagree; both are kept here.",
+  "evidence": "Builder (bench_acq*.py, OMP/BLAS threads 1): fits per acquire 6->3 CE SHORT, 8->3 L SHORT, 9->3 CE FULL at about 156 us each, against 0.8-2.3 s of acquire. CE SHORT median 0.85 vs 0.85 s. An earlier 3.15->1.63 s reading was warm-up and CPU load. Reviewer (fhz_count.py): spline fits 13->8 on CE FULL/SHORT, 6->5 on L FULL; all_hits=True 1790->49 fits (1.80->1.47 s). Final commit message: 8 fits for 3 hits on L SHORT, 9 for 3 on CE FULL.",
+  "status": "fixed",
+  "where": "sstvae/qrss/acquire.py TbdHit.f_hz",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "performance",
+  "what": "Gate V's blind coarse timing grid is now computed once, not twice (reference fix item 5), bit-identically. Python gate V on a noise candidate drops by 11-14 s per FULL candidate. The C++ saves 12-16% and is about 7x faster than Python.",
+  "evidence": "Builder (bench_verify.py). Python whole verify: CE FULL 74.5->63.1 s (-15%), L FULL 63.1->50.6 s (-20%), L SHORT 2.71->2.55 s, CE SHORT 4.6-4.7->4.3-4.7 s. Coarse timing only: CE FULL 46.9->35.8 s, L FULL 50.1->37.9 s. C++ (old = new + the removed n_best=1 fit, an estimate, not a before-build): CE FULL 8.33 s saves 1.10 s (12%); L FULL 6.98 s saves 1.33 s (16%); CE SHORT saves 0.07 s (8%); L SHORT 0.08-0.09 s (11%). Reviewer (ab_run.py): Python CE FULL 73.33->59.29 s, L FULL 62.25->51.39 s, CE SHORT 4.62->4.09 s, L SHORT 2.61->2.27 s (fit calls 4->2). C++ removed fit 1.16 s CE / 1.28 s L FULL. Native noise verify 8.30 s CE FULL, 7.19 s L FULL, about 7x.",
+  "status": "fixed",
+  "where": "sstvae/qrss/track.py verify, ltrack.py verify_l; track_timing.cpp, ltrack_timing.cpp",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "performance",
+  "what": "The typed C++ receive_slot is about 2.5-3x faster than the Python reference per scenario. The receiver_slot parity file's fast-tier cost is dominated by the reference, not the C++.",
+  "evidence": "time_slot.py, C++ vs Python: ce-tiny 0.89 vs 2.62 s, joint 1.36 vs 4.10 s, l-tiny 0.68 vs 2.06 s, noise 0.78 vs 1.80 s",
+  "status": "n/a",
+  "where": "rx_api receive_slot",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "performance",
+  "what": "Whole-slot receive_slot on the 13 acceptance scenarios, C++ (rx_api, conversions included) against Python. The builder's summary and the reviewer's re-measurement disagree.",
+  "evidence": "Builder: TINY 0.76-1.2 vs 1.0-2.9 s; SHORT 1.5-2.0 vs 3.7-5.1 s; joint SHORT CE+L neighbour 2.9-3.2 vs 6.9-7.0 s; '1.5 to 2.6 times, most on the longer slots'. Reviewer: that conclusion did not follow from its own ranges; measured 2.0-3.0x (Python/C++): ce-tiny-6 2.0/0.86, ce-tiny-12-joint 2.3/0.96, l-tiny-6 1.6/0.67, l-tiny-12 3.1/1.13, ce-short-12 4.6/1.54, ce-short-20 4.2/1.47, l-short-12-joint 4.1/2.03, l-short-20 5.0/1.76, ce-short-drift 4.4/1.87, ce-short-tx-ppm 4.5/1.74, l-short-rx-ppm 4.5/1.66, ce-l-neighbours 9.4/3.11, ce-short-lead-in 4.7/1.61 s.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_acceptance.py",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "7",
+  "kind": "performance",
+  "what": "CLI receive, C++ against the script, at small sizes. For the short noise file the gap is mostly interpreter start-up.",
+  "evidence": "TINY .npz 1.4 vs 2.9 s; TINY transmitted WAV 3.5 vs 8.4 s; 4 s noise WAV 0.025 vs 1.1 s",
+  "status": "n/a",
+  "where": "sstvae-qrss receive",
+  "group": "stage2-waves6-7"
+ },
+ {
+  "wave": "8",
+  "kind": "performance",
+  "what": "Wave 8's FLAC encoder (CONSTANT, FIXED and VERBATIM only) missed the ~10% size target against soundfile/libFLAC: 1.21x on lowpassed band noise, 1.31x on narrower band noise, at most 1.023x on TINY captures, 1.000x on white noise and 1.20x on a mostly unwritten hour. The review measured 1.238x on FE band noise, and the 9b listen test, run on a pre-LPC build, measured 14.5% larger.",
+  "evidence": "measure.py: 1.21/1.31, <=1.023, 1.000, 1.20; review 1.238. fe_488687.flac was 166,562 bytes from soundfile against 190,696 from the C++, with 14,400,000 samples equal. Closed by the 9b LPC encoder (0.898-0.968x).",
+  "status": "fixed",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "performance",
+  "what": "Packing a full hour of band noise took 1.43 s in C++ against 1.04 s for soundfile. During the session the encoder became 2.5x faster with byte-identical output: an exact Rice-parameter search that uses the convexity of cost(k), one fused pass for all five fixed-order abs-sums, and std::bit_width.",
+  "evidence": "bench.py/prof.py: pack_hour 1.43 s against 1.04 s; the review quoted 1.4 s against 1.0 s; test_flac.cpp golden sizes and md5 unchanged.",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "performance",
+  "what": "With LPC subframes (orders up to 12), packed hours are 0.898-0.968x soundfile's size on 8 simulated passband hours, and 0.90-0.97x on synthetic stretches. Capping the order at 8, libFLAC level 5's cap, costs about 9.6%: orders 9-12 are where the C++ beats libFLAC, because the FE's steep band edges want more poles.",
+  "evidence": "verify_hours.py sizes: 0.9022, 0.9409, 0.9011, 0.9534, 0.9677, 0.9353, 0.9001 and 0.8980x. 60 s at level 0.3: 639451 bytes at order 8 against 583421 at order 12. Review: typ_0.1 27.59 MB against 30.65 MB, typ_0.01 18.64 MB against 19.26 MB.",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "performance",
+  "what": "LPC encode time is 1.29-1.50 s per passband hour and 0.42-0.48 s for a 12%-heard hour; soundfile takes 0.36-0.76 s of wall time. The worst case is unpredictable audio, still under the ~2 s budget: white noise 1.86 s and Gaussian noise 1.78 s per hour. A packed white-noise hour is 0.08% larger than raw.",
+  "evidence": "fbench (one core, RelWithDebInfo -O2): typ_0.3 1.305 s, ssb_0.03 1.502 s, partial_0.1 0.416 s, white 1.862 s (57.65 MB against 57.6 MB raw), gauss 1.782 s. Earlier runs measured 0.41-1.51 s.",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "performance",
+  "what": "GCC 13 at -O2 uses the 'very-cheap' vectorizer cost model, which skips loops of unknown trip count, including the LPC dot product over a runtime order. Writing it as fixed blocks of eight, fed from int16 copies of the samples and coefficients (widening multiplies, since SSE2 has no pmulld), made the kernel about 6.5x faster.",
+  "evidence": "With tries=1, about 1.4 s per hour became 1.24 s with the int16 path and 1.14 s with the SLP epilogue (flac.cpp lpc_residual_t).",
+  "status": "n/a",
+  "where": "native/core/qrss/flac.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "performance",
+  "what": "On a 50-pass FULL store, the first C++ store was slower than Python where it did file I/O and faster on arithmetic. The cause was a byte-at-a-time CRC-32 over 2.5 MB accumulator archives plus eager npz reads, and slicing-by-8 CRC alone brought associate to 38.8 ms per pass. The shared-change note quotes Python at 66 ms 'at the time' and a ratio of x0.84 -> x1.76, which disagrees with the 78.1 ms timing.",
+  "evidence": "Scratch timing.py: associate per pass Py 78.1 ms against C++ 90.3 ms (x0.86); warm rebuild 1.07 against 0.32 ms per member pass (x3.38); cold load+rebuild 151.5 against 198.0 ms (x0.77); load 2.1 against 7.6 ms; save 8.7 against 17.3 ms. crcbench: 6.3 -> 1.25 ms per 2.5 MB. Slicing-by-8 applied at the wave 8 integration 136c208 (78 -> 39 ms per association pass).",
+  "status": "fixed",
+  "where": "native/core/qrss/crc32.cpp, store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "performance",
+  "what": "50 SHORT passes into one accumulator, through the Python facade with binding overhead included: rebuild of 50 members 12.1 ms against 68.2 ms (5.6x); attach with rebuild, npz and JSON write and fsync 40.3 against 52.9 ms (I/O dominated); add_pass 6.3 against 4.8 ms. The accumulator read is slower in C++, 9.5 ms against 4.5 ms, because it decodes and validates every npz member.",
+  "evidence": "scratchpad/w8r/timing.py, 2026-10-14 (w8 store review).",
+  "status": "n/a",
+  "where": "native/core/qrss/store.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "performance",
+  "what": "finish_receive, typed C++ against Python, one run each on 4 shared CPUs; the slot receiver dominates the time in both. ce-tiny whole 0.89 s against 1.72 s (1.9x); ce-tiny part 1.31 against 2.6-3.2 s (2-2.4x); l-tiny whole 0.75 against 2.18 s (2.9x); l-tiny part 1.11 against 3.29 s (3.0x); ce-short whole 1.79 against 4.97 s (2.8x); l-short whole 1.68 against 5.48 s (3.3x).",
+  "evidence": "Live build parity timing table (QRSS_PARITY_WORST=1); the live review confirmed 1.9-3.3x.",
+  "status": "n/a",
+  "where": "native/core/qrss/live.cpp finish_receive",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "8",
+  "kind": "performance",
+  "what": "FeRing is much faster in C++. Writing 8.5M samples (one ring) takes 7.8 ms against Python's 144 ms (18x), and reading a FULL slot takes 22.8 ms against 95.5 ms (4.2x). FeRing::read holds a shared lock for about 10-20 ms while it copies a FULL slot.",
+  "evidence": "Scratchpad microbenchmarks (w8 live review); live.hpp's blocking notes (live build).",
+  "status": "n/a",
+  "where": "native/core/qrss/live.cpp FeRing",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "performance",
+  "what": "Whole-listener TINY replay (run() over WavSource, 78 s of audio at -12 dB, synchronous, best of 2). CE: Python 7.94 s wall / 12.69 s CPU against C++ 2.93 / 2.88 s, which is 2.7x wall and 4.4x CPU. L: Python 11.92 / 21.09 s against C++ 3.34 / 3.28 s, which is 3.6x and 6.4x. Python's CPU exceeds its wall time because numpy's BLAS is threaded.",
+  "evidence": "scratchpad/w9a/measure.py, with the machine shared by three agents. The tiles agree to about 1e-12 Hz and 1e-12 dB.",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "performance",
+  "what": "feed() latency per 0.25 s chunk. With nothing else running: Python p50 566 us / p95 680 us, C++ p50 110 / p95 234 us. During a real background receive: Python p50 898 / p95 2340 / max 4893 us (the GIL is shared with the worker), C++ p50 226 / p95 340 / max 568 us. In the ctest, with a stubbed receive in flight: p50 97-98 us, p95 150-202 us, max 250-1504 us.",
+  "evidence": "measure_bg.py; test_qrss_core_listener output: 'p50 98.2 us, p95 201.7 us, max 1503.9 us (120 chunks of 0.25 s)'.",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.cpp feed",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "performance",
+  "what": "Code size: listener.cpp is 1931 lines plus a 441-line header, against about 1000 lines for live.py's LiveListener and run(). The pybind layer is 947 lines, because it must hand Python seams back their own objects and keep the GIL out of the listener's lock.",
+  "evidence": "git diff --stat 136c208 HEAD (9a listener build).",
+  "status": "n/a",
+  "where": "native/core/qrss/listener.*, native/bindings/module/qrss/listener.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "performance",
+  "what": "sstvae-qrss decode against qrss_decode.py on the same store, best of 3: --list 0.030 s against 1.131 s; a --key full render 0.578 s against 1.679 s at fp32, and 0.620 s against 1.599 s at fp16. Most of the script's time is imports and the model load.",
+  "evidence": "Subprocess timing in the codec tree, 2026-10-14.",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/decode.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "performance",
+  "what": "Binary size of sstvae-qrss (RelWithDebInfo, with debug info): 62.4 MB plain and 68.4 MB with the codec glue at 9a; 75.6 MB unstripped without the codec and 81.9 MB in the codec build at 9b, and 4.3 MB stripped.",
+  "evidence": "ls -l and strip (9a sources build; 9b listen build and review).",
+  "status": "n/a",
+  "where": "sstvae-qrss",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "performance",
+  "what": "sstvae-qrss listen against qrss_listen.py, in the review's figures after its RSS fix: TINY CE+L replay 5.4-5.9 s wall / 7.5-8.5 s CPU against 10.1 / 13.2 s; SHORT replay 5.4 / 6.4 s against 15.7 / 19.1 s. Peak RSS: TINY 73-78 MB (96 MB in the codec build) against 174 MB; SHORT 178 MB against 386 MB. The build lane reported TINY CPU 7.3-7.6 against 12.4-13.0 s (about 1.7x) and SHORT CPU 5.6-5.9 against 16.9-18.1 s (about 3x), with its SHORT RSS (177-227 against 379-428 MB) read through pytest's os.wait4.",
+  "evidence": "tests/test_qrss_native_listen.py -s output; _run/meas.py rusage (the build); the review's corrected launcher measurement.",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/listen.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "performance",
+  "what": "Session latency and stop times. Session::push: p50 22 us, p95 28-38 us, max 90 us while a receive runs (p95 81 us under TSan). stop(): 0.08 s clean, 1.25 s with a receive held. After stdin EOF the C++ exits in 0.00-0.01 s against Python's 0.17-0.22 s, and in 1.27 s with an end-of-slot receive in flight. SIGTERM exits in 0.11 s, or 1.27-1.32 s with a receive in flight.",
+  "evidence": "ctest qrss_core_listen_api; test_stdin, test_eof_with_a_receive_in_flight and test_a_signal_stops_it.",
+  "status": "n/a",
+  "where": "native/core/qrss/listen_api.cpp",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9b",
+  "kind": "performance",
+  "what": "ThreadSanitizer slows the QRSS DSP tests far more than the file and thread tests, so receiver_slot cannot fit ctest's 120 s TIMEOUT. The follow-up measured a listener refresh/receive running about 25x slower under TSan. Any per-test timeout must be sized for the sanitizer build.",
+  "evidence": "Normal build: receiver_slot 20.1 s, tx_audio 5.9 s, passband 2.5 s, listener 5.1 s, store 4.2 s. TSan: receiver_slot about 255 s, tx_audio 34.7 s, passband 16.5 s, listener 49.2 s, store 44.9 s, acquire 98.9 s. Follow-up: listener test 6 s optimized against 57.9 s under TSan.",
+  "status": "n/a",
+  "where": "native/tests (TSan)",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "performance",
+  "what": "Fast tiers on 4 shared CPUs: 61 qrss_core ctests in 39 s; live+live_l 24.5 s plain and 17.1 s native; multipass+frontend 11.8 / 7.9 s; em+cli 19.0 / 13.7 s; sources parity, 19 tests, in about 2 s; decode parity, 52 plain-tree tests in 89 s and 7 codec side-by-side tests in 108 s; the CLI and paths parity files 124 s together. An incremental rebuild after a one-file change takes about 10-15 s at -j2.",
+  "evidence": "9a reference-fixes insight and sources review timings, 2026-10-14.",
+  "status": "n/a",
+  "where": "tests/test_qrss_native_*.py, ctest",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "9a",
+  "kind": "performance",
+  "what": "expire() lists the passband store directory twice per write, once for hours() and once for the temporary sweep. That is negligible at tens of files, but it could be one listing.",
+  "evidence": "Inferred from code: native/core/qrss/passband.cpp expire(), frontend.py expire() (9a reference-fixes review).",
+  "status": "open",
+  "where": "native/core/qrss/passband.cpp, sstvae/qrss/frontend.py",
+  "group": "stage3-waves8-9"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "performance",
+  "what": "Tail statistics and em shared pieces through the binding against Python: template_z about 210x, _gauss_z about 700x, prior_from 2.8x; the reviewer's figures for em_prior, known_header and template_z agree in kind. The template search calls template_z per candidate cell set, so the retro lane gets this for free.",
+  "evidence": "build (scratchpad/emgen/timing.py, 20-5000 calls each): template_z 1.1 us vs 236 us; far-tail branch 1.1 us vs 123 us; _gauss_z 0.1 us vs 72 us; prior_from on a FULL pass (50600 latents) 1.77 ms vs 5.04 ms. Review (scratchpad/rv10/bench.py, warm page cache, 2026-10-14): em_prior on six FULL members 11.9 ms vs 3.3 ms; known_header 10.7 ms vs 1.5 ms (one polar list header decode 11.6 ms -> 1.27 ms); template_z 110-186 us -> 1.1 us",
+  "status": "n/a",
+  "where": "native/core/qrss/em.cpp, native/core/math/special",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/skeleton",
+  "kind": "performance",
+  "what": "known_keying is SLOWER in C++ than Python because it loads every member's whole pass file (~3.6 MB for FULL, ~5 ms each in C++); the reviewer suspects the store lane's CRC32 (slicing-by-8) against zlib's PCLMUL crc32 plus extra copies in load_pass, and says it is worth a look in the store lane, not in em.",
+  "evidence": "known_keying 31.7 ms C++ vs 23.7 ms Python, measured 2026-10-14 with bench.py; cause inferred from code (native/core/qrss store crc32.cpp)",
+  "status": "open",
+  "where": "native/core/qrss/store.cpp load_pass / crc32.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/em",
+  "kind": "performance",
+  "what": "pass_path, rereceive and em_refine are 4-8x faster than Python single-threaded with the reference's arithmetic (build's scratch timings); the reviewer's parity-file ratios put it at 3-5x.",
+  "evidence": "build (scratch time_both.py, 2026-10-14, simulated -6 dB passes, one thread, RelWithDebInfo; C++ vs Python s): pass_path TINY 0.05 vs 0.21, SHORT 0.19 vs 0.94, FULL 1.09 vs 6.07; rereceive receive_pass branch TINY 0.06 vs 0.36, SHORT 0.32 vs 2.59, FULL 3.37 vs 18.27; hdr split (path given) SHORT 1.01 vs 4.94, FULL 4.22 vs 22.95; no split SHORT 0.54 vs 3.00, FULL 3.24 vs 17.35; split measuring its own path SHORT 1.18 vs 6.70, FULL 4.98 vs 29.37; em_refine one round over 3 TINY 0.31 vs 1.68, over 2 SHORT 1.98 vs 10.22; ratios 0.12-0.24; parity-file ratios 0.20-0.28 rereceive, 0.19-0.22 em_refine. Review (tests/test_qrss_native_em_refine.py _print_worst): em_refine 0.316, SHORT rereceive 0.186, TINY rereceive 0.278",
+  "status": "n/a",
+  "where": "native/core/qrss/em_refine.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "performance",
+  "what": "Template search is about 2-2.6x faster than Python and retro_detect about 2.4x, from exact precomputation (per-candidate channel/derotation/N0 reused across segments, FR FFTs cached per chunk start, the roll as an index offset, 32-row batched pocketfft, AVX2+FMA clones of the product and |C|^2 loops). receiver::prepare is ~2.5 s of FULL's 6.3 s.",
+  "evidence": "build (scratchpad/w10r/timing.py, best of 3/2/1, shared 4-CPU container; one FULL-pass accumulator, 1 segment, 1 candidate, 5 clock steps): raw FE Capture TINY 0.17 vs 0.33 s, SHORT 0.88 vs 1.93 s, FULL 6.3 vs 16.6 s; on a receiver.Prepared 0.10 vs 0.23, 0.62 vs 1.42, 3.8 vs 12.6 s; Z identical (dZ 0 to 3.6e-15). retro_detect (timing_retro.py, seven-slot world): SHORT 4.9 vs 12.1 s, TINY 1.14 vs 2.77 s, second run SHORT 2.55 vs 5.0 s; under --native-qrss=rx decode --retro 7.7 s and test_qrss_em's retro test 2.6 s (was 7.2 s). Review (probe_cw.py): TINY 0.27-0.34 s vs 0.53-0.75 s; SHORT 1.4 s vs 3.2 s",
+  "status": "n/a",
+  "where": "native/core/qrss/em_search.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/retro",
+  "kind": "performance",
+  "what": "The search is FFT-bound and both sides use pocketfft, so the gain is ~2.2-3.3x, not 10x. Per search_chan call the products went to an AVX2 clone, |C|^2 to an AVX2 branch-free hypot (bit-identical, NaN/inf lanes checked), and the IFFTs to 32-row batched pocketfft calls (memcmp-identical).",
+  "evidence": "scratchpad/w10r/bench_parts.cpp, bench_batch.cpp, bench_abs.cpp: per search_chan call (K=128, 19 bins) products 27 ms, |C|^2 28 ms, IFFTs 53 ms per-row -> 36 ms batched; total 111 -> 65 ms vs numpy 175 ms",
+  "status": "n/a",
+  "where": "native/core/qrss/em_search.cpp _search_chan",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "performance",
+  "what": "End-to-end CLI wall time C++ against Python on a two-member store (SHORT + TINY with captures), including process start, codec load and fp16 render: decode --em 2 is 4.5x faster; decode --retro with slots held (mostly fixed cost) 2.9x. The whole no-Python chain (encode, listen replay of a 1201 s recording, --list, --retro SHORT find, --em 1) takes 12.8 s.",
+  "evidence": "scratchpad timeit.py run 2026-10-14: decode --em 2 1.22 s vs 5.51 s; decode --retro 0.60 s vs 1.75 s; ctest qrss_core_em_chain output: [listen] 7.8 s, [retro] 1.7 s, [em] 1.7 s (12.8 s total; 12.7 s in the review's run)",
+  "status": "n/a",
+  "where": "native/apps/sstvae_qrss/decode.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "performance",
+  "what": "Blocking cost per unit of work for an app worker thread calling em_api (measured RelWithDebInfo, one core of a shared 4-CPU box): refine per pass re-received, times rounds (default 3, stopping early under 0.05 dB gain); retro per slot searched plus a receive per find.",
+  "evidence": "integrate build notes: refine TINY ~0.1 s, SHORT 0.3-1.2 s, FULL 3-5 s per pass; retro TINY ~0.2 s, SHORT ~0.9 s, FULL ~6 s per slot; a full 48 h passband store (192 slots) ~3 min SHORT, ~20 min FULL",
+  "status": "n/a",
+  "where": "native/core/qrss/em_api.hpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "10/integrate",
+  "kind": "performance",
+  "what": "em_api always installs a progress hook, so em_refine reads every member's pass file once more per round (eligible()) to size the total. Negligible on TINY, but it is a full pass read on FULL passes. (The EM lane recorded the same extra read before round 1 as a deviation: a pass that cannot be read counts, since the round will meet its error.)",
+  "evidence": "native/core/qrss/em_refine.cpp eligible(), inferred from code; refine of 2 rounds over 3 TINY passes 0.52 s",
+  "status": "open",
+  "where": "native/core/qrss/em_refine.cpp / em_api.cpp",
+  "group": "stage4-wave10"
+ },
+ {
+  "wave": "6b (receiver) and app 39fa50c",
+  "kind": "performance",
+  "status": "fixed",
+  "where": "native/core/qrss/track.cpp kf_forward; receiver_slot; app listener",
+  "what": "Ideas-doc O8 (move the pure-Python Kalman forward/backward loops, 28-30% of CE receive CPU, into compiled code) is made moot by the port: the whole receiver is C++, and since 2026-10-14 the app's listener is the C++ 'sstvae-qrss listen', not the venv Python the doc assumed. The C++ gain shrinks with pass length, because FFT filters and the Kalman passes then dominate even in C++.",
+  "evidence": "wave 6b: receive_slot Python vs C++ SHORT CE 4.04 vs 1.62 s (2.5x), SHORT joint 7.29 vs 2.83 s (2.6x), FULL CE 32.39 vs 9.13 s (3.5x), FULL joint 51.59 vs 16.29 s (3.2x), TINY about 1.5-2x. Wave 6a: track_l L FULL -6 dB Python/C++ gate V 1.51/0.27 s, round A 8.92/3.54 s, round B 11.64/3.45 s, refine_timing_l 9.47/4.69 s; 'The C++ gain shrinks with pass length, because the FFT filters and the Kalman passes dominate there'. UI commit 39fa50c 2026-10-14 17:34Z 'QRSS app: listen with sstvae-qrss listen, not qrss_listen.py'; packaging ships sstvae-qrss beside the app (8cd20f5). Doc's O8 figure: _kf_forward 712 calls, 5.47 s of 19.2 CPU s on CE SHORT; doc said the app ran the listener from the repo venv (native/gui/qrss_window.cpp:520-538).",
+  "group": "format"
+ },
+ {
+  "wave": "9a, 9b",
+  "kind": "performance",
+  "status": "n/a",
+  "where": "sstvae-qrss listen vs qrss_listen.py",
+  "what": "The joint-listening CPU problem the doc measured in Python (a CE SHORT recording took 12.6 s listening for both against 7.7 s with --just-ce) is about 3x smaller in the C++ listener, with less than half the memory. Two measurements of SHORT disagree slightly; both kept.",
+  "evidence": "wave 9a: whole-listener TINY replay, 78 s audio at -12 dB, CE Python 7.94 s wall / 12.69 s CPU vs C++ 2.93 / 2.88 s; L 11.92 / 21.09 vs 3.34 / 3.28 s. Wave 9b build: TINY CE+L C++ 7.3-7.6 s CPU vs Python 12.4-13.0 s; SHORT replay plus FLAC pack C++ 5.6-5.9 s CPU vs Python 16.9-18.1 s, wall 4.5-5.9 vs 14.0-15.5 s, RSS 177-227 vs 379-428 MB. Wave 9b review (after fixing the pytest ru_maxrss floor): TINY 10.1 s wall / 13.2 s CPU Python vs 5.4-5.9 / 7.5-8.5 s C++; SHORT 15.7 / 19.1 s vs 5.4 / 6.4 s; peak RSS TINY 174 MB vs 73-78 MB (96 MB codec build), SHORT 386 vs 178 MB; binary 75.6 MB plain, 81.9 MB codec.",
+  "group": "format"
+ },
+ {
+  "wave": "10",
+  "kind": "performance",
+  "status": "n/a",
+  "where": "native/core/qrss/em.cpp, em_refine.cpp, em_search.cpp; sstvae-qrss decode",
+  "what": "EM re-receive and the known-waveform template search, which the doc's R10, L2, L5 and O12 build on, now run in C++ at 2-5x Python's speed, which lowers those ideas' CPU cost.",
+  "evidence": "wave 10: decode --em 2 1.22 s vs 5.51 s (4.5x); decode --retro 0.60 vs 1.75 s; template_search one-FULL-pass accumulator TINY 0.17 vs 0.33 s, SHORT 0.88 vs 1.93 s, FULL 6.3 vs 16.6 s (receiver::prepare about 2.5 s of FULL's 6.3 s); retro over 7 SHORT slots 4.9 vs 12.1 s; em_prior six FULL members 11.9 vs 3.3 ms; known_header 10.7 vs 1.5 ms; template_z 236 us vs 1.1 us; no-Python chain ctest 12.8 s total.",
+  "group": "format"
+ },
+ {
+  "wave": "5, 6a",
+  "kind": "performance",
+  "status": "n/a",
+  "where": "native/core/qrss/acquire_a12.cpp preamble_search",
+  "what": "The port did not make live acquisition much cheaper, so the doc's CPU costs for adding A2 lines (R3, L1, L7, priced at 30-101 ms per line) still hold roughly: A2 per line costs about the same in C++ as in numpy, whose Lambda grid is already one BLAS call.",
+  "evidence": "wave 5: preamble_search per candidate from FE, CE Python 53.9 vs C++ 43.4 ms (x1.2), L 59.1 vs 40.7 ms (x1.5); C++ CE breakdown a2_input 7.2, a2_mf 0.55, preamble_sums 17.6, preamble_p 26 ms. Wave 6a: 'The live path barely gains because A2 dominates': preamble_search CE 0.052 vs 0.042 s, L 0.035 vs 0.034 s. Wave 4: tests/test_qrss_acquire.py fast tier 20.6 s native vs 22.4 s Python. Doc: A2 81-101 ms per line on shared CPUs (opt/verify_feas/m2_a2.py).",
+  "group": "format"
+ },
+ {
+  "wave": "4",
+  "kind": "performance",
+  "status": "open",
+  "where": "native/core/qrss/ce_rx.cpp, lwave_rx.cpp matched filters",
+  "what": "Doc idea O16 (a data-band matched filter by convolution and interpolation) was not built; the C++ keeps the closed-form gather for parity but runs it 3.5-5.2x faster, which shrinks O16's remaining value.",
+  "evidence": "wave 4: on FULL at 250 Hz ce.matched_filter 160.9 ms Python vs 46.5 ms native (3.5x), lwave.matched_filter 236.1 vs 45.8 ms (5.2x). Doc O16: symbol_mf 1.47 s of 5.5 CPU s on L SHORT joint, ~25% of an L pass (inferred).",
+  "group": "format"
+ }
+]

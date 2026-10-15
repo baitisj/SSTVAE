@@ -1,0 +1,7 @@
+pass 1954752_1200008_41c8f47d   CE full
+  frequency   1200.008 Hz at t0   drift +0.000 Hz/min   wander 0.001 Hz rms
+  doppler    0.026 Hz   clock +0.0 ppm   Z_ref 251.0   SNR2500 -6.0 dB   kappa 0.93
+  header     K1ABC FN42 picture 7b202aad mode A segment 0 codec d1d8
+  callsign   K1ABC   match Z 697.0   keying fsk   agrees
+  mean W     +9.12 dB
+image: img/py-listenwav-full.png

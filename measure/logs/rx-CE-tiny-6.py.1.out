@@ -1,0 +1,5 @@
+pass 1990584_1499988_178ade4f   CE tiny
+  frequency   1499.988 Hz at t0   drift -0.011 Hz/min   wander 0.033 Hz rms
+  doppler    0.108 Hz   clock +39.5 ppm   Z_ref 34.3   SNR2500 -6.9 dB   kappa 1.57
+  header     not decoded
+  mean W     +7.36 dB
