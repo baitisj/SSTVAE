@@ -2,11 +2,12 @@
 
 **Send pictures over HF radio using a neural image codec instead of scanlines or file bytes.**
 
-SSTVAE is an experimental amateur-radio image mode. A convolutional
+SSTVAE (and QRSSTVAE) are experimental amateur-radio image modes. A convolutional
 autoencoder compresses your image into a few hundred thousand
 *continuous-valued* numbers ("latents"), and those numbers are sent
-directly as OFDM carrier amplitudes — no bits, no packets, no JPEG. The
-decoder network is trained with a simulated HF channel in the loop, so
+directly as OFDM carrier amplitudes, a phase-modulated constant carrier, or
+a single-carrier analog I/Q signal paired with a pilot tone. There are no
+bits, no packets, no JPEG. A decoder network is trained with a simulated HF channel in the loop, so
 noise and fading push the picture quality gently downhill instead of
 breaking it.
 
@@ -73,13 +74,13 @@ Scottie 2 is 320×256 *by design* — it isn't failing, it's doing its job
 at its own resolution.)
 
 Three modes, **32 / 64 / 95 s**, in **~1200 Hz**, at 640×480 — the same
-airtime and bandwidth as the common analog modes. Across the range where
-acquisition is reliable, 20 dB down to 3 dB SNR, the picture gives up
-just **1.4 dB of PSNR for a 17 dB drop in channel SNR**. That gentle
-slope is the entire point of the design. The cliff hasn't been abolished
-so much as moved off the picture and onto acquisition: below about 0 dB
-you increasingly get *no* picture rather than a poor one — which is a
-much better place for it.
+airtime and bandwidth as the common analog modes. From 20 dB down to
+0 dB SNR, mode C gives up just **1.9 dB of PSNR for a 20 dB drop in
+channel SNR** (2.5 to 2.7 dB on simulated fading). That gentle slope is
+the entire point of the design. The cliff hasn't been abolished so much
+as moved off the picture and onto acquisition: on fading channels,
+below about −2 dB you increasingly get *no* picture rather than a poor
+one — which is a much better place for it.
 
 Two things it costs you:
 
@@ -100,6 +101,19 @@ row-by-row table against analog SSTV, HamDRM and SSDV in
 [Comparison with other modes](https://github.com/arodland/SSTVAE/wiki/Comparison-with-other-modes),
 and the beacon, nested modes and waveform in
 [How it works](https://github.com/arodland/SSTVAE/wiki/How-it-works).
+
+## QRSSTVAE
+
+**A slow, narrow variant in the spirit of QRSS beacons.**
+It sends the same v5 latents on either a constant-amplitude
+carrier about 50 Hz wide, or on a single-carrier analog I/Q signal beside
+a steady pilot, about 22 Hz wide in all.
+
+These are sent in 30-minute passes that start on the quarter hour.
+Receivers average repeated passes of a picture, so it can build
+up from signals far below the noise. The constant-amplitude carrier is
+designed so that an Si5351 clock-chip beacon can generate it directly.
+See [docs/qrss/README.md](docs/qrss/README.md).
 
 ## Get the app
 
@@ -229,6 +243,9 @@ still images; any mistakes in the translation are mine.
 The autoencoder is trained on **[COCO](https://cocodataset.org)**
 (Common Objects in Context), Lin *et al.*, 2014 — resized to 640×480 as
 `arodland/coco640-sstvae` on the Hugging Face Hub.
+
+QRSSTVAE user interface including the scheduler was designed and implemented
+by Jeff Baitis (call sign: AG7EW).
 
 The photographs used on this page are my own.
 

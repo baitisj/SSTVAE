@@ -51,6 +51,27 @@ target_include_directories(test_beacon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME beacon COMMAND test_beacon)
 set_tests_properties(beacon PROPERTIES TIMEOUT 240)
 
+# The catalog: reading a folder of templates, never failing on a bad
+# file, and the "Save as" filename helper.
+add_executable(test_template_catalog test_template_catalog.cpp)
+target_link_libraries(test_template_catalog PRIVATE sstvae_core)
+target_include_directories(test_template_catalog PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME template_catalog
+         COMMAND test_template_catalog
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../../sstvae/overlay/templates)
+set_tests_properties(template_catalog PROPERTIES TIMEOUT 60)
+
+# Template substitution against the reference's rules, and the shipped
+# templates themselves, which are read from the Python package so the
+# apps and the CLI cannot drift apart on what "Reply" says.
+add_executable(test_overlay_template test_overlay_template.cpp)
+target_link_libraries(test_overlay_template PRIVATE sstvae_core)
+target_include_directories(test_overlay_template PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME overlay_template
+         COMMAND test_overlay_template
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../../sstvae/overlay/templates)
+set_tests_properties(overlay_template PROPERTIES TIMEOUT 60)
+
 add_executable(test_log test_log.cpp)
 target_link_libraries(test_log PRIVATE sstvae_core)
 target_include_directories(test_log PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -207,9 +228,16 @@ if(TARGET sstvae_overlay_render)
   target_link_libraries(test_overlay_render PRIVATE sstvae_core
                         sstvae_overlay_render Qt6::Core Qt6::Gui)
   target_include_directories(test_overlay_render PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  add_test(NAME overlay_render COMMAND test_overlay_render)
+  add_test(NAME overlay_render
+           COMMAND test_overlay_render ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)
   set_tests_properties(overlay_render PROPERTIES TIMEOUT 300)
 endif()
+
+add_executable(test_slow_spectrogram test_slow_spectrogram.cpp)
+target_link_libraries(test_slow_spectrogram PRIVATE sstvae_core)
+target_include_directories(test_slow_spectrogram PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME slow_spectrogram COMMAND test_slow_spectrogram)
+set_tests_properties(slow_spectrogram PROPERTIES TIMEOUT 300)
 
 add_executable(test_spectrum test_spectrum.cpp)
 target_link_libraries(test_spectrum PRIVATE sstvae_core)
@@ -248,6 +276,10 @@ if(TARGET sstvae_gui)
   target_include_directories(test_tx_panel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   sstvae_hamlib_copy_runtime(test_tx_panel)
   sstvae_onnxruntime_copy_runtime(test_tx_panel)
+  # `TransmitPanel::builtin_templates_dir()` looks beside the executable
+  # -- see native/CMakeLists.txt -- and this is the one test that
+  # constructs a real `TransmitPanel`.
+  sstvae_copy_builtin_templates(test_tx_panel)
   add_test(NAME tx_panel COMMAND test_tx_panel)
   set_tests_properties(tx_panel PROPERTIES TIMEOUT 300)
 
@@ -258,6 +290,22 @@ if(TARGET sstvae_gui)
   sstvae_onnxruntime_copy_runtime(test_overlay_editor)
   add_test(NAME overlay_editor COMMAND test_overlay_editor)
   set_tests_properties(overlay_editor PROPERTIES TIMEOUT 300)
+
+  add_executable(test_share test_share.cpp)
+  target_link_libraries(test_share PRIVATE sstvae_gui)
+  target_include_directories(test_share PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  sstvae_hamlib_copy_runtime(test_share)
+  sstvae_onnxruntime_copy_runtime(test_share)
+  add_test(NAME share COMMAND test_share)
+  set_tests_properties(share PROPERTIES TIMEOUT 300)
+
+  add_executable(test_item_menu test_item_menu.cpp)
+  target_link_libraries(test_item_menu PRIVATE sstvae_gui)
+  target_include_directories(test_item_menu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  sstvae_hamlib_copy_runtime(test_item_menu)
+  sstvae_onnxruntime_copy_runtime(test_item_menu)
+  add_test(NAME item_menu COMMAND test_item_menu)
+  set_tests_properties(item_menu PROPERTIES TIMEOUT 300)
 
   add_executable(test_crop_view test_crop_view.cpp)
   target_link_libraries(test_crop_view PRIVATE sstvae_gui)
@@ -282,6 +330,13 @@ if(TARGET sstvae_gui)
   sstvae_onnxruntime_copy_runtime(test_picture_box)
   add_test(NAME picture_box COMMAND test_picture_box)
   set_tests_properties(picture_box PROPERTIES TIMEOUT 300)
+  add_executable(test_image_viewer test_image_viewer.cpp)
+  target_link_libraries(test_image_viewer PRIVATE sstvae_gui)
+  target_include_directories(test_image_viewer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  sstvae_hamlib_copy_runtime(test_image_viewer)
+  sstvae_onnxruntime_copy_runtime(test_image_viewer)
+  add_test(NAME image_viewer COMMAND test_image_viewer)
+  set_tests_properties(image_viewer PROPERTIES TIMEOUT 300)
 
   add_executable(test_pane_container test_pane_container.cpp)
   target_link_libraries(test_pane_container PRIVATE sstvae_gui)
@@ -290,6 +345,30 @@ if(TARGET sstvae_gui)
   sstvae_onnxruntime_copy_runtime(test_pane_container)
   add_test(NAME pane_container COMMAND test_pane_container)
   set_tests_properties(pane_container PROPERTIES TIMEOUT 300)
+
+  add_executable(test_qrss_window test_qrss_window.cpp)
+  target_link_libraries(test_qrss_window PRIVATE sstvae_gui)
+  target_include_directories(test_qrss_window PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  sstvae_hamlib_copy_runtime(test_qrss_window)
+  sstvae_onnxruntime_copy_runtime(test_qrss_window)
+  add_test(NAME qrss_window COMMAND test_qrss_window)
+  set_tests_properties(qrss_window PROPERTIES TIMEOUT 120)
+
+  add_executable(test_qrss_tx test_qrss_tx.cpp)
+  target_link_libraries(test_qrss_tx PRIVATE sstvae_gui)
+  target_include_directories(test_qrss_tx PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  sstvae_hamlib_copy_runtime(test_qrss_tx)
+  sstvae_onnxruntime_copy_runtime(test_qrss_tx)
+  add_test(NAME qrss_tx COMMAND test_qrss_tx)
+  set_tests_properties(qrss_tx PROPERTIES TIMEOUT 120)
+
+  add_executable(test_qrss_schedule test_qrss_schedule.cpp)
+  target_link_libraries(test_qrss_schedule PRIVATE sstvae_gui)
+  target_include_directories(test_qrss_schedule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  sstvae_hamlib_copy_runtime(test_qrss_schedule)
+  sstvae_onnxruntime_copy_runtime(test_qrss_schedule)
+  add_test(NAME qrss_schedule COMMAND test_qrss_schedule)
+  set_tests_properties(qrss_schedule PROPERTIES TIMEOUT 60)
 
   add_executable(test_waterfall test_waterfall.cpp)
   target_link_libraries(test_waterfall PRIVATE sstvae_gui)
@@ -301,3 +380,67 @@ if(TARGET sstvae_gui)
 endif()
 
 
+
+# --- QRSSTVAE core (native/core/qrss) ------------------------------------------
+# One executable per tests/qrss/test_<module>.cpp, globbed so a ported
+# module adds its test without editing this file; ctest names are
+# qrss_core_<module>. Keyed on the target, not the option, for the
+# reason given above add_subdirectory(tests) in ../CMakeLists.txt. Each
+# gets the QRSS golden corpus directory as its one argument.
+#
+# The TIMEOUT is sized for an optimized build. Under ThreadSanitizer (the
+# CI tsan job's -fsanitize=thread) the slowest ones run many times longer
+# -- acquire 99 s, receiver_slot about 255 s, on 4 shared CPUs -- so there
+# it is 1500 s: still the bound on a wedged test, never the expected time.
+if(TARGET sstvae_qrss)
+  set(_qrss_core_timeout 120)
+  if(CMAKE_CXX_FLAGS MATCHES "-fsanitize=thread")
+    set(_qrss_core_timeout 1500)
+  endif()
+  file(GLOB _qrss_core_tests CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/qrss/test_*.cpp)
+  foreach(_src ${_qrss_core_tests})
+    get_filename_component(_name ${_src} NAME_WE)
+    string(REGEX REPLACE "^test_" "" _mod ${_name})
+    add_executable(test_qrss_core_${_mod} ${_src})
+    target_link_libraries(test_qrss_core_${_mod} PRIVATE sstvae_qrss)
+    target_include_directories(test_qrss_core_${_mod} PRIVATE
+                               ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/qrss)
+    if(NOT MSVC)
+      target_compile_options(test_qrss_core_${_mod} PRIVATE -ffp-contract=off)
+    endif()
+    add_test(NAME qrss_core_${_mod}
+             COMMAND test_qrss_core_${_mod} ${CMAKE_CURRENT_SOURCE_DIR}/golden_qrss)
+    set_tests_properties(qrss_core_${_mod} PROPERTIES TIMEOUT ${_qrss_core_timeout})
+  endforeach()
+endif()
+
+# The codec glue (native/core/qrss/codec): only with SSTVAE's codec, so not
+# in the glob above, which every build compiles. Writes the ONNX models it
+# reads; checks the v5 artifacts too when they are on this machine.
+if(TARGET sstvae_qrss_codec)
+  add_executable(test_qrss_core_codec qrss/codec/test_codec.cpp)
+  target_link_libraries(test_qrss_core_codec PRIVATE sstvae_qrss_codec)
+  target_include_directories(test_qrss_core_codec PRIVATE
+                             ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/qrss)
+  if(NOT MSVC)
+    target_compile_options(test_qrss_core_codec PRIVATE -ffp-contract=off)
+  endif()
+  sstvae_onnxruntime_copy_runtime(test_qrss_core_codec)
+  add_test(NAME qrss_core_codec COMMAND test_qrss_core_codec)
+  set_tests_properties(qrss_core_codec PROPERTIES TIMEOUT 120)
+endif()
+
+# sstvae-qrss's subcommands, run in-process from the CLI's object library
+# (whichever it holds: encode only with the codec).
+if(TARGET sstvae_qrss_cli)
+  add_executable(test_qrss_core_cli qrss/cli/test_cli.cpp)
+  target_link_libraries(test_qrss_core_cli PRIVATE sstvae_qrss_cli)
+  target_include_directories(test_qrss_core_cli PRIVATE
+                             ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/qrss)
+  if(NOT MSVC)
+    target_compile_options(test_qrss_core_cli PRIVATE -ffp-contract=off)
+  endif()
+  sstvae_onnxruntime_copy_runtime(test_qrss_core_cli)
+  add_test(NAME qrss_core_cli COMMAND test_qrss_core_cli)
+  set_tests_properties(qrss_core_cli PROPERTIES TIMEOUT 120)
+endif()

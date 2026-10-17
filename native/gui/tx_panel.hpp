@@ -10,36 +10,46 @@
 
 #include <QWidget>
 
+#include <array>
 #include <atomic>
+#include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "images/images.hpp"
 #include "images/types.hpp"
 #include "optimize/speculative.hpp"
 #include "overlay/model.hpp"
+#include "overlay/template.hpp"
+#include "qrss_schedule.hpp"
+#include "qrss_tx.hpp"
 #include "tx/engine.hpp"
 
-class QColor;
 class QComboBox;
-class QDoubleSpinBox;
 class QDragEnterEvent;
 class QDropEvent;
 class QGroupBox;
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QProgressBar;
 class QPushButton;
 class QSlider;
 class QTimer;
+class QToolButton;
 
 namespace sstvae::gui {
 
 class AppState;
 class ErrorBanner;
+class ItemMenu;
 class OverlayEditor;
+class QrssScheduleWindow;
+class QrssSends;
 
 // The output level is stored as a peak amplitude (`transmit.level`,
 // 0..1) because that is what the transmitter scales to, but it is
@@ -85,9 +95,25 @@ public:
     // Everything below the canvas, as one widget, so the container can
     // hold it to the same height as the receive pane's strip.
     QWidget* control_strip() const;
+    // Scheduled QRSS sends (gui/qrss_schedule.hpp), and the window the
+    // QRSSTVAE mode's "Schedule..." button opens. The window is made on
+    // first use.
+    QrssScheduler* scheduler() const { return scheduler_; }
+    QrssScheduleWindow* schedule_window() const { return schedule_window_; }
+    QString schedule_summary() const;
+    QrssSends* sends() const { return sends_; }
+    // Test / Tune: key the radio and send a 1500 Hz tone for
+    // `transmit.test_tone_s` (the schedule window's button). Empty when
+    // it started, else why not. `cancel()` halts it.
+    std::string begin_test_tone();
+    bool test_tone_running() const { return test_run_; }
+    // Hide the schedule window, so it does not keep the app running as
+    // its last window.
+    void hide_windows();
 
 public slots:
     void send();
+    void show_schedule();
     // The settings dialog was accepted, or the model finished loading.
     // Both can turn refinement on or off underneath us, and both must
     // take effect at once rather than at the next edit.
@@ -112,10 +138,23 @@ public slots:
     void choose_framing();
     // The receive panel's newest complete picture, for a "last_rx" inset.
     void set_last_rx_image(const images::Picture& image);
+    // The same reception's callsign and SNR, for a template's `{snr}`
+    // (docs/overlay-templates.md). `callsign` is accepted for parity
+    // with the signal and is not otherwise used here: unlike Android's
+    // Pictures list, the desktop has no per-reception "reply to this
+    // one" binding, so `{theircall}` stays operator-typed.
+    void set_last_reception_info(const QString& callsign, double snr_db);
 
 signals:
+    // The next scheduled QRSS send, in a line, whenever the schedule
+    // changes (shown on the main window's QRSSTVAE mode).
+    void scheduleChanged(const QString& summary);
     void transmitStarted();
     void transmitFinished();
+    // A QRSS run is getting ready (encoding, making audio, waiting for
+    // its quarter hour) and has not keyed: `message` says what for.
+    // Empty when it keys or ends.
+    void qrssPreparing(const QString& message);
 
     // Emitted from the optimizer's worker thread; queued to the slot
     // below, exactly like the transmit callbacks above.
@@ -125,6 +164,9 @@ signals:
     void stateChanged(int phase, double progress, const QString& message);
     void errorOccurred(const QString& message);
     void sendFinished(bool ok);
+    // Test / Tune started, ticked or ended: `remaining` is the fraction
+    // of the tone still to send (1 until the radio keys).
+    void testToneChanged(bool running, double remaining);
 
 protected:
     // A dropped picture file loads exactly as a chosen one does.
@@ -143,13 +185,15 @@ private slots:
     void on_selection(overlay::Item* item);
     void on_mode_changed();
     void on_level_changed(int steps);
+    // A different template replaces the composition on the canvas --
+    // see `template_combo_`'s tooltip -- and the fields row is rebuilt
+    // for whichever placeholders it uses.
+    void on_template_selected(int index);
 
 private:
     void build_ui();
     // Keeps the floating error banner across the top of the picture.
     void place_banner();
-    // Paint the current text colour onto the Colour button.
-    void set_color_swatch(const QColor& color);
     // True while the picture is committed to a send in progress.
     bool picture_locked() const;
     void set_picture_controls_enabled(bool on);
@@ -161,10 +205,74 @@ private:
     // for the optimizer first, and that wait must not block the GUI.
     void begin_transmit(const images::Picture& picture,
                         std::vector<double> latents);
+    // A QRSS send (gui/qrss_tx.hpp): encode, then each pass on its half
+    // hour, keyed through the same engine and PTT. `passes` empty: the
+    // mode's own, from the next quarter hour there is time for. Empty
+    // when it started; otherwise why not, which `interactive` shows in a
+    // dialog (Send); the schedule, which nobody may be watching, puts it
+    // on the banner and in the log itself.
+    std::string begin_qrss(const images::Picture& picture, const std::string& mode,
+                           const std::string& waveform, double freq_hz, std::vector<qrss_tx::Pass> passes,
+                           bool interactive);
+    // The scheduler's way in.
+    QrssScheduler::Start start_scheduled(const qrss_schedule::Entry& entry,
+                                         const std::vector<qrss_tx::Pass>& passes,
+                                         std::string* why);
+    void update_schedule_summary();
+    // The engine a QRSS run or Test / Tune keys through.
+    void make_qrss_engine();
+    // The selected SSTVAE mode ("A"/"B"/"C"); with a QRSS mode selected,
+    // the SSTVAE mode last saved, so the optimizer and `{mode}` always
+    // see a real SSTVAE mode.
+    std::string sstvae_mode() const;
+    // The selected QRSS mode ("A"/"B"/"C"), or empty.
     void rebuild_optimizer();
     QWidget* build_tool_row();
+    // Text and its alignment only, now -- everything else a selection
+    // used to fill this box with (size, height, rotation, color,
+    // fill/stroke, stacking order) is on the item's right-click menu.
+    // Still `control_strip()`'s fixed-shape rule: always present,
+    // disabled rather than hidden with nothing selected, because this
+    // one *is* part of the strip whose height the receive pane is
+    // matched against.
     QGroupBox* build_properties(QWidget* parent);
+    // "Their call" plus up to `MAX_INLINE_CUSTOM_FIELDS` custom-field
+    // rows plus an overflow button (docs/overlay-templates.md).
+    // **A fixed shape always**, whatever the current template needs --
+    // every row exists from construction on and only `setEnabled`
+    // (plus the label text and the overflow button's count) changes,
+    // matching `build_properties`' own rule and for the same reason:
+    // `PaneContainer::equalise_strips` does not re-run when a strip's
+    // *content* changes shape (`on_selection`'s comment has the story),
+    // so a box that grew or shrank with the field count would desync
+    // the two panes exactly the way a hidden `properties_` used to.
+    QGroupBox* build_fields_box(QWidget* parent);
     QWidget* build_send_bar();
+    // Recompute what `{mycall}`/`{grid}`/`{name}`/`{theircall}`/`{snr}`/
+    // `{utc}`/`{date}`/`{mode}` resolve to and push them to the editor.
+    // Cheap and called often -- on a template change, an edit to either
+    // field-row control, a mode change, a fresh reception, or the
+    // config changing -- rather than tracked incrementally, since the
+    // whole `Fields` is a handful of short strings.
+    void refresh_fields();
+    // Assigns the current template's custom-field labels to the fixed
+    // inline rows (first `MAX_INLINE_CUSTOM_FIELDS`) and routes any
+    // beyond that to the overflow button/pop-up. Called wherever the
+    // *set* of custom fields can have changed -- a template switch --
+    // never on a keystroke, so typing in a row does not fight itself:
+    // see `on_custom_field_edited`.
+    void sync_custom_field_rows();
+    void on_custom_field_edited(int slot);
+    // Built-in templates plus the operator's own from
+    // `config().folders.template_dir`, in that order; "None" is index 0
+    // and is not a file. Called once at construction and again after
+    // "Save as template..." writes a new one.
+    void refresh_templates();
+    void open_custom_fields_dialog();
+    void save_as_template();
+    void delete_template();
+    void update_delete_enabled();
+    static std::filesystem::path builtin_templates_dir();
     void update_level_label();
     overlay::Item* editing_item();
 
@@ -175,7 +283,18 @@ private:
     QPushButton* choose_button_ = nullptr;
     QPushButton* frame_button_ = nullptr;
     QLabel* image_label_ = nullptr;
-    QPushButton* add_rx_button_ = nullptr;
+    // --- the tool palette -------------------------------------------
+    //
+    // Icon buttons rather than the "Add text"/"Add last received"/
+    // "Add image..."/"Add rectangle" text buttons this row used to be:
+    // a condensed strip reads as a palette rather than a sentence of
+    // controls. Each still adds its item immediately at a default
+    // position and selects it, same as before -- a visual tidy-up, not
+    // a new click-to-place interaction.
+    QToolButton* add_text_button_ = nullptr;
+    QToolButton* add_rx_button_ = nullptr;
+    QToolButton* add_image_button_ = nullptr;
+    QToolButton* add_rect_button_ = nullptr;
 
     // The picture as loaded, at its own size, plus how it is framed
     // into the transmit canvas. Kept apart so re-framing starts from
@@ -186,18 +305,46 @@ private:
 
     QWidget* strip_ = nullptr;
     QGroupBox* properties_ = nullptr;
+    // Formatting, on a right-click over an item (`ItemMenu`).
+    ItemMenu* item_menu_ = nullptr;
+
+    // --- templates (docs/overlay-templates.md) --------------------------
+    QComboBox* template_combo_ = nullptr;
+    QPushButton* save_template_button_ = nullptr;
+    QPushButton* delete_template_button_ = nullptr;
+    QPushButton* share_template_button_ = nullptr;
+    // Parallel to `template_combo_`'s items: index 0 is the built-in
+    // "None" (an empty document, never read from a file).
+    std::vector<overlay::Doc> templates_;
+    // Parallel to `templates_`, and what makes a template deletable: a
+    // file of the operator's own has a path here, "None" and the
+    // built-ins (which live beside the executable) have an empty one.
+    std::vector<std::filesystem::path> template_paths_;
+    QGroupBox* fields_box_ = nullptr;
+    QLineEdit* theircall_edit_ = nullptr;
+    // Up to this many custom fields are shown inline, live-updating, in
+    // `fields_box_` itself; a template asking for more spills the rest
+    // into `custom_fields_button_`'s pop-up. Four is generous against
+    // the built-ins (one apiece) and against anything a hand-written
+    // template is likely to declare.
+    static constexpr int MAX_INLINE_CUSTOM_FIELDS = 4;
+    std::array<QLabel*, MAX_INLINE_CUSTOM_FIELDS> custom_field_labels_{};
+    std::array<QLineEdit*, MAX_INLINE_CUSTOM_FIELDS> custom_field_edits_{};
+    // Which label (if any) each inline row currently represents --
+    // `on_custom_field_edited` reads this rather than re-deriving it
+    // from the template on every keystroke. Empty means the slot is
+    // unused for the current template.
+    std::array<std::string, MAX_INLINE_CUSTOM_FIELDS> custom_field_slots_;
+    QPushButton* custom_fields_button_ = nullptr;
+    // Keyed by label, so a "Comment" field carries its value from one
+    // template to the next within a session -- the label is the only
+    // identity a custom field has. Cleared by nothing here; a fresh
+    // session starts empty.
+    std::map<std::string, std::string> custom_field_values_;
+    std::optional<double> last_reception_snr_db_;
     QPlainTextEdit* text_edit_ = nullptr;
     QComboBox* align_combo_ = nullptr;
-    QDoubleSpinBox* size_spin_ = nullptr;
-    QDoubleSpinBox* rotation_spin_ = nullptr;
-    QPushButton* color_button_ = nullptr;
-    // What the swatch currently shows, so a drag's per-mouse-move
-    // selectionChanged does not rebuild an identical icon.
-    QColor swatch_color_;
-    // Whether the button has ever been given a swatch. Distinct from
-    // `swatch_color_` being invalid, which is also a legal *state* --
-    // an image item has no colour.
-    bool swatch_set_ = false;
+
     // Set while the property widgets are being filled from an item, so
     // their change signals do not write straight back into it.
     bool loading_properties_ = false;
@@ -214,6 +361,21 @@ private:
     std::unique_ptr<tx::TxEngine> engine_;
     std::thread thread_;
     std::atomic<bool> running_{false};
+    // transmitStarted has gone out for the send in progress. A QRSS run
+    // spends minutes encoding, making audio and waiting for its quarter
+    // hour before it keys; it announces itself only at the first key,
+    // so receiving carries on and nothing reads as on the air early.
+    bool announced_ = false;
+    bool qrss_run_ = false;
+    bool test_run_ = false;   // the run is Test / Tune
+
+    QrssScheduler* scheduler_ = nullptr;          // a child of this panel
+    // The QRSS run on the air takes following sends through this.
+    std::shared_ptr<qrss_tx::Chain> qrss_chain_;
+    QrssScheduleWindow* schedule_window_ = nullptr;
+    QrssSends* sends_ = nullptr;                  // a child of this panel
+    // The newest reception, for a "last received" inset in the Editor.
+    std::optional<images::Picture> last_rx_;
 
     // Null when the feature is off or the model has not loaded yet.
     std::unique_ptr<optimize::Speculative> optimizer_;

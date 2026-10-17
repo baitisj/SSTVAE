@@ -34,10 +34,15 @@
 #include "audio/audio.hpp"
 #include "images/images.hpp"
 #include "overlay/model.hpp"
+#include "overlay/template.hpp"
 #include "settings/settings.hpp"
 #include "modem/modem.hpp"
 #include "ofdm/ofdm.hpp"
 #include "sync/sync.hpp"
+
+#ifdef SSTVAE_HAVE_QRSS
+#include "qrss/registry.hpp"
+#endif
 
 namespace py = pybind11;
 using sstvae::ofdm::cdouble;
@@ -682,6 +687,36 @@ PYBIND11_MODULE(sstvae_native, m) {
                     return py::make_tuple(sstvae::overlay::to_json(doc), out);
                 },
                 py::arg("text"));
+    // Templates (docs/overlay-templates.md): the substitution rules, so
+    // the parity suite can hold this implementation to the reference's
+    // output on a corpus rather than trusting two readings of the doc.
+    using StrMap = std::map<std::string, std::string>;
+    overlay.def(
+        "substitute_text",
+        [](const std::string& text, const StrMap& builtin, const StrMap& custom) {
+            return sstvae::overlay::substitute_text(text, {builtin, custom});
+        },
+        py::arg("text"), py::arg("builtin"), py::arg("custom"));
+    overlay.def(
+        "substitute",
+        [](const std::string& doc_json, const StrMap& builtin, const StrMap& custom) {
+            const auto doc = sstvae::overlay::from_json(doc_json);
+            return sstvae::overlay::to_json(
+                sstvae::overlay::substitute(doc, {builtin, custom}));
+        },
+        py::arg("doc_json"), py::arg("builtin"), py::arg("custom"));
+    overlay.def(
+        "placeholders",
+        [](const std::string& doc_json) {
+            const auto p = sstvae::overlay::placeholders(sstvae::overlay::from_json(doc_json));
+            return py::make_tuple(p.builtin, p.custom);
+        },
+        py::arg("doc_json"));
+    overlay.def(
+        "format_snr",
+        [](std::optional<double> snr_db) { return sstvae::overlay::format_snr(snr_db); },
+        py::arg("snr_db").none(true));
+    overlay.def("normalize_label", &sstvae::overlay::normalize_label, py::arg("label"));
     overlay.attr("CANVAS_W") = sstvae::overlay::CANVAS_W;
     overlay.attr("CANVAS_H") = sstvae::overlay::CANVAS_H;
     overlay.attr("DOC_VERSION") = sstvae::overlay::DOC_VERSION;
@@ -864,4 +899,10 @@ PYBIND11_MODULE(sstvae_native, m) {
     config.attr("GROUP_LATENTS") = sstvae::config::GROUP_LATENTS;
     config.attr("PREAMBLE_SAMPLES") = sstvae::config::PREAMBLE_SAMPLES;
     config.attr("PROTOCOL_VERSION") = sstvae::config::PROTOCOL_VERSION;
+
+#ifdef SSTVAE_HAVE_QRSS
+    // QRSSTVAE, as `sstvae_native.qrss.<module>`: each ported module binds
+    // itself from bindings/module/qrss/<module>.cpp.
+    sstvae_bindings::qrss::bind_all(m);
+#endif
 }

@@ -78,8 +78,20 @@ MINGW*|MSYS*|CYGWIN*)
     app="$STAGE_DIR/sstvae"
     mkdir -p "$app"
     cp "$BUILD_DIR/sstvae-gui.exe" "$app/"
+    # The built-in templates, beside the executable, which is where
+    # `TransmitPanel::builtin_templates_dir` looks. Copied explicitly on
+    # every platform but macOS (whose bundle carries them): they were
+    # not, for a week, and the Linux and Windows packages had an empty
+    # template picker with nothing failing -- the packaged-app check in
+    # CI asserts they are here now.
+    cp -R "$BUILD_DIR/templates" "$app/"
     cp "$BUILD_DIR/sstvae-decode.exe" "$app/" 2>/dev/null || true
     cp "$BUILD_DIR/sstvae-audio-check.exe" "$app/" 2>/dev/null || true
+    # The QRSSTVAE command line, which the app runs as its QRSS listener
+    # (`sstvae-qrss listen`, looked for beside the executable): without
+    # it the QRSS window falls back to a Python script a packaged app
+    # does not have. Absent only from a build with SSTVAE_BUILD_QRSS=OFF.
+    cp "$BUILD_DIR/sstvae-qrss.exe" "$app/" 2>/dev/null || true
     # Ours first, so windeployqt sees a complete executable and does not
     # report an import it cannot resolve.
     [ -n "$HAMLIB_RUNTIME_DIR" ] && cp "$HAMLIB_RUNTIME_DIR"/*.dll "$app/"
@@ -108,6 +120,8 @@ Darwin)
     # this is what tells them apart on a machine we cannot log in to.
     cp "$BUILD_DIR/sstvae-audio-check" "$app/Contents/MacOS/" 2>/dev/null || true
     cp "$BUILD_DIR/sstvae-decode" "$app/Contents/MacOS/" 2>/dev/null || true
+    # The app's QRSS listener (`sstvae-qrss listen`), as on Windows.
+    cp "$BUILD_DIR/sstvae-qrss" "$app/Contents/MacOS/" 2>/dev/null || true
     mkdir -p "$app/Contents/Frameworks"
     [ -n "$HAMLIB_RUNTIME_DIR" ] && cp "$HAMLIB_RUNTIME_DIR"/libhamlib*.dylib \
         "$app/Contents/Frameworks/" 2>/dev/null || true
@@ -119,6 +133,16 @@ Darwin)
     macdeployqt "$app" -verbose=1 \
         ${HAMLIB_RUNTIME_DIR:+-libpath="$HAMLIB_RUNTIME_DIR"} \
         ${ORT_LIBDIR:+-libpath="$ORT_LIBDIR"}
+    # **A signature, and a check of it, or a broken bundle passes green.**
+    # macdeployqt signs ad hoc and, when that fails, prints ERROR and
+    # exits 0 -- which it did on every run for a week after a data file
+    # landed under Contents/MacOS, where codesign allows only code. An
+    # ad-hoc signature is what an arm64 Mac needs to launch the portable
+    # download at all, and sign.sh's Developer ID signing replaces it
+    # with --force, so signing here costs nothing; the verify is the
+    # part that turns a layout mistake into a failed step.
+    codesign --force --deep --sign - "$app"
+    codesign --verify --deep --strict "$app"
     ;;
 
 # ------------------------------------------------------------------ Linux
@@ -152,8 +176,19 @@ Darwin)
        "$app/share/icons/hicolor/scalable/apps/org.cleverdomain.sstvae.svg"
 
     cp "$BUILD_DIR/sstvae-gui" "$app/bin/"
+    # The built-in templates, under share/ like everything else here
+    # that is not code: `builtin_templates_dir` resolves
+    # <prefix>/share/sstvae/templates from the executable's own prefix,
+    # which is what makes this AppDir and a distro package at /usr the
+    # same layout. See the Windows section for why they are copied at
+    # all.
+    mkdir -p "$app/share/sstvae"
+    cp -R "$BUILD_DIR/templates" "$app/share/sstvae/"
     cp "$BUILD_DIR/sstvae-decode" "$app/bin/" 2>/dev/null || true
     cp "$BUILD_DIR/sstvae-audio-check" "$app/bin/" 2>/dev/null || true
+    # The app's QRSS listener (`sstvae-qrss listen`), as on Windows. It
+    # inherits the launcher's LD_LIBRARY_PATH from the app that runs it.
+    cp "$BUILD_DIR/sstvae-qrss" "$app/bin/" 2>/dev/null || true
     [ -n "$HAMLIB_RUNTIME_DIR" ] && cp -P "$HAMLIB_RUNTIME_DIR"/libhamlib.so* "$app/lib/"
     [ -n "$ORT_LIBDIR" ] && cp -P "$ORT_LIBDIR"/libonnxruntime.so* "$app/lib/"
 
@@ -306,11 +341,14 @@ Darwin)
                 ;;
         esac
     done
-    libs="$(unresolved "$app/bin/sstvae-gui" | tr '\n' ' ')"
-    if [ -n "$libs" ]; then
-        echo "package_app: sstvae-gui needs $libs" >&2
-        fatal=1
-    fi
+    for exe in sstvae-gui sstvae-qrss; do
+        [ -e "$app/bin/$exe" ] || continue
+        libs="$(unresolved "$app/bin/$exe" | tr '\n' ' ')"
+        if [ -n "$libs" ]; then
+            echo "package_app: $exe needs $libs" >&2
+            fatal=1
+        fi
+    done
     [ "$fatal" -eq 0 ] || exit 1
 
     # A wrapper, because the alternative is asking the user to set two
